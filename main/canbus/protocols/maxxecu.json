@@ -1,0 +1,145 @@
+{
+  "name": "maxxecu_default",
+  "bitrate": 500000,
+  "frames": [
+
+    {
+      "id": "0x520",
+      "signals": [
+        {"name":"rpm","offset":0,"len":2,"scale":1,"endian":"little"},
+        {"name":"tps_pedal","offset":2,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"map","offset":4,"len":2,"scale":0.0145038,"offset_val":-14.6959,"endian":"little"},
+        {"name":"lambda_avg","offset":6,"len":2,"scale":0.001,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x521",
+      "signals": [
+        {"name":"lambda_a","offset":0,"len":2,"scale":0.001,"endian":"little"},
+        {"name":"lambda_b","offset":2,"len":2,"scale":0.001,"endian":"little"},
+        {"name":"ign_angle","offset":4,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"ignition_cut","offset":6,"len":2,"scale":1,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x522",
+      "signals": [
+        {"name":"fuel_pw_primary","offset":0,"len":2,"scale":0.01,"endian":"little"},
+        {"name":"fuel_duty_primary","offset":2,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"fuel_cut","offset":4,"len":2,"scale":1,"endian":"little"},
+        {"name":"speed","offset":6,"len":2,"scale":0.0621371,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x523",
+      "signals": [
+        {"name":"und_driven_wheel_speed","offset":0,"len":2,"scale":0.0621371,"endian":"little"},
+        {"name":"driven_wheel_speed","offset":2,"len":2,"scale":0.0621371,"endian":"little"},
+        {"name":"wheel_slip","offset":4,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"target_slip","offset":6,"len":2,"scale":0.1,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x524",
+      "signals": [
+        {"name":"traction_power_limit","offset":0,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"lambda_corr_a","offset":2,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"lambda_corr_b","offset":4,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"firmware_version","offset":6,"len":2,"scale":0.001,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x525",
+      "signals": [
+        {"name":"user_channel_9","offset":0,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"user_channel_10","offset":2,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"user_channel_11","offset":4,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"user_channel_12","offset":6,"len":2,"scale":0.1,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x527",
+      "signals": [
+        {"name":"lambda_target","offset":6,"len":2,"scale":0.001,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x530",
+      "signals": [
+        {"name":"battery_voltage","offset":0,"len":2,"scale":0.01,"endian":"little"},
+        {"name":"baro_pressure","offset":2,"len":2,"scale":0.0145038,"endian":"little"},
+        {"name":"air_temp","offset":4,"len":2,"scale":0.18,"offset_val":32,"endian":"little"},
+        {"name":"coolant_temp","offset":6,"len":2,"scale":0.18,"offset_val":32,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x531",
+      "signals": [
+        {"name":"total_fuel_corr","offset":0,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"ethanol_content","offset":2,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"total_ignition_comp","offset":4,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"egt1","offset":6,"len":2,"scale":1.8,"offset_val":32,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x532",
+      "signals": [
+        {"name":"egt2","offset":0,"len":2,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"egt3","offset":2,"len":2,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"egt4","offset":4,"len":2,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"egt5","offset":6,"len":2,"scale":1.8,"offset_val":32,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x533",
+      "signals": [
+        {"name":"egt6","offset":0,"len":2,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"egt7","offset":2,"len":2,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"egt8","offset":4,"len":2,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"egt_highest","offset":6,"len":2,"scale":1.8,"offset_val":32,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x534",
+      "signals": [
+        {"name":"egt_diff","offset":0,"len":2,"scale":1.8,"endian":"little"},
+        {"name":"cpu_temp","offset":2,"len":2,"scale":0.18,"offset_val":32,"endian":"little"},
+        {"name":"error_code_count","offset":4,"len":2,"scale":1,"endian":"little"},
+        {"name":"lost_sync_count","offset":6,"len":2,"scale":1,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x536",
+      "signals": [
+        {"name":"gear","offset":0,"len":2,"scale":1,"endian":"little"},
+        {"name":"boost_solenoid_duty","offset":2,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"oil_pressure","offset":4,"len":2,"scale":0.0145038,"endian":"little"},
+        {"name":"oil_temp","offset":6,"len":2,"scale":0.18,"offset_val":32,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x540",
+      "signals": [
+        {"name":"active_boost_table","offset":0,"len":1,"scale":1,"endian":"little"},
+        {"name":"active_tune_selector","offset":1,"len":1,"scale":1,"endian":"little"},
+        {"name":"virtual_fuel_tank","offset":2,"len":2,"scale":0.1,"endian":"little"},
+        {"name":"trans_temp","offset":4,"len":2,"scale":0.18,"offset_val":32,"endian":"little"},
+        {"name":"diff_temp","offset":6,"len":2,"scale":0.18,"offset_val":32,"endian":"little"}
+      ]
+    }
+
+  ]
+}

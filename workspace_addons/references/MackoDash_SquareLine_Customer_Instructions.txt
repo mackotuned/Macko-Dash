@@ -1,0 +1,267 @@
+MACKODASH SQUARELINE CUSTOMER INSTRUCTIONS
+Object Names, Live Values, Bars, Arcs, and Theme Export
+Version 1 - SquareLine Studio / LVGL 8.4 - Recommended canvas 1024 x 600
+
+
+WHAT THIS SHEET IS FOR
+======================
+MackoDash uses an object's SquareLine name to decide which live vehicle value
+controls it. You design the appearance. MackoDash supplies the live data.
+
+Use the exact names in this sheet whenever possible. They are ready to copy
+and paste.
+
+
+QUICK START
+===========
+1. Create one 1024 x 600 screen in SquareLine Studio.
+2. Set the project/export LVGL version to 8.4 or LVGL 8.x.
+3. Add Labels for numbers and text values.
+4. Add Bars or Arcs only for the supported gauges listed below.
+5. Select each live object and enter its MackoDash name in SquareLine's
+   object Name field.
+6. Add a Button named dash_settings_button.
+7. Export the complete C project from SquareLine.
+8. ZIP the entire exported folder.
+9. Open MackoDash Theme Builder and select the SquareLine ZIP.
+10. Build the .mdtheme.zip package, then use Copy to SD Card.
+
+SquareLine normally adds ui_ to generated variable names. That is okay.
+For example, an object named dash_rpm_value may export as ui_dash_rpm_value.
+MackoDash accepts both.
+
+
+LIVE VALUE LABELS - COMPLETE LIST
+=================================
+Create a SquareLine Label and give it one of these names.
+
+Vehicle data           Required object name       Example longest text
+---------------------  -------------------------  --------------------
+Engine RPM             dash_rpm_value             11000
+Vehicle speed          dash_speed_value           200
+Current gear           dash_gear_value            N or 6
+Coolant temperature    dash_ect_value             300
+Intake air temperature dash_iat_value             200
+Air/fuel ratio         dash_afr_value              14.7
+Ignition timing        dash_timing_value           -20
+Manifold/boost         dash_map_value              -14.7 or 40.0
+Battery voltage        dash_batt_value             14.7
+Throttle position      dash_tps_value              100
+Oil pressure           dash_oil_value              120
+Injector duty cycle    dash_duty_value             100
+Knock retard           dash_knock_value            6.0
+Fuel level             dash_fuel_value             100
+Odometer               dash_odo_value              123456.7
+
+Design every Label wide enough for the longest example, including a minus
+sign and decimal point where shown. The preview text entered in SquareLine is
+only a design aid; MackoDash replaces it with live data.
+
+
+LIVE BARS - COMPLETE LIST
+=========================
+Create a SquareLine Bar. Use the exact name and set its range as shown.
+
+Gauge                  Required object name       Recommended min / max
+---------------------  -------------------------  ---------------------
+Engine RPM             dash_rpm_bar               0 / 11000
+Vehicle speed          dash_speed_bar             0 / 200
+Fuel level             dash_fuel_bar              0 / 100
+Throttle position      dash_tps_bar               0 / 100
+Coolant temperature    dash_ect_bar               0 / 300
+Intake air temperature dash_iat_bar               0 / 200
+Oil pressure           dash_oil_bar               0 / 120
+
+The Bar's starting value in SquareLine is only for previewing the design.
+MackoDash replaces it with the live value.
+
+
+LIVE ARCS - COMPLETE LIST
+=========================
+Create a SquareLine Arc. Use the exact name and set its range as shown.
+
+Gauge                  Required object name       Recommended min / max
+---------------------  -------------------------  ---------------------
+Engine RPM             dash_rpm_arc               0 / 11000
+Vehicle speed          dash_speed_arc             0 / 200
+Fuel level             dash_fuel_arc              0 / 100
+Throttle position      dash_tps_arc               0 / 100
+Coolant temperature    dash_ect_arc               0 / 300
+Intake air temperature dash_iat_arc               0 / 200
+Oil pressure           dash_oil_arc               0 / 120
+
+You may change an Arc's size, colors, thickness, start angle, and sweep.
+The Arc knob is removed on the dashboard, so design it as a display gauge and
+not as a user-operated control.
+
+
+IMPORTANT GAUGE LIMIT
+=====================
+The following currently work as Labels only. Do not create live Bars or Arcs
+for them because those gauge names are not supported by the customer runtime:
+
+  gear, AFR, timing, manifold/boost, battery voltage,
+  injector duty, knock retard, and odometer
+
+For example, dash_afr_value is supported, but dash_afr_bar and dash_afr_arc
+are not supported.
+
+
+LIVE UNIT LABELS
+================
+Create a SquareLine Label for each unit that should be changed by MackoDash.
+
+Unit                    Required object name       Displayed text
+----------------------  -------------------------  ----------------
+Speed                   dash_speed_unit            MPH or KPH
+Coolant temperature     dash_ect_unit              F or C
+Intake air temperature  dash_iat_unit              F or C
+Manifold/boost          dash_map_unit              PSI
+Fuel level              dash_fuel_unit             %
+Throttle position       dash_tps_unit              %
+Oil pressure            dash_oil_unit              PSI
+
+Static captions such as RPM, COOLANT, AFR, and OIL can use any ordinary name
+that does not begin with dash_. Examples: rpm_caption or coolant_title.
+
+
+REQUIRED SETTINGS BUTTON
+========================
+Every customer theme should contain one SquareLine Button named:
+
+  dash_settings_button
+
+MackoDash connects this Button to the dashboard Settings menu. The button may
+use any supported position, size, color, and text. Keep it easy to reach.
+
+
+USING THE SAME LIVE VALUE MORE THAN ONCE
+========================================
+Add _2 through _9 when a value appears more than once. This works with Labels,
+Bars, Arcs, unit Labels, and the settings Button.
+
+Examples:
+
+  dash_rpm_value
+  dash_rpm_value_2
+  dash_rpm_value_3
+
+  dash_rpm_bar
+  dash_rpm_bar_2
+
+  dash_ect_unit
+  dash_ect_unit_2
+
+Never give two SquareLine objects the exact same name.
+
+
+NAMING RULES AND TYPO HELP
+==========================
+- Names are not case-sensitive.
+- Spaces and hyphens are treated like underscores.
+- SquareLine's automatic ui_ prefix is ignored.
+- A unique one-letter typo, missing letter, extra letter, or swapped pair is
+  usually corrected automatically.
+- If a typo could mean two different values, MackoDash refuses to guess.
+- Canonical names from this sheet are strongly recommended for customer work.
+
+These all resolve to the RPM value Label:
+
+  dash_rpm_value
+  DASH RPM VALUE
+  dash-rpm-value
+  ui_dash_rpm_value
+  dash_rpm_vlaue
+
+
+ACCEPTED SHORT NAMES
+====================
+The names above are preferred. These shorter alternatives are also accepted:
+
+Preferred name              Accepted short names
+--------------------------  ------------------------------------------
+dash_rpm_value              rpm_value, engine_rpm_value
+dash_speed_value            speed_value, mph_value, kph_value
+dash_gear_value             gear_value
+dash_ect_value              coolant_value, water_temp_value
+dash_iat_value              intake_temp_value, air_temp_value
+dash_afr_value              afr_value, lambda_value
+dash_timing_value           timing_value, ignition_value
+dash_map_value              map_value, boost_value
+dash_batt_value             battery_value, voltage_value
+dash_tps_value              tps_value, throttle_value
+dash_oil_value              oil_pressure_value
+dash_duty_value             injector_duty_value
+dash_knock_value            knock_value
+dash_fuel_value             fuel_level_value
+dash_odo_value              odometer_value
+dash_settings_button        settings_button
+
+For Bars and Arcs, the accepted short name is the preferred name without
+dash_. Coolant also accepts coolant_bar and coolant_arc. Intake temperature
+also accepts air_temp_bar and air_temp_arc.
+
+
+SQUARELINE DESIGN RULES
+=======================
+- Use one dashboard screen.
+- A 1024 x 600 landscape canvas gives the best result.
+- Keep important objects fully inside the screen.
+- Use Labels, Bars, Arcs, Images, and Buttons.
+- Built-in exact fonts are Montserrat 12, 14, 28, and 44.
+- Custom fonts require an exact supported font workflow. Theme Builder strict
+  mode stops instead of silently changing an unsupported font.
+- Size live Labels for their longest possible value.
+- Decorative objects must not start with dash_.
+- Do not add custom C code or scripts to a customer theme.
+- Do not create multiple dashboard screens.
+
+Smaller landscape canvases are supported and are uniformly scaled and centered
+without stretching. A 1024 x 600 project is still strongly recommended because
+it provides the most predictable text size and placement.
+
+
+WARNING LIGHTS AND ADVANCED INDICATORS
+======================================
+The firmware recognizes advanced names such as dash_cel_indicator,
+dash_vtec_indicator, dash_shift_indicator, dash_oil_indicator, and
+dash_knock_indicator. These are reserved for advanced/manual theme packages.
+The current customer Theme Builder does not import generic SquareLine indicator
+objects, so do not rely on these names in a customer SquareLine project yet.
+
+
+EXPORT AND BUILD
+================
+1. Save the SquareLine project.
+2. Export the complete C project, not a screenshot or preview image.
+3. ZIP the entire exported project folder with its screens, images, and project
+   information intact.
+4. Open MackoDashThemeBuilder.exe.
+5. Select the SquareLine export ZIP.
+6. Enter the theme display name and a unique lowercase Theme ID.
+7. Leave strict validation enabled for customer packages.
+8. Select Build Theme Package.
+9. Select Copy to SD Card and choose the SD card drive.
+10. Insert the SD card into MackoDash and reboot.
+
+The finished file is placed in:
+
+  /MACKODASH/THEMES
+
+MackoDash supports up to 30 SD card themes.
+
+
+FINAL CUSTOMER CHECKLIST
+========================
+[ ] Project uses one landscape dashboard screen.
+[ ] Canvas is preferably 1024 x 600.
+[ ] Every live Label uses a name from the complete value list.
+[ ] Every live Bar uses a name from the supported Bar list.
+[ ] Every live Arc uses a name from the supported Arc list.
+[ ] Bar and Arc ranges are set correctly.
+[ ] Duplicate values use _2, _3, and so on.
+[ ] Static/decorative objects do not start with dash_.
+[ ] dash_settings_button is present and easy to tap.
+[ ] Labels fit the longest example values.
+[ ] Theme Builder strict validation passes without warnings.
+[ ] The finished theme is tested on MackoDash before distribution.

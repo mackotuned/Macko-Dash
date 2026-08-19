@@ -1,0 +1,52 @@
+# MackoDash Theme Builder
+
+Theme Builder converts a one-screen SquareLine Studio C export into a validated
+`.mdtheme.zip` package for `/MACKODASH/THEMES` on the dashboard SD card.
+
+## Customer workflow
+
+1. Create a 1024x600, LVGL 8.x SquareLine project.
+2. Follow `../references/MackoDash_SquareLine_Customer_Instructions.txt` for
+  the complete Label, Bar, Arc, unit, and settings-button name lists.
+3. Export the complete C project and ZIP the exported folder.
+4. Open MackoDash Theme Builder and select that ZIP.
+5. Enter a unique lowercase theme ID and build the package.
+6. Use **Copy to SD Card** and select the SD card drive.
+
+Strict mode is the customer default. It stops on custom generated fonts because
+SquareLine exports compiled LVGL font C files, not the original TTF/OTF files.
+This prevents a package from silently changing typography. The substitution
+checkbox is only for development previews. Built-in Montserrat 12, 14, 28, and
+44 pass strict validation because the dashboard contains exact matches.
+
+## Supported fidelity fields
+
+- SquareLine anchor, x/y offset, z-order, fixed/content dimensions
+- Labels, bars, arcs, images, and buttons
+- Bar ranges, colors, opacity, radius, rotation, and indicator images
+- Raw RGB565 and RGB565A8 images, including SquareLine image zoom
+- A `conversion-report.json` stored in every package
+
+Unsupported widgets, malformed images, multiple screens, invalid metadata, and
+missing exact fonts stop conversion instead of creating an approximate customer
+package.
+
+## Run from source
+
+```powershell
+& 'C:/Users/mackb/.espressif/python_env/idf5.5_py3.11_env/Scripts/python.exe' `
+  workspace_addons/theme_packager/mackodash_theme_builder.py
+```
+
+The command-line converter is `convert_squareline_export.py`. Run it with
+`--help` for automation options.
+
+## Standalone Windows application
+
+The customer executable is:
+
+`dist/MackoDashThemeBuilder.exe`
+
+It is self-contained and does not require Python or ESP-IDF. Developers can
+rebuild it with `build_windows.ps1`; the build requires `C:\Python314` with
+Tkinter and PyInstaller.

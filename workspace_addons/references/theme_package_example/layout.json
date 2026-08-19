@@ -1,0 +1,84 @@
+{
+  "background": "#08090A",
+  "objects": [
+    {
+      "type": "label",
+      "name": "dash_rpm_value",
+      "x": 40,
+      "y": 30,
+      "width": 260,
+      "height": 60,
+      "font_size": 44,
+      "align": "center",
+      "color": "#FFFFFF",
+      "text": "0"
+    },
+    {
+      "type": "bar",
+      "name": "dash_rpm_bar",
+      "x": 40,
+      "y": 110,
+      "width": 944,
+      "height": 24,
+      "min": 0,
+      "max": 9000,
+      "color": "#E4002B",
+      "track_color": "#25282D"
+    },
+    {
+      "type": "label",
+      "name": "dash_speed_value",
+      "x": 352,
+      "y": 190,
+      "width": 320,
+      "height": 80,
+      "font_size": 44,
+      "align": "center",
+      "color": "#FFFFFF",
+      "text": "0"
+    },
+    {
+      "type": "label",
+      "name": "dash_speed_unit",
+      "x": 452,
+      "y": 272,
+      "width": 120,
+      "height": 30,
+      "font_size": 14,
+      "align": "center",
+      "color": "#84868D",
+      "text": "MPH"
+    },
+    {
+      "type": "label",
+      "name": "dash_gear_value",
+      "x": 440,
+      "y": 330,
+      "width": 144,
+      "height": 80,
+      "font_size": 44,
+      "align": "center",
+      "color": "#39FF8C",
+      "text": "N"
+    },
+    {
+      "type": "indicator",
+      "name": "dash_cel_indicator",
+      "x": 40,
+      "y": 520,
+      "width": 100,
+      "height": 40,
+      "color": "#FFB020"
+    },
+    {
+      "type": "button",
+      "name": "dash_settings_button",
+      "x": 884,
+      "y": 520,
+      "width": 116,
+      "height": 60,
+      "text": "Settings",
+      "background": "#151619"
+    }
+  ]
+}

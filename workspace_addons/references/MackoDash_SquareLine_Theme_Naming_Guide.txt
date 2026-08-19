@@ -1,0 +1,264 @@
+MACKODASH SQUARELINE THEME NAMING GUIDE
+Version 1 - LVGL 8.4 - 1024 x 600
+
+CUSTOMER DOCUMENT
+-----------------
+For the simpler, complete sheet intended for customers and designers, use:
+
+  MackoDash_SquareLine_Customer_Instructions.txt
+
+That sheet contains the current copy-and-paste lists for all supported live
+Labels, Bars, Arcs, units, and the Settings button. This file remains the
+technical package-format reference.
+
+PURPOSE
+-------
+Use these object names in SquareLine Studio so MackoDash can connect visual
+objects to live vehicle data automatically. Designers choose the position,
+size, colors, fonts, and styling. MackoDash supplies the live values.
+
+The names are not case-sensitive. Spaces and hyphens are treated as
+underscores. Common SquareLine prefixes such as ui_ are ignored.
+
+Examples that all resolve to the same binding:
+  dash_rpm_value
+  DASH RPM VALUE
+  ui_dash_rpm_value
+  dash-rpm-value
+
+A unique one-character spelling mistake is also accepted. For example,
+"dash_rpm_vlaue" resolves to "dash_rpm_value". If a typo could match more
+than one binding, the object is left unbound instead of guessing.
+
+PROJECT REQUIREMENTS
+--------------------
+Canvas size:       1024 x 600 pixels
+LVGL version:      8.4
+Screen count:      One dashboard screen
+Recommended name:  dash_screen
+
+1024 x 600 is recommended for new themes, but legacy canvases from 160 x 120
+through 2048 x 2048 are supported. Put the original canvas size in the
+manifest resolution field. MackoDash scales the entire design uniformly and
+centers it without distortion:
+
+  480 x 272   -> scales to 1024 x 580 and centers with 10-pixel top/bottom bands
+  800 x 480   -> scales to 1000 x 600 and centers with 12-pixel side bands
+  480 x 480   -> scales to 600 x 600 and centers with 212-pixel side bands
+  480 x 800   -> scales to 360 x 600 and centers with 332-pixel side bands
+
+Landscape projects with a similar aspect ratio produce the best automatic
+result. Portrait and square projects work, but usually need a layout redesign
+to use the wide dashboard effectively. MackoDash does not stretch or reflow
+objects because that would distort gauges and overlap text.
+
+Keep every live object inside the dashboard screen. Decorative objects can
+use any name that does not begin with dash_.
+
+CORE LIVE VALUES
+----------------
+Canonical name          SquareLine object       Live content
+
+dash_rpm_value          Label                   Engine RPM, integer
+dash_speed_value        Label                   Vehicle speed, integer
+dash_gear_value         Label                   N or current gear
+dash_ect_value          Label                   Coolant temperature
+dash_iat_value          Label                   Intake air temperature
+dash_afr_value          Label                   Air/fuel ratio
+dash_timing_value       Label                   Ignition timing
+dash_map_value          Label                   Manifold pressure / boost
+dash_batt_value         Label                   Battery voltage
+dash_tps_value          Label                   Throttle position
+dash_oil_value          Label                   Oil pressure
+dash_duty_value         Label                   Injector duty cycle
+dash_knock_value        Label                   Knock retard
+dash_fuel_value         Label                   Fuel level
+dash_odo_value          Label                   Odometer or selected trip
+
+GAUGES
+------
+Canonical name          SquareLine object       Recommended range
+
+dash_rpm_bar            Bar                     0 to 9000
+dash_rpm_arc            Arc                     0 to 9000
+dash_speed_bar          Bar                     0 to 200
+dash_speed_arc          Arc                     0 to 200
+dash_fuel_bar           Bar                     0 to 100
+dash_fuel_arc           Arc                     0 to 100
+dash_tps_bar            Bar                     0 to 100
+dash_tps_arc            Arc                     0 to 100
+dash_ect_bar            Bar                     0 to 300
+dash_ect_arc            Arc                     0 to 300
+dash_oil_bar            Bar                     0 to 120
+dash_oil_arc            Arc                     0 to 120
+
+INDICATORS
+----------
+Canonical name          SquareLine object       Behavior
+
+dash_cel_indicator      Any visual object       Visible when CEL is active
+dash_vtec_indicator     Any visual object       Visible at configured VTEC RPM
+dash_shift_indicator    Any visual object       Visible near configured redline
+dash_oil_indicator      Any visual object       Visible for low oil pressure
+dash_knock_indicator    Any visual object       Visible when knock is detected
+
+CONTROLS
+--------
+Canonical name          SquareLine object       Behavior
+
+dash_settings_button    Button                  Opens MackoDash settings
+
+Every usable theme should include dash_settings_button. This gives the user a
+reliable way to return to the Theme page. MackoDash may add a fallback settings
+button when one is missing.
+
+UNITS AND STATIC LABELS
+-----------------------
+Canonical name          SquareLine object       Live content
+
+dash_speed_unit         Label                   MPH or KPH
+dash_ect_unit           Label                   deg F or deg C
+dash_iat_unit           Label                   deg F or deg C
+dash_map_unit           Label                   PSI
+dash_fuel_unit          Label                   %
+dash_tps_unit           Label                   %
+dash_oil_unit           Label                   PSI
+
+MULTIPLE COPIES OF ONE VALUE
+----------------------------
+Add a numeric suffix when the same value appears more than once:
+
+  dash_rpm_value
+  dash_rpm_value_2
+  dash_rpm_value_3
+
+The suffix may be used on labels, bars, arcs, indicators, and unit labels.
+MackoDash binds all copies to the same live value. Up to 9 copies of a binding
+are recommended.
+
+SUPPORTED FRIENDLY ALIASES
+--------------------------
+These common alternatives are accepted:
+
+  rpm_value, engine_rpm_value       -> dash_rpm_value
+  speed_value, mph_value            -> dash_speed_value
+  gear_value                        -> dash_gear_value
+  coolant_value, water_temp_value   -> dash_ect_value
+  intake_temp_value, air_temp_value -> dash_iat_value
+  boost_value                       -> dash_map_value
+  battery_value, voltage_value      -> dash_batt_value
+  throttle_value                    -> dash_tps_value
+  oil_pressure_value                -> dash_oil_value
+  injector_duty_value               -> dash_duty_value
+  fuel_level_value                  -> dash_fuel_value
+  odometer_value                    -> dash_odo_value
+  settings_button                   -> dash_settings_button
+
+TYPO-TOLERANCE RULES
+--------------------
+MackoDash resolves names in this order:
+
+1. Exact canonical name.
+2. Normalized name: lowercase, spaces/hyphens changed to underscores, repeated
+   underscores removed, and ui_ prefix ignored.
+3. Listed friendly alias.
+4. Unique one-character typo match against canonical names and aliases.
+5. Optional numeric copy suffix removed, then steps 1-4 repeated.
+
+MackoDash will not guess when two names are equally close. An unresolved object
+remains visible with its SquareLine default value and is reported in the boot
+log. This prevents a typo from connecting a gauge to the wrong sensor.
+
+DO NOT DO THIS
+--------------
+- Do not give two different objects the exact same SquareLine object name.
+- Do not use dash_ names for purely decorative objects.
+- Do not rename live objects after packaging without rechecking this guide.
+- Do not place scripts or custom C code in a theme package.
+- Do not depend on a custom event for the settings button.
+
+PACKAGE MANIFEST
+----------------
+The finished MackoDash package is named with the .mdtheme.zip suffix and must
+contain manifest.json at the ZIP root:
+
+{
+  "schema": 1,
+  "id": "author.theme-name",
+  "name": "Theme Name",
+  "resolution": [1024, 600],
+  "lvgl": "8.4",
+  "layout": "layout.json"
+}
+
+The id must be unique and use only lowercase letters, numbers, periods,
+underscores, and hyphens. Copy the finished ZIP to:
+
+  /MACKODASH/THEMES
+
+Reboot MackoDash after inserting the SD card. Up to 30 SD themes are listed.
+
+LAYOUT.JSON FORMAT
+------------------
+The MackoDash Theme Packager converts the SquareLine design into layout.json.
+Advanced theme authors may create it directly. The root object supports:
+
+  background    Screen color as "#RRGGBB" or a numeric RGB value
+  objects       Array containing no more than 96 visual objects
+
+Every object supports:
+
+  type          "label", "bar", "arc", "button", "indicator", "object", or "image"
+  name          A live binding name from this guide, or any decorative name
+  x, y          Top-left position in pixels
+  width, height Object size in pixels
+  color         Text, indicator, arc, or bar color
+
+Labels additionally support text, font_size, and align. Align may be left,
+center, or right. Montserrat 12, 14, 28, and 44 have exact built-in matches.
+Theme Builder strict mode stops when a custom or unavailable font would be
+substituted. A development-only override can create an approximate preview,
+but packages with font warnings should not be distributed to customers.
+
+Bars and arcs additionally support min, max, and track_color. Arcs also support
+rotation and sweep in degrees. Buttons support text and background.
+
+Images additionally require asset, format, source_width, and source_height.
+The asset must be a safe relative path inside the ZIP. Supported raw LVGL 16-bit
+formats are "rgb565" (2 bytes per pixel) and "rgb565a8" (3 bytes per pixel).
+Each decoded image is limited to 2 MB and a theme may contain up to 12 images.
+Image bytes are CRC-checked before display and released when changing themes.
+
+Example:
+
+{
+  "background": "#08090A",
+  "objects": [
+    {"type":"label", "name":"dash_rpm_value", "x":40, "y":30,
+     "width":260, "height":60, "font_size":44, "align":"center",
+     "color":"#FFFFFF", "text":"0"},
+    {"type":"bar", "name":"dash_rpm_bar", "x":40, "y":110,
+     "width":944, "height":24, "min":0, "max":9000,
+     "color":"#E4002B", "track_color":"#25282D"},
+    {"type":"button", "name":"dash_settings_button", "x":900, "y":520,
+     "width":100, "height":60, "text":"Settings", "background":"#151619"}
+  ]
+}
+
+Objects outside the 1024 x 600 canvas are clamped to safe coordinates. Invalid
+or oversized layouts do not replace the current dashboard; MackoDash falls back
+to the built-in Modern theme. A missing settings button is replaced by a small
+fallback control in the lower-right corner.
+
+DESIGNER CHECKLIST
+------------------
+[ ] Project is 1024 x 600 and LVGL 8.4.
+[ ] Every live object uses a name from this guide.
+[ ] Object types match the naming table.
+[ ] Duplicate live values use _2, _3, and so on.
+[ ] A dash_settings_button is present and easy to reach.
+[ ] Important text fits at both short and longest expected values.
+[ ] RPM gauges cover at least the configured engine range.
+[ ] Theme is exported and packaged as .mdtheme.zip.
+[ ] manifest.json is at the ZIP root.
+[ ] Theme is tested on the dashboard before distribution.

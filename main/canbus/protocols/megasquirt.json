@@ -1,0 +1,141 @@
+{
+  "name": "megasquirt",
+  "bitrate": 500000,
+  "frames": [
+
+    {
+      "id": "0x5F0",
+      "signals": [
+        { "name":"seconds",       "offset":0, "len":2, "scale":1.0,   "offset_val":0, "endian":"big" },
+        { "name":"pw1",           "offset":2, "len":2, "scale":0.001, "offset_val":0, "endian":"big" },
+        { "name":"pw2",           "offset":4, "len":2, "scale":0.001, "offset_val":0, "endian":"big" },
+        { "name":"rpm",           "offset":6, "len":2, "scale":1.0,   "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F1",
+      "signals": [
+        { "name":"ign_angle",     "offset":0, "len":2, "scale":0.1, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F2",
+      "signals": [
+        { "name":"baro",          "offset":0, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"map",           "offset":2, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"air_temp",      "offset":4, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"coolant_temp",  "offset":6, "len":2, "scale":0.1, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F3",
+      "signals": [
+        { "name":"tps",               "offset":0, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"battery_voltage",   "offset":2, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"lambda1",           "offset":4, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"lambda2",           "offset":6, "len":2, "scale":0.1, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F4",
+      "signals": [
+        { "name":"fuel_load",     "offset":0, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"ego_corr1",     "offset":2, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"ego_corr2",     "offset":4, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"accel_enrich",  "offset":6, "len":2, "scale":0.1, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F5",
+      "signals": [
+        { "name":"warmup_enrich", "offset":0, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"tps_accel",     "offset":2, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"baro_corr",     "offset":4, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"gammae",        "offset":6, "len":2, "scale":0.1, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F6",
+      "signals": [
+        { "name":"ve1",           "offset":0, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"ve2",           "offset":2, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"ve3",           "offset":4, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"iac_step",      "offset":6, "len":2, "scale":1.0, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F7",
+      "signals": [
+        { "name":"cam_angle",     "offset":0, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"tps_dot",       "offset":2, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
+        { "name":"map_dot",       "offset":4, "len":2, "scale":1.0, "offset_val":0, "endian":"big" },
+        { "name":"rpm_dot",       "offset":6, "len":2, "scale":10.0, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F8",
+      "signals": [
+        { "name":"maf_load",      "offset":0, "len":2, "scale":0.1,  "offset_val":0, "endian":"big" },
+        { "name":"fuel_load2",    "offset":2, "len":2, "scale":0.1,  "offset_val":0, "endian":"big" },
+        { "name":"fuel_corr",     "offset":4, "len":2, "scale":0.1,  "offset_val":0, "endian":"big" },
+        { "name":"maf",           "offset":6, "len":2, "scale":0.01, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5F9",
+      "signals": [
+        { "name":"ego_voltage1",  "offset":0, "len":2, "scale":0.01, "offset_val":0, "endian":"big" },
+        { "name":"ego_voltage2",  "offset":2, "len":2, "scale":0.01, "offset_val":0, "endian":"big" },
+        { "name":"dwell",         "offset":4, "len":2, "scale":0.1,  "offset_val":0, "endian":"big" },
+        { "name":"dwell_trail",   "offset":6, "len":2, "scale":0.1,  "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x5FA",
+      "signals": [
+        { "name":"status1", "offset":0, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"status2", "offset":1, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"status3", "offset":2, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"status4", "offset":3, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"status5", "offset":4, "len":2, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"status6", "offset":6, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"status7", "offset":7, "len":1, "scale":1, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x611",
+      "signals": [
+        { "name":"pwm_duty1", "offset":0, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"pwm_duty2", "offset":1, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"pwm_duty3", "offset":2, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"pwm_duty4", "offset":3, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"pwm_duty5", "offset":4, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"pwm_duty6", "offset":5, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"gear",      "offset":6, "len":1, "scale":1, "offset_val":0, "endian":"big" },
+        { "name":"engine_status", "offset":7, "len":1, "scale":1, "offset_val":0, "endian":"big" }
+      ]
+    },
+
+    {
+      "id": "0x61A",
+      "signals": [
+        { "name":"speed",  "offset":0, "len":2, "scale":0.36, "offset_val":0, "endian":"big" },
+        { "name":"vss2",   "offset":2, "len":2, "scale":0.36, "offset_val":0, "endian":"big" },
+        { "name":"vss3",   "offset":4, "len":2, "scale":0.36, "offset_val":0, "endian":"big" },
+        { "name":"vss4",   "offset":6, "len":2, "scale":0.36, "offset_val":0, "endian":"big" }
+      ]
+    }
+
+  ]
+}

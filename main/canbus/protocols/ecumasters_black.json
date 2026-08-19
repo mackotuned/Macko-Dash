@@ -1,0 +1,78 @@
+{
+  "name": "emu_black",
+  "bitrate": 1000000,
+  "frames": [
+
+    {
+      "id": "0x600",
+      "signals": [
+        {"name":"rpm","offset":0,"len":2,"scale":1,"endian":"little"},
+        {"name":"tps","offset":2,"len":1,"scale":0.5,"endian":"little"},
+        {"name":"iat","offset":3,"len":1,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"map","offset":4,"len":2,"scale":0.145038,"offset_val":-14.6959,"endian":"little"},
+        {"name":"injpw","offset":6,"len":2,"scale":0.016129,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x601",
+      "signals": [
+        {"name":"ain1","offset":0,"len":2,"scale":0.004883,"endian":"little"},
+        {"name":"ain2","offset":2,"len":2,"scale":0.004883,"endian":"little"},
+        {"name":"ain3","offset":4,"len":2,"scale":0.004883,"endian":"little"},
+        {"name":"ain4","offset":6,"len":2,"scale":0.004883,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x602",
+      "signals": [
+        {"name":"speed","offset":0,"len":2,"scale":0.621371,"endian":"little"},
+        {"name":"baro","offset":2,"len":1,"scale":0.145038,"offset_val":-14.6959,"endian":"little"},
+        {"name":"oil_temp","offset":3,"len":1,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"oil_pressure","offset":4,"len":1,"scale":0.9064875,"endian":"little"},
+        {"name":"fuel_pressure","offset":5,"len":1,"scale":0.9064875,"endian":"little"},
+        {"name":"coolant_temp","offset":6,"len":2,"scale":1.8,"offset_val":32,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x603",
+      "signals": [
+        {"name":"ign_angle","offset":0,"len":1,"scale":0.5,"endian":"little"},
+        {"name":"dwell","offset":1,"len":1,"scale":0.05,"endian":"little"},
+        {"name":"lambda","offset":2,"len":1,"scale":0.007813,"endian":"little"},
+        {"name":"lambda_corr","offset":3,"len":1,"scale":0.5,"endian":"little"},
+        {"name":"egt1","offset":4,"len":2,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"egt2","offset":6,"len":2,"scale":1.8,"offset_val":32,"endian":"little"}
+      ]
+    },
+
+    {
+      "id": "0x604",
+      "signals": [
+        {"name":"gear","offset":0,"len":1,"scale":1,"endian":"little"},
+        {"name":"ecu_temp","offset":1,"len":1,"scale":1.8,"offset_val":32,"endian":"little"},
+        {"name":"battery_voltage","offset":2,"len":2,"scale":0.027,"endian":"little"},
+
+        {"name":"err_clt","offset":4,"len":1,"scale":1,"endian":"little"},
+        {"name":"err_iat","offset":4,"len":1,"scale":1,"endian":"little"},
+        {"name":"err_map","offset":4,"len":1,"scale":1,"endian":"little"},
+        {"name":"err_wbo","offset":4,"len":1,"scale":1,"endian":"little"},
+        {"name":"err_egt1","offset":4,"len":1,"scale":1,"endian":"little"},
+        {"name":"err_egt2","offset":4,"len":1,"scale":1,"endian":"little"},
+        {"name":"err_alarm","offset":4,"len":1,"scale":1,"endian":"little"},
+        {"name":"knocking","offset":4,"len":1,"scale":1,"endian":"little"},
+
+        {"name":"ffsensor","offset":5,"len":1,"scale":1,"endian":"little"},
+        {"name":"err_dbw","offset":5,"len":1,"scale":1,"endian":"little"},
+        {"name":"err_fpr","offset":5,"len":1,"scale":1,"endian":"little"},
+
+        {"name":"gearcut","offset":6,"len":1,"scale":1,"endian":"little"},
+        {"name":"als","offset":6,"len":1,"scale":1,"endian":"little"},
+        {"name":"lc","offset":6,"len":1,"scale":1,"endian":"little"}
+      ]
+    }
+
+  ]
+}

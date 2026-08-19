@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "id": "mackodash.example",
+  "name": "MackoDash Example",
+  "resolution": [1024, 600],
+  "lvgl": "8.4",
+  "layout": "layout.json"
+}

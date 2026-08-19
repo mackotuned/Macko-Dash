@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "name": "ESP-IDF",
+      "compilerPath": "${config:idf.toolsPathWin}\\tools\\riscv32-esp-elf\\esp-14.2.0_20260121\\riscv32-esp-elf\\bin\\riscv32-esp-elf-gcc.exe",
+      "intelliSenseMode": "windows-gcc-x64",
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "defines": [
+        "ESP_PLATFORM",
+        "IDF_TARGET_ESP32P4"
+      ],
+      "includePath": [
+        "${workspaceFolder}",
+        "${workspaceFolder}/build/config",
+        "${workspaceFolder}/main",
+        "${workspaceFolder}/components/**",
+        "${workspaceFolder}/managed_components/**",
+        "C:/Users/mackb/esp/v5.5/esp-idf/components/**"
+      ]
+    }
+  ],
+  "version": 4
+}

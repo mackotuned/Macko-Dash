@@ -1,0 +1,24 @@
+menu "C6 OTA Bridge"
+
+    config HONDA_DASH_ENABLE_WIFI_OTA
+        bool "Enable WiFi / OTA update feature"
+        default n
+        help
+            Compiles in the C6 hosted-WiFi bridge and the OTA update web
+            server. When disabled, the WiFi-related source files and their
+            component dependencies (esp_wifi, esp_wifi_remote, esp_hosted,
+            esp_http_server) are left out of the build entirely, so the
+            esp_hosted component's background SDIO task never starts and
+            never competes with the dashboard for CPU time. The settings
+            menu's Update tile is hidden in this case too. All the real
+            WiFi/OTA code stays in the project untouched -- just flip this
+            back on to bring it back.
+
+    config OTA_C6_FIRMWARE_PATH
+        string "C6 firmware image path"
+        default "/spiffs/network_adapter.bin"
+        depends on HONDA_DASH_ENABLE_WIFI_OTA
+        help
+            Path to the onboard C6 firmware image used by the ESP-Hosted slave OTA bridge.
+
+endmenu

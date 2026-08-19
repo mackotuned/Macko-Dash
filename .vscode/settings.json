@@ -1,0 +1,13 @@
+{
+    "C_Cpp.default.configurationProvider": "espressif.esp-idf-extension",
+    "idf.flashType": "UART",
+    "idf.currentSetup": "C:/Users/mackb/esp/v5.5/esp-idf",
+    "idf.projectDir": "C:/Users/mackb/OneDrive/Desktop/FT550 esp/mackodash_with_build",
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32p4"
+    },
+    "idf.portWin": "COM10",
+    "idf.openOcdConfigs": [
+        "board/esp32p4-builtin.cfg"
+    ]
+}

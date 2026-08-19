@@ -1,0 +1,24 @@
+MACKODASH USB UPDATE INSTRUCTIONS
+================================
+
+Included files:
+  MackoDashUpdateFlasher.exe
+  mackodash.bin
+
+Keep both files together in the same folder.
+
+1. Connect MackoDash to the Windows PC with its update USB cable.
+2. Keep the dashboard powered for the entire update.
+3. Open MackoDashUpdateFlasher.exe.
+4. Confirm that the firmware shows as Validated.
+5. Confirm the dashboard COM port. The app normally selects it automatically.
+6. Select Flash ESP32-P4 Update.
+7. Confirm the warning and wait for flash verification to finish.
+8. Do not unplug USB or power until Update Complete appears.
+
+This updates only the ESP32-P4 dashboard application. It preserves settings,
+odometer data, SD-card themes, and ESP32-C6 firmware.
+
+If the USB port is busy, close any serial monitor or other flashing program and
+try again. If an update fails, leave USB and power connected, review the error,
+and retry. Do not use Erase Flash or another firmware file.

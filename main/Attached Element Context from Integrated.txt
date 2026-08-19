@@ -1,0 +1,35 @@
+Attached Element Context from Integrated Browser
+
+Element: img
+
+URL: https://japanesenostalgiccar.com/wordpress/wp-content/uploads/2018/08/069-2934_Honda-Civic-Si-EM1.jpg
+
+HTML Path: img
+
+Outer HTML:
+```html
+<img style="display: block;-webkit-user-select: none;margin: auto;background-color: hsl(0, 0%, 90%);transition: background-color 300ms;" src="https://japanesenostalgiccar.com/wordpress/wp-content/uploads/2018/08/069-2934_Honda-Civic-Si-EM1.jpg" width="960" height="640">
+```
+
+Dimensions:
+- top: 0px
+- left: 0px
+- width: 1895px
+- height: 811px
+
+CSS:
+```css
+element { display: block;-webkit-user-select: none;margin: auto;background-color: hsl(0, 0%, 90%);transition: background-color 300ms; }
+
+/* Resolved values */
+margin: 85.5px 467.5px;
+transition: background-color 0.3s;
+background-color: rgb(230, 230, 230);
+display: block;
+height: 640px;
+overflow-clip-margin: content-box /*UA*/;
+overflow-x: clip /*UA*/;
+overflow-y: clip /*UA*/;
+user-select: none;
+width: 960px;
+```

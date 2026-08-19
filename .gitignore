@@ -1,0 +1,6 @@
+/build/
+/managed_components/
+/workspace_addons/archives/
+/workspace_addons/**/__pycache__/
+/workspace_addons/**/build/
+/workspace_addons/**/dist/
