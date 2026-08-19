@@ -3,8 +3,11 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import io
+import json
 import struct
 import sys
+import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -13,15 +16,43 @@ import esptool
 from esptool.bin_image import LoadFirmwareImage
 
 
-APP_OFFSET = 0x20000
-APP_PARTITION_SIZE = 0x600000
 ESP32_P4_CHIP_ID = 18
 APP_DESC_MAGIC = 0xABCD5432
 EXPECTED_PROJECT = "mackodash"
+BUNDLE_SCHEMA = 1
+BUNDLE_MANIFEST = "manifest.json"
+MAX_BUNDLE_SIZE = 16 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class ImageDefinition:
+    name: str
+    filename: str
+    offset: int
+    max_size: int
+    exact_size: bool = False
+
+
+IMAGE_DEFINITIONS = (
+    ImageDefinition("bootloader", "bootloader.bin", 0x2000, 0x6000),
+    ImageDefinition("partition_table", "partition-table.bin", 0x8000, 0xC00, True),
+    ImageDefinition("ota_data", "ota_data_initial.bin", 0xF000, 0x2000, True),
+    ImageDefinition("application", "mackodash.bin", 0x20000, 0x600000),
+    ImageDefinition("storage", "storage.bin", 0xC20000, 0x3E0000, True),
+)
+APP_DEFINITION = next(image for image in IMAGE_DEFINITIONS if image.name == "application")
 
 
 class FirmwareValidationError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class BundleImage:
+    definition: ImageDefinition
+    path: Path
+    size: int
+    sha256: str
 
 
 @dataclass(frozen=True)
@@ -34,6 +65,7 @@ class FirmwareInfo:
     compile_date: str
     compile_time: str
     idf_version: str
+    images: tuple[BundleImage, ...]
 
 
 def _decode_field(data: bytes, offset: int, length: int) -> str:
@@ -54,22 +86,15 @@ def _read_app_description(data: bytes) -> tuple[str, str, str, str, str]:
     return project_name, version, compile_date, compile_time, idf_version
 
 
-def validate_firmware(path: str | Path) -> FirmwareInfo:
-    firmware_path = Path(path).expanduser().resolve()
-    if firmware_path.suffix.lower() != ".bin":
-        raise FirmwareValidationError("Choose the MackoDash .bin application file.")
-    if not firmware_path.is_file():
-        raise FirmwareValidationError("The selected firmware file does not exist.")
-
-    size = firmware_path.stat().st_size
+def _validate_application(data: bytes) -> tuple[str, str, str, str, str]:
+    size = len(data)
     if size < 64 * 1024:
-        raise FirmwareValidationError("The selected file is too small to be MackoDash firmware.")
-    if size > APP_PARTITION_SIZE:
+        raise FirmwareValidationError("The application image is too small to be MackoDash firmware.")
+    if size > APP_DEFINITION.max_size:
         raise FirmwareValidationError(
-            f"Firmware is {size:,} bytes, larger than the {APP_PARTITION_SIZE:,}-byte application partition."
+            f"Application is {size:,} bytes, larger than its {APP_DEFINITION.max_size:,}-byte partition."
         )
 
-    data = firmware_path.read_bytes()
     try:
         image = LoadFirmwareImage("esp32p4", data)
         image.verify()
@@ -88,16 +113,148 @@ def validate_firmware(path: str | Path) -> FirmwareInfo:
         raise FirmwareValidationError(
             f"Wrong application project '{project_name or 'unknown'}'; expected '{EXPECTED_PROJECT}'."
         )
+    return project_name, version, compile_date, compile_time, idf_version
+
+
+def create_firmware_bundle(build_dir: str | Path, output_path: str | Path) -> Path:
+    build_root = Path(build_dir).expanduser().resolve()
+    output = Path(output_path).expanduser().resolve()
+    source_paths = {
+        "bootloader": build_root / "bootloader" / "bootloader.bin",
+        "partition_table": build_root / "partition_table" / "partition-table.bin",
+        "ota_data": build_root / "ota_data_initial.bin",
+        "application": build_root / "mackodash.bin",
+        "storage": build_root / "storage.bin",
+    }
+    missing = [str(path) for path in source_paths.values() if not path.is_file()]
+    if missing:
+        raise FirmwareValidationError("Build the complete firmware first; missing: " + ", ".join(missing))
+
+    files: list[dict[str, object]] = []
+    payloads: dict[str, bytes] = {}
+    for definition in IMAGE_DEFINITIONS:
+        data = source_paths[definition.name].read_bytes()
+        payloads[definition.filename] = data
+        files.append({
+            "name": definition.name,
+            "file": definition.filename,
+            "offset": definition.offset,
+            "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        })
+
+    project_name, version, compile_date, compile_time, idf_version = _validate_application(
+        payloads[APP_DEFINITION.filename]
+    )
+    manifest = {
+        "schema": BUNDLE_SCHEMA,
+        "project": project_name,
+        "chip": "esp32p4",
+        "version": version,
+        "compile_date": compile_date,
+        "compile_time": compile_time,
+        "idf_version": idf_version,
+        "files": files,
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+        def write_entry(filename: str, data: str | bytes) -> None:
+            info = zipfile.ZipInfo(filename, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o600 << 16
+            archive.writestr(info, data, compresslevel=9)
+
+        write_entry(BUNDLE_MANIFEST, json.dumps(manifest, indent=2) + "\n")
+        for definition in IMAGE_DEFINITIONS:
+            write_entry(definition.filename, payloads[definition.filename])
+    validate_firmware(output)
+    return output
+
+
+def _validate_manifest(manifest: object) -> dict[str, dict[str, object]]:
+    if not isinstance(manifest, dict) or manifest.get("schema") != BUNDLE_SCHEMA:
+        raise FirmwareValidationError(f"Unsupported firmware bundle manifest; expected schema {BUNDLE_SCHEMA}.")
+    if manifest.get("project") != EXPECTED_PROJECT or manifest.get("chip") != "esp32p4":
+        raise FirmwareValidationError("This firmware bundle is not for MackoDash ESP32-P4.")
+    files = manifest.get("files")
+    if not isinstance(files, list) or len(files) != len(IMAGE_DEFINITIONS):
+        raise FirmwareValidationError("Firmware bundle manifest does not contain the required five images.")
+
+    by_name: dict[str, dict[str, object]] = {}
+    for item in files:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            raise FirmwareValidationError("Firmware bundle manifest contains an invalid image entry.")
+        name = item["name"]
+        if name in by_name:
+            raise FirmwareValidationError(f"Firmware bundle manifest repeats image '{name}'.")
+        by_name[name] = item
+    if set(by_name) != {definition.name for definition in IMAGE_DEFINITIONS}:
+        raise FirmwareValidationError("Firmware bundle manifest image names do not match the required layout.")
+    return by_name
+
+
+def validate_firmware(path: str | Path) -> FirmwareInfo:
+    bundle_path = Path(path).expanduser().resolve()
+    if bundle_path.suffix.lower() != ".zip":
+        raise FirmwareValidationError("Choose the official MackoDash firmware .zip file.")
+    if not bundle_path.is_file():
+        raise FirmwareValidationError("The selected firmware ZIP does not exist.")
+    if bundle_path.stat().st_size > MAX_BUNDLE_SIZE:
+        raise FirmwareValidationError("The selected firmware ZIP is unexpectedly large.")
+
+    try:
+        archive = zipfile.ZipFile(bundle_path)
+    except zipfile.BadZipFile as error:
+        raise FirmwareValidationError(f"Invalid or damaged firmware ZIP: {error}") from error
+
+    with archive:
+        names = archive.namelist()
+        expected_names = {BUNDLE_MANIFEST, *(definition.filename for definition in IMAGE_DEFINITIONS)}
+        if len(names) != len(set(names)) or set(names) != expected_names:
+            raise FirmwareValidationError("Firmware ZIP must contain only the manifest and five firmware images at its root.")
+        if any(info.is_dir() or info.file_size > MAX_BUNDLE_SIZE for info in archive.infolist()):
+            raise FirmwareValidationError("Firmware ZIP contains an invalid or oversized entry.")
+        try:
+            manifest = json.loads(archive.read(BUNDLE_MANIFEST).decode("utf-8"))
+        except (KeyError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise FirmwareValidationError(f"Firmware bundle manifest is missing or invalid: {error}") from error
+        manifest_files = _validate_manifest(manifest)
+
+        total_size = 0
+        image_data: dict[str, bytes] = {}
+        bundle_images: list[BundleImage] = []
+        for definition in IMAGE_DEFINITIONS:
+            item = manifest_files[definition.name]
+            if item.get("file") != definition.filename or item.get("offset") != definition.offset:
+                raise FirmwareValidationError(f"Invalid file or flash offset for '{definition.name}'.")
+            data = archive.read(definition.filename)
+            size = len(data)
+            total_size += size
+            if size == 0 or size > definition.max_size or (definition.exact_size and size != definition.max_size):
+                qualifier = "exactly" if definition.exact_size else "no more than"
+                raise FirmwareValidationError(
+                    f"{definition.filename} must be {qualifier} {definition.max_size:,} bytes."
+                )
+            digest = hashlib.sha256(data).hexdigest()
+            if item.get("size") != size or item.get("sha256") != digest:
+                raise FirmwareValidationError(f"Checksum or size mismatch for '{definition.filename}'.")
+            image_data[definition.name] = data
+            bundle_images.append(BundleImage(definition, bundle_path, size, digest))
+
+    project_name, version, compile_date, compile_time, idf_version = _validate_application(
+        image_data["application"]
+    )
 
     return FirmwareInfo(
-        path=firmware_path,
-        size=size,
-        sha256=hashlib.sha256(data).hexdigest(),
+        path=bundle_path,
+        size=total_size,
+        sha256=hashlib.sha256(bundle_path.read_bytes()).hexdigest(),
         project_name=project_name,
         version=version or "unknown",
         compile_date=compile_date or "unknown",
         compile_time=compile_time or "unknown",
         idf_version=idf_version or "unknown",
+        images=tuple(bundle_images),
     )
 
 
@@ -130,21 +287,30 @@ def flash_firmware(port: str, firmware: FirmwareInfo, log: Callable[[str], None]
     if not port.upper().startswith("COM"):
         raise ValueError("Select a valid Windows COM port.")
 
+    firmware = validate_firmware(firmware.path)
     writer = _LogWriter(log)
-    arguments = [
-        "--chip", "esp32p4",
-        "--port", port,
-        "--baud", "460800",
-        "--before", "default-reset",
-        "--after", "hard-reset",
-        "write-flash",
-        "--flash-mode", "dio",
-        "--flash-freq", "40m",
-        "--flash-size", "16MB",
-        hex(APP_OFFSET), str(firmware.path),
-    ]
-    with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
-        try:
-            esptool.main(arguments)
-        finally:
-            writer.flush()
+    with tempfile.TemporaryDirectory(prefix="mackodash-firmware-") as directory:
+        extract_root = Path(directory)
+        with zipfile.ZipFile(firmware.path) as archive:
+            for image in firmware.images:
+                (extract_root / image.definition.filename).write_bytes(archive.read(image.definition.filename))
+
+        arguments = [
+            "--chip", "esp32p4",
+            "--port", port,
+            "--baud", "460800",
+            "--before", "default-reset",
+            "--after", "hard-reset",
+            "write-flash",
+            "--flash-mode", "dio",
+            "--flash-freq", "40m",
+            "--flash-size", "16MB",
+        ]
+        for image in firmware.images:
+            arguments.extend((hex(image.definition.offset), str(extract_root / image.definition.filename)))
+
+        with contextlib.redirect_stdout(writer), contextlib.redirect_stderr(writer):
+            try:
+                esptool.main(arguments)
+            finally:
+                writer.flush()

@@ -2,13 +2,14 @@ $ErrorActionPreference = 'Stop'
 $python = 'C:\Python314\python.exe'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Resolve-Path (Join-Path $root '..\..')
-$firmware = Join-Path $projectRoot 'build\mackodash.bin'
+$buildDir = Join-Path $projectRoot 'build'
+$firmwareBundle = Join-Path $root 'dist\MackoDash-Firmware.zip'
 
 if (-not (Test-Path $python)) {
     throw "Python with Tkinter was not found at $python"
 }
-if (-not (Test-Path $firmware)) {
-    throw "Build the MackoDash firmware first; $firmware was not found"
+if (-not (Test-Path (Join-Path $buildDir 'mackodash.bin'))) {
+    throw "Build the complete MackoDash firmware first; $buildDir is incomplete"
 }
 
 & $python -c "import tkinter, esptool, serial; print('Tk', tkinter.Tcl().call('info', 'patchlevel')); print('esptool', esptool.__version__)"
@@ -21,7 +22,8 @@ if (-not (Test-Path $firmware)) {
     --specpath $root `
     (Join-Path $root 'mackodash_update_flasher.py')
 
-Copy-Item $firmware (Join-Path $root 'dist\mackodash.bin') -Force
+& $python (Join-Path $root 'build_firmware_bundle.py') $buildDir $firmwareBundle
+Remove-Item (Join-Path $root 'dist\*.bin') -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root 'CUSTOMER_INSTRUCTIONS.txt') (Join-Path $root 'dist\CUSTOMER_INSTRUCTIONS.txt') -Force
 
 Write-Host "Built customer files in $(Join-Path $root 'dist')"

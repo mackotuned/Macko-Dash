@@ -51,7 +51,7 @@ class UpdateFlasherFrame(ttk.Frame):
         )
         ttk.Label(
             frame,
-            text="Updates only the ESP32-P4 dashboard application. Settings, themes, odometer data, and the C6 are preserved.",
+            text="Installs a complete validated ESP32-P4 firmware ZIP. NVS settings, odometer data, SD-card themes, and the C6 are preserved.",
             style="Hint.TLabel",
             wraplength=750,
         ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 20))
@@ -92,7 +92,7 @@ class UpdateFlasherFrame(ttk.Frame):
         buttons = ttk.Frame(frame)
         buttons.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(0, 12))
         self.flash_button = ttk.Button(
-            buttons, text="Flash ESP32-P4 Update", style="Accent.TButton", command=self._confirm_flash, state="disabled"
+            buttons, text="Flash ESP32-P4 Firmware", style="Accent.TButton", command=self._confirm_flash, state="disabled"
         )
         self.flash_button.pack(side="left")
         ttk.Label(buttons, textvariable=self.status, style="Hint.TLabel", wraplength=490).pack(
@@ -117,8 +117,8 @@ class UpdateFlasherFrame(ttk.Frame):
 
     def _choose_firmware(self) -> None:
         selected = filedialog.askopenfilename(
-            title="Choose MackoDash ESP32-P4 firmware",
-            filetypes=[("MackoDash firmware", "*.bin"), ("All files", "*.*")],
+            title="Choose MackoDash full firmware ZIP",
+            filetypes=[("MackoDash firmware ZIP", "*.zip"), ("All files", "*.*")],
         )
         if not selected:
             return
@@ -127,7 +127,7 @@ class UpdateFlasherFrame(ttk.Frame):
     def _load_adjacent_firmware(self) -> None:
         if not getattr(sys, "frozen", False):
             return
-        candidate = Path(sys.executable).with_name("mackodash.bin")
+        candidate = Path(sys.executable).with_name("MackoDash-Firmware.zip")
         if candidate.is_file():
             self._load_firmware(candidate, show_error=False)
 
@@ -148,15 +148,19 @@ class UpdateFlasherFrame(ttk.Frame):
 
         self.firmware_info = info
         self.firmware_path.set(str(info.path))
+        image_summary = "    ".join(
+            f"{image.definition.name}: {image.size:,} B" for image in info.images
+        )
         self.metadata.configure(
             text=(
-                f"Validated ESP32-P4 firmware\n"
+                f"Validated complete ESP32-P4 firmware bundle\n"
                 f"Project: {info.project_name}    Version: {info.version}    Built: {info.compile_date} {info.compile_time}\n"
-                f"Size: {info.size:,} bytes    SHA-256: {info.sha256}"
+                f"Payload: {info.size:,} bytes    Bundle SHA-256: {info.sha256}\n"
+                f"{image_summary}"
             ),
             style="Good.TLabel",
         )
-        self.status.set("Firmware validated. Connect the dashboard and select its USB port.")
+        self.status.set("Full firmware ZIP validated. Connect the dashboard and select its USB port.")
         self._append_log(f"Validated {info.path.name}")
         self._append_log(f"SHA-256 {info.sha256}")
         self._update_flash_state()
@@ -194,11 +198,12 @@ class UpdateFlasherFrame(ttk.Frame):
             messagebox.showerror("No USB port", "Connect the dashboard and select its COM port.")
             return
         confirmed = messagebox.askyesno(
-            "Flash MackoDash update?",
-            f"Firmware: {self.firmware_info.path.name}\n"
+            "Flash complete MackoDash firmware?",
+            f"Firmware ZIP: {self.firmware_info.path.name}\n"
             f"Version: {self.firmware_info.version}\n"
             f"USB port: {port}\n\n"
-            "This updates only the ESP32-P4 application and preserves settings and themes.\n\n"
+            "This replaces the ESP32-P4 bootloader, partition table, OTA metadata, application, and onboard SPIFFS.\n\n"
+            "NVS settings, odometer data, SD-card themes, and ESP32-C6 firmware are preserved.\n\n"
             "Keep power and USB connected until verification finishes.",
             icon="warning",
         )
@@ -212,7 +217,7 @@ class UpdateFlasherFrame(ttk.Frame):
         self._update_flash_state()
         self.status.set("Connecting and flashing. Do not disconnect USB or power.")
         self._append_log("")
-        self._append_log(f"Starting app-only flash on {port} at 0x20000...")
+        self._append_log(f"Starting complete ESP32-P4 firmware flash on {port}...")
         threading.Thread(target=self._flash_worker, args=(port, self.firmware_info), daemon=True).start()
 
     def _flash_worker(self, port: str, info: FirmwareInfo) -> None:

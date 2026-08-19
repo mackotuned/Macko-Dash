@@ -1,24 +1,26 @@
 # MackoDash USB Update Flasher
 
-`MackoDashUpdateFlasher.exe` updates only the ESP32-P4 dashboard application
-over its USB serial connection. Customers do not need Python or ESP-IDF.
+`MackoDashUpdateFlasher.exe` installs a validated complete ESP32-P4 firmware
+bundle over USB. Customers do not need Python or ESP-IDF.
 
 ## Customer workflow
 
 1. Connect MackoDash to the Windows PC using its update USB port.
 2. Open `MackoDashUpdateFlasher.exe`.
-3. The included `mackodash.bin` is validated automatically. Use **Browse** only
-  when installing a newer official firmware file.
+3. Select the official `MackoDash-Firmware.zip` downloaded from GitHub. An
+   adjacent bundle is validated automatically when included with the EXE.
 4. Confirm the automatically selected dashboard COM port.
-5. Select **Flash ESP32-P4 Update** and keep USB and power connected.
+5. Select **Flash ESP32-P4 Firmware** and keep USB and power connected.
 6. Wait for hash verification and the success message.
 
-The flasher rejects damaged files, wrong-chip images, oversized applications,
-and ESP-IDF images whose project name is not `mackodash`. It forces the target
-to ESP32-P4 and writes only the application at `0x20000`.
+The ZIP contains the bootloader, partition table, OTA metadata, application,
+and SPIFFS storage images plus a checksum manifest. The flasher rejects missing,
+damaged, unexpected, oversized, wrong-offset, wrong-chip, and wrong-project
+bundles before enabling the flash button.
 
-It does not erase or write NVS, OTA metadata, bootloader, partition table,
-SPIFFS storage, SD-card themes, or ESP32-C6 firmware.
+The full flash replaces ESP32-P4 SPIFFS storage. It does not erase or write NVS,
+so settings and odometer data remain intact. SD-card themes and ESP32-C6 firmware
+are not touched.
 
 ## Developer validation
 
@@ -28,6 +30,5 @@ SPIFFS storage, SD-card themes, or ESP32-C6 firmware.
 ```
 
 Build the standalone executable with `build_windows.ps1`. The pinned runtime
-dependencies are listed in `requirements.txt`. The build script places the EXE
-and the current `mackodash.bin` together in `dist`; distribute both files in the
-same folder so the firmware loads automatically.
+dependencies are listed in `requirements.txt`. The build script creates the EXE
+and a validated `MackoDash-Firmware.zip` in `dist` from the current ESP-IDF build.

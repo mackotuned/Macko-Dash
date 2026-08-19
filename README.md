@@ -86,18 +86,14 @@ Available channels depend on what the selected ECU broadcasts. Always verify cha
 
 Use the official Windows updater from [MackoDash Flash Tools](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update).
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/mackotuned/MackoDash-Flash-Tools/MackoDash/firmware-update-screenshot.png" alt="MackoDash Utility firmware update screen" width="680">
-</p>
-
 1. Connect the dashboard to the Windows PC with its update USB cable.
 2. Keep the dashboard powered and the USB cable connected throughout the update.
 3. Open the **Firmware Update** tab in MackoDash Utility.
-4. Confirm that `mackodash.bin` shows as **Validated**.
+4. Select the official `MackoDash-Firmware.zip` downloaded from GitHub and confirm that it shows as **Validated**.
 5. Confirm the dashboard COM port.
-6. Select **Flash ESP32-P4 Update** and wait for verification to finish.
+6. Select **Flash ESP32-P4 Firmware** and wait for verification to finish.
 
-The updater writes only the ESP32-P4 dashboard application at `0x20000`. It preserves dashboard settings, odometer and trip data, SPIFFS storage, SD-card themes, partition data, and ESP32-C6 firmware.
+The full firmware ZIP contains the ESP32-P4 bootloader, partition table, OTA metadata, dashboard application, and SPIFFS storage. NVS settings, odometer and trip data, SD-card themes, and ESP32-C6 firmware are not touched. Onboard SPIFFS is replaced by the version included in the firmware bundle.
 
 > Do not disconnect USB or dashboard power until verification has finished.
 
@@ -121,7 +117,7 @@ Themes are stored as `*.mdtheme.zip` files in `/MACKODASH/THEMES`. Invalid packa
 | What you see | What to check |
 | --- | --- |
 | Updater says the COM port is busy | Close ESP-IDF Monitor, serial terminals, and other flashing programs, then retry |
-| Firmware does not show as Validated | Download the Flash Tools ZIP again and keep `mackodash.bin` beside the utility |
+| Firmware ZIP does not show as Validated | Download the official `MackoDash-Firmware.zip` again without modifying or extracting it |
 | ECU values remain at zero | Confirm vehicle power, CAN wiring, transceiver connection, ECU protocol, and CAN bitrate |
 | Some channels remain unavailable | Confirm that the selected ECU protocol broadcasts those channels |
 | Theme does not appear | Use a FAT-formatted card and confirm the package is in `/MACKODASH/THEMES` |
