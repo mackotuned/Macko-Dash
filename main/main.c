@@ -2,11 +2,8 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "bsp/esp-bsp.h"
-#include "bsp/display.h"
-#include "bsp_board_extra.h"
 #include "lvgl.h"
 #include "honda_dash_ui.h"
-#include <string.h>
 #include <stdint.h>
 #include <math.h>
 #include "esp_timer.h"
