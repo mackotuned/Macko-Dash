@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <math.h>
 #include "esp_log.h"
+#include "esp_app_desc.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -27,6 +28,7 @@
 #include "warning_chime.h"
 #include "odometer/odometer.h"
 #include "dashboard_runtime.h"
+#include "canbus.h"
 
 #if LV_USE_QRCODE
 extern lv_obj_t * lv_qrcode_create(lv_obj_t * parent, lv_coord_t size, lv_color_t dark_color, lv_color_t light_color);
@@ -353,6 +355,8 @@ static lv_obj_t *s_page_odometer;
 static lv_obj_t *s_page_engine_limits;
 static lv_obj_t *s_page_ecu;
 static lv_obj_t *s_page_theme_resets;
+static lv_obj_t *s_diagnostics_values[6];
+static lv_timer_t *s_diagnostics_timer;
 
 /* ---- config page widget handles + pending (not-yet-saved) state ---- */
 typedef enum {
@@ -1105,7 +1109,13 @@ static void settings_close_cb(lv_event_t *e)
 }
 
 static void settings_open_theme_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_theme); }
-static void settings_open_info_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_info); }
+static void settings_diagnostics_refresh(void);
+static void settings_open_info_cb(lv_event_t *e)
+{
+    (void)e;
+    settings_show_page(s_page_info);
+    settings_diagnostics_refresh();
+}
 static void settings_open_warning_audio_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_warning_audio); }
 static void settings_open_ecu_cb(lv_event_t *e)
 {
@@ -2446,6 +2456,102 @@ static lv_obj_t *build_config_menu_row(lv_obj_t *parent, const char *title, lv_e
     return row;
 }
 
+static lv_obj_t *build_diagnostics_tile(lv_obj_t *parent, const char *title)
+{
+    lv_obj_t *tile = lv_obj_create(parent);
+    lv_obj_set_size(tile, 405, 104);
+    lv_obj_set_style_bg_color(tile, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(tile, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(tile, C_LINE, LV_PART_MAIN);
+    lv_obj_set_style_radius(tile, 10, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(tile, 13, LV_PART_MAIN);
+    lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(tile, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(tile, 7, LV_PART_MAIN);
+
+    make_label(tile, title, DASH_FONT_LABEL, C_LABEL_DIM);
+    lv_obj_t *value = make_label(tile, "Waiting", DASH_FONT_LABEL14, C_LABEL);
+    lv_obj_set_width(value, LV_PCT(100));
+    lv_label_set_long_mode(value, LV_LABEL_LONG_WRAP);
+    return value;
+}
+
+static const char *diagnostics_controller_name(canbus_controller_state_t state)
+{
+    switch (state) {
+        case CANBUS_CONTROLLER_STOPPED: return "STOPPED";
+        case CANBUS_CONTROLLER_RUNNING: return "RUNNING";
+        case CANBUS_CONTROLLER_BUS_OFF: return "BUS OFF";
+        case CANBUS_CONTROLLER_RECOVERING: return "RECOVERING";
+        default: return "OFFLINE";
+    }
+}
+
+static void settings_diagnostics_refresh(void)
+{
+    if (!s_page_info || lv_obj_has_flag(s_page_info, LV_OBJ_FLAG_HIDDEN)) {
+        return;
+    }
+
+    canbus_diagnostics_t diagnostics;
+    canbus_get_diagnostics(&diagnostics);
+
+    char text[96];
+    snprintf(text, sizeof(text), "%s / %s",
+             diagnostics.live_data ? "LIVE" : "NO DATA",
+             diagnostics_controller_name(diagnostics.controller_state));
+    lv_label_set_text(s_diagnostics_values[0], text);
+    lv_obj_set_style_text_color(s_diagnostics_values[0],
+                                diagnostics.live_data ? C_GREEN : C_AMBER, LV_PART_MAIN);
+
+    if (diagnostics.bitrate > 0) {
+        snprintf(text, sizeof(text), "%s / %d kbps%s", diagnostics.protocol,
+                 diagnostics.bitrate / 1000, diagnostics.obd2_active ? " / OBD-II" : "");
+    } else {
+        snprintf(text, sizeof(text), "%s / Detecting rate", diagnostics.protocol);
+    }
+    lv_label_set_text(s_diagnostics_values[1], text);
+
+    if (diagnostics.live_data) {
+        snprintf(text, sizeof(text), "%lu ms ago", (unsigned long)diagnostics.last_frame_age_ms);
+    } else if (diagnostics.last_frame_age_ms > 0) {
+        snprintf(text, sizeof(text), "Stale / %lu ms ago",
+                 (unsigned long)diagnostics.last_frame_age_ms);
+    } else {
+        snprintf(text, sizeof(text), "Waiting for CAN frames");
+    }
+    lv_label_set_text(s_diagnostics_values[2], text);
+
+    snprintf(text, sizeof(text), "RPM + speed: %s\nGear: %s / Oil: %s",
+             diagnostics.drivetrain_live ? "OK" : "WAIT",
+             diagnostics.gear_live ? "OK" : "N/A",
+             diagnostics.oil_pressure_recent ? "OK" : "N/A");
+    lv_label_set_text(s_diagnostics_values[3], text);
+
+    snprintf(text, sizeof(text), "Bus: %lu / Missed: %lu\nRX counter: %lu / Queued: %lu",
+             (unsigned long)diagnostics.bus_error_count,
+             (unsigned long)diagnostics.receive_missed_count,
+             (unsigned long)diagnostics.rx_error_counter,
+             (unsigned long)diagnostics.queued_frames);
+    lv_label_set_text(s_diagnostics_values[4], text);
+    bool errors = diagnostics.bus_error_count || diagnostics.receive_missed_count ||
+                  diagnostics.rx_error_counter;
+    lv_obj_set_style_text_color(s_diagnostics_values[4], errors ? C_AMBER : C_GREEN, LV_PART_MAIN);
+
+    const esp_app_desc_t *app = esp_app_get_description();
+    snprintf(text, sizeof(text), "Firmware %s\nSD: %s / Themes: %u", app->version,
+             theme_storage_is_available() ? "READY" : "NOT FOUND",
+             (unsigned)theme_storage_get_count());
+    lv_label_set_text(s_diagnostics_values[5], text);
+}
+
+static void settings_diagnostics_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    settings_diagnostics_refresh();
+}
+
 static void build_config_section_header(lv_obj_t *parent, const char *title)
 {
     lv_obj_t *label = make_label(parent, title, DASH_FONT_LABEL, C_LABEL_DIM);
@@ -2907,13 +3013,24 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_set_size(s_page_info, LV_PCT(100), LV_PCT(100));
     lv_obj_add_flag(s_page_info, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_flex_flow(s_page_info, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(s_page_info, 8, LV_PART_MAIN);
-    make_label(s_page_info, "INFO", DASH_FONT_LABEL14, C_LABEL);
-    make_label(s_page_info, "UI Version: 1.0.1", DASH_FONT_LABEL14, C_LABEL);
-    make_label(s_page_info, "Panel: 1024x600", DASH_FONT_LABEL14, C_LABEL);
-    make_label(s_page_info, "Platform: ESP32-P4", DASH_FONT_LABEL14, C_LABEL);
-    make_label(s_page_info, "Protocol: Hondata CAN", DASH_FONT_LABEL14, C_LABEL);
+    lv_obj_set_style_pad_row(s_page_info, 10, LV_PART_MAIN);
+    make_label(s_page_info, "DIAGNOSTICS", DASH_FONT_LABEL14, C_LABEL);
+
+    lv_obj_t *diagnostics_grid = make_plain_container(s_page_info);
+    lv_obj_set_size(diagnostics_grid, LV_PCT(100), 342);
+    lv_obj_set_flex_flow(diagnostics_grid, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(diagnostics_grid, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(diagnostics_grid, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_row(diagnostics_grid, 10, LV_PART_MAIN);
+    s_diagnostics_values[0] = build_diagnostics_tile(diagnostics_grid, "CAN BUS");
+    s_diagnostics_values[1] = build_diagnostics_tile(diagnostics_grid, "PROTOCOL");
+    s_diagnostics_values[2] = build_diagnostics_tile(diagnostics_grid, "LAST FRAME");
+    s_diagnostics_values[3] = build_diagnostics_tile(diagnostics_grid, "SIGNALS");
+    s_diagnostics_values[4] = build_diagnostics_tile(diagnostics_grid, "ERRORS");
+    s_diagnostics_values[5] = build_diagnostics_tile(diagnostics_grid, "SYSTEM");
     build_settings_back_btn(s_page_info);
+    s_diagnostics_timer = lv_timer_create(settings_diagnostics_timer_cb, 1000, NULL);
 
     lv_obj_t *units_content = build_config_subpage(panel, &s_page_units, "UNITS");
     lv_obj_t *display_content = build_config_subpage(panel, &s_page_display, "DISPLAY");
@@ -3093,7 +3210,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_set_scrollbar_mode(cfg_scroll, LV_SCROLLBAR_MODE_AUTO);
 
     build_config_section_header(cfg_scroll, "GENERAL");
-    build_config_menu_row(cfg_scroll, "Device Information", settings_open_info_cb);
+    build_config_menu_row(cfg_scroll, "Diagnostics", settings_open_info_cb);
 
     /* --- independent unit controls --- */
     static const char *const unit_titles[UNIT_SETTING_COUNT] = {

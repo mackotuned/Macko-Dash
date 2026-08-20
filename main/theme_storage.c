@@ -24,6 +24,7 @@
 static const char *TAG = "theme_storage";
 static theme_storage_package_t s_packages[THEME_STORAGE_MAX_PACKAGES];
 static size_t s_package_count;
+static bool s_storage_available;
 
 static uint16_t read_le16(const uint8_t *data)
 {
@@ -328,6 +329,7 @@ static esp_err_t ensure_theme_directories(void)
 esp_err_t theme_storage_init(void)
 {
     s_package_count = 0;
+    s_storage_available = false;
 
     esp_err_t err = bsp_sdcard_mount();
     if (err != ESP_OK) {
@@ -335,6 +337,7 @@ esp_err_t theme_storage_init(void)
         return err;
     }
 
+    s_storage_available = true;
     ESP_LOGI(TAG, "SD card mounted at %s", BSP_SD_MOUNT_POINT);
     ensure_theme_directories();
 
@@ -380,6 +383,11 @@ esp_err_t theme_storage_init(void)
         ESP_LOGI(TAG, "Theme package: %s (%s)", s_packages[i].display_name, s_packages[i].status);
     }
     return ESP_OK;
+}
+
+bool theme_storage_is_available(void)
+{
+    return s_storage_available;
 }
 
 size_t theme_storage_get_count(void)

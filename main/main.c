@@ -17,7 +17,6 @@
 #include "warning_chime.h"
 
 #define MIN_VALID_SPEED_MPH 3.0f
-#define PANEL_ONLY_DEBUG_MODE 0
 #define BOOT_LOGO_DURATION_MS 1500
 #define ENABLE_STARTUP_SWEEP 1
 #define STARTUP_SWEEP_DURATION_MS 2800
@@ -28,54 +27,20 @@
 
 LV_IMG_DECLARE(boot_logo);
 
-static volatile float g_speed_mph = 0.0f;
-static float rpmNow = 0.0f;
 static honda_dash_data_t g_last_ui_data = {0};
 static bool g_last_ui_valid = false;
-static int64_t g_last_ui_push_us = 0;
 static TaskHandle_t s_can_startup_task = NULL;
 static TaskHandle_t s_can_rx_task = NULL;
-static TaskHandle_t s_can_mapping_task = NULL;
+static TaskHandle_t s_odometer_tracking_task = NULL;
 static lv_timer_t *s_gauge_timer = NULL;
 static bool s_ota_mode_active = false;
 static bool s_render_paused_active = false;
 
-// -------- GEAR DETECTION ------//
-
-static const float gear_table[5] = {
-    209.0f,  // 1 (Acura Integra GSR 3.230 * 4.40 FD, 195/45R16)
-    136.0f,  // 2 (2.105 * 4.40 FD, 195/45R16)
-    94.0f,   // 3 (1.458 * 4.40 FD, 195/45R16)
-    71.0f,   // 4 (1.107 * 4.40 FD, 195/45R16)
-    55.0f    // 5 (0.848 * 4.40 FD, 195/45R16)
-};
-
-static float gear_last_rpm = 0;
-static float gear_last_speed = 0;
-
-//------------------------------//
-
-//------------DATA_SENT_OUT---------//
-typedef struct {
-    float oil_temp_f;
-    float water_temp_f;
-    float oil_pressure_psi;
-    float fuel_pressure_psi;
-    float fuel_level_pct;
-    float afr;
-    float boost_psi;
-    float fuel_comp;
-} gauge_data_t;
-
-static gauge_data_t g_gauge_data;
-
-static void can_mapping_task(void *arg);
+static void odometer_tracking_task(void *arg);
 static void start_can_background_tasks(void);
 static void stop_can_background_tasks(void);
 static void start_gauge_timer(void);
 static void stop_gauge_timer(void);
-
-//---------------------------------------//
 
 static bool ui_data_changed_significantly(const honda_dash_data_t *prev, const honda_dash_data_t *cur)
 {
@@ -101,67 +66,6 @@ static bool ui_data_changed_significantly(const honda_dash_data_t *prev, const h
     if (fabsf(prev->fuel_pct - cur->fuel_pct) >= 1.0f) return true;
 
     return false;
-}
-
-static int detect_gear(float rpm, float mph, float dt)
-{
-    static int current_gear = -1;   // -1 = N
-    static float filtered_ratio = 0;
-
-    if (mph < 2.0f) {
-        current_gear = -1;
-        filtered_ratio = 0;
-        return -1;
-    }
-
-    float safe_mph = fmaxf(mph, 1.0f);
-    float ratio = rpm / safe_mph;
-
-    // Smooth the CAN-derived RPM/speed ratio to prevent gear hunting.
-    filtered_ratio += 0.2f * (ratio - filtered_ratio);
-
-    // ---------- FORCE 1ST DURING LAUNCH ----------
-    if (mph < 12.0f && filtered_ratio > 150.0f) {
-        current_gear = 1;
-        return 1;
-    }
-
-    // ---------- CLUTCH / REV MATCH ----------
-    float rpm_rate = (rpm - gear_last_rpm) / dt;
-    float speed_rate = fabsf(mph - gear_last_speed);
-
-    gear_last_rpm = rpm;
-    gear_last_speed = mph;
-
-    if (fabsf(rpm_rate) > 2000.0f && speed_rate < 0.8f) {
-        current_gear = -1;
-        return -1;
-    }
-
-    // ---------- IDLE NEUTRAL ----------
-    if (rpm < 1350.0f && mph > 2.0f) {
-        current_gear = -1;
-        return -1;
-    }
-
-    // ---------- NORMAL GEAR MATCH ----------
-    float smallest_error = 9999.0f;
-    int best = current_gear;
-
-    for (int i = 0; i < (int)(sizeof(gear_table) / sizeof(gear_table[0])); i++) {
-        float err = fabsf(filtered_ratio - gear_table[i]);
-        if (err < smallest_error) {
-            smallest_error = err;
-            best = i + 1;
-        }
-    }
-
-    // Only switch if clearly closer than current gear
-    if (smallest_error < 18.0f) {
-        current_gear = best;
-    }
-
-    return current_gear;
 }
 
 void gauge_timer(lv_timer_t * t) {
@@ -202,7 +106,7 @@ void gauge_timer(lv_timer_t * t) {
             startup_base.duty_valid = true;
             startup_base.knock_valid = true;
             startup_base.odo_miles = odometer_get_miles();
-            startup_base.fuel_pct = g_gauge_data.fuel_level_pct;
+            startup_base.fuel_pct = can_data.fuel_level;
             startup_base_inited = true;
         }
 
@@ -225,38 +129,17 @@ void gauge_timer(lv_timer_t * t) {
         d.knock_valid = true;
     } else {
     static float displayRPM = 0.0f;
-    displayRPM += 0.20f * (rpmNow - displayRPM);
+    displayRPM += 0.20f * (can_data.rpm - displayRPM);
 
-    // -------- GEAR DETECTION -------- //
-    static int64_t last_us = 0;
-    int64_t now_us = esp_timer_get_time();
-    float dt = (last_us == 0) ? 0.01f :
-               (now_us - last_us) / 1000000.0f;
-    last_us = now_us;
-
-    float speed_for_gear = g_speed_mph;
-
-    if (speed_for_gear < MIN_VALID_SPEED_MPH)
-        speed_for_gear = 0.0f;
-
-    int gear;
+    int gear = 0;
     bool can_live = canbus_has_live_data();
     bool can_gear_live = canbus_has_live_gear();
-    bool can_drivetrain_live = canbus_has_live_drivetrain();
 
-    if (!can_live) {
-        gear = -1;
-    } else if (can_gear_live && can_data.gear > 0.0f && can_data.gear < 10.0f) {
+    if (can_live && can_gear_live && can_data.gear > 0.0f && can_data.gear < 10.0f) {
         gear = (int)can_data.gear;
-    } else if (!can_drivetrain_live) {
-        gear = -1;
-    } else if (rpmNow < 400.0f || speed_for_gear < MIN_VALID_SPEED_MPH) {
-        gear = -1;
-    } else {
-        gear = detect_gear(rpmNow, speed_for_gear, dt);
     }
 
-    float speed_mph = g_speed_mph;
+    float speed_mph = can_data.speed * 0.621371f;
 
     if (speed_mph < MIN_VALID_SPEED_MPH)
         speed_mph = 0.0f;
@@ -270,38 +153,36 @@ void gauge_timer(lv_timer_t * t) {
 
     d.rpm        = (uint16_t)(displayRPM < 0 ? 0 : displayRPM);
     d.speed_mph  = speed_mph;
-    d.gear       = (gear <= 0) ? 0 : (int8_t)gear;
-    d.ect_f      = g_gauge_data.water_temp_f;
+    d.gear       = (int8_t)gear;
+    d.ect_f      = can_data.coolant_temp;
     d.iat_f      = can_data.air_temp;
-    d.afr        = g_gauge_data.afr;
+    d.afr        = can_data.air_fuel_ratio;
     d.timing_deg = can_data.ign_angle;
-    d.map_psi    = g_gauge_data.boost_psi;
+    d.map_psi    = can_data.boost;
     d.batt_v     = can_data.battery_voltage;
     d.tps_pct    = display_tps;
-    d.oil_psi    = g_gauge_data.oil_pressure_psi;
+    d.oil_psi    = can_data.oil_pressure;
     /* Not decoded by canbus.c yet -- hondata.json already carries
        inj_duration / knock_count signals on the wire (frames 0x663/0x665),
        they're just not wired into can_dash_data_t or protocol_loader's
        signal_name_to_ptr() yet. Wire those up if you want live duty/knock. */
     d.duty_pct   = 0.0f;
     d.knock_deg  = 0.0f;
-    bool optional_grace = now_us < 30000000;
+    bool optional_grace = esp_timer_get_time() < 30000000;
     d.oil_valid   = optional_grace || canbus_has_recent_oil_pressure();
     d.duty_valid  = true;
     d.knock_valid = optional_grace;
     d.cel        = false;
     d.odo_miles  = odometer_get_miles();
-    d.fuel_pct   = g_gauge_data.fuel_level_pct;
+    d.fuel_pct   = can_data.fuel_level;
     }
 
-    int64_t now_ui_us = esp_timer_get_time();
     bool changed = dash_config_get_value_smoothing() ||
                    (!g_last_ui_valid) || ui_data_changed_significantly(&g_last_ui_data, &d);
     if (changed) {
         honda_dash_ui_update(&d);
         g_last_ui_data = d;
         g_last_ui_valid = true;
-        g_last_ui_push_us = now_ui_us;
     }
 }
 
@@ -321,24 +202,18 @@ static void can_startup_task(void *arg)
     canbus_init();
 
     xTaskCreatePinnedToCore(canbus_task, "can_rx", 4096, NULL, 8, &s_can_rx_task, 1);
-    xTaskCreatePinnedToCore(can_mapping_task, "can_mapping_task", 4096, NULL, 7, &s_can_mapping_task, 1);
+    xTaskCreatePinnedToCore(odometer_tracking_task, "odometer_tracking", 3072, NULL, 7, &s_odometer_tracking_task, 1);
 
     s_can_startup_task = NULL;
 
     vTaskDelete(NULL);
 }
 
-static void can_mapping_task(void *arg){
+static void odometer_tracking_task(void *arg){
     int64_t last_odo_ms = 0;
 
     while (1){
         int64_t now_ms = esp_timer_get_time() / 1000;
-
-        // ---------- Drivetrain ----------
-        rpmNow = can_data.rpm;
-
-        // CAN speed usually in KPH
-        g_speed_mph = can_data.speed * 0.621371f;
 
         // ---------- Odometer ----------
         if (now_ms - last_odo_ms >= 1000){
@@ -355,24 +230,13 @@ static void can_mapping_task(void *arg){
                 odometer_add_meters(whole);
         }
 
-        // ---------- Gauge data ----------
-        g_gauge_data.oil_temp_f       = can_data.oil_temp;
-        g_gauge_data.water_temp_f     = can_data.coolant_temp;
-        g_gauge_data.oil_pressure_psi = can_data.oil_pressure;
-        g_gauge_data.fuel_pressure_psi = can_data.fuel_pressure;
-        g_gauge_data.fuel_level_pct   = can_data.fuel_level;
-        g_gauge_data.afr = can_data.air_fuel_ratio;
-        g_gauge_data.boost_psi = can_data.boost;
-        g_gauge_data.fuel_comp = can_data.fuel_comp;
-        
-
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
 static void start_can_background_tasks(void)
 {
-    if (s_can_startup_task || s_can_rx_task || s_can_mapping_task) {
+    if (s_can_startup_task || s_can_rx_task || s_odometer_tracking_task) {
         return;
     }
 
@@ -391,9 +255,9 @@ static void stop_can_background_tasks(void)
         s_can_rx_task = NULL;
     }
 
-    if (s_can_mapping_task) {
-        vTaskDelete(s_can_mapping_task);
-        s_can_mapping_task = NULL;
+    if (s_odometer_tracking_task) {
+        vTaskDelete(s_odometer_tracking_task);
+        s_odometer_tracking_task = NULL;
     }
 
     canbus_shutdown();
@@ -464,36 +328,6 @@ void app_main(void) {
             .mirror_y = 0,
         }
     };
-
-    if (PANEL_ONLY_DEBUG_MODE) {
-        ESP_LOGW("main", "panel-only debug mode enabled");
-
-        esp_lcd_panel_handle_t panel = NULL;
-        esp_lcd_panel_io_handle_t panel_io = NULL;
-        esp_err_t err;
-
-        err = bsp_display_brightness_init();
-        ESP_LOGI("main", "panel-only: brightness init -> %s", esp_err_to_name(err));
-
-        err = bsp_display_new(NULL, &panel, &panel_io);
-        ESP_LOGI("main", "panel-only: bsp_display_new -> %s", esp_err_to_name(err));
-
-        if (panel) {
-            err = esp_lcd_panel_disp_on_off(panel, true);
-            ESP_LOGI("main", "panel-only: panel on -> %s", esp_err_to_name(err));
-            bsp_display_backlight_on();
-            ESP_LOGI("main", "panel-only: backlight forced on");
-        } else {
-            ESP_LOGE("main", "panel-only: panel handle is NULL");
-        }
-
-        while (1) {
-            bsp_display_brightness_set(100);
-            vTaskDelay(pdMS_TO_TICKS(500));
-            bsp_display_brightness_set(10);
-            vTaskDelay(pdMS_TO_TICKS(500));
-        }
-    }
 
     lv_display_t *disp = bsp_display_start_with_config(&cfg);
     if (!disp) {

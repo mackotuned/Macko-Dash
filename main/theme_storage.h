@@ -30,6 +30,7 @@ typedef struct {
 } theme_storage_package_t;
 
 esp_err_t theme_storage_init(void);
+bool theme_storage_is_available(void);
 size_t theme_storage_get_count(void);
 const theme_storage_package_t *theme_storage_get_package(size_t index);
 esp_err_t theme_storage_delete(size_t index);

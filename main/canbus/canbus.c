@@ -43,6 +43,7 @@ static volatile int64_t s_last_oil_pressure_rx_us = 0;
 static volatile int64_t s_last_obd2_rx_us = 0;
 static bool s_obd2_active = false;
 static bool s_can_driver_ready = false;
+static int s_active_bitrate = 0;
 
 #define CAN_LIVE_TIMEOUT_US 500000
 #define CAN_GEAR_LIVE_TIMEOUT_US 1500000
@@ -315,6 +316,7 @@ void canbus_init(void)
     ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
     ESP_ERROR_CHECK(twai_start());
     s_can_driver_ready = true;
+    s_active_bitrate = bitrate;
 
     ESP_LOGI(TAG, "CAN initialized at %d", bitrate);
 }
@@ -346,6 +348,7 @@ void canbus_shutdown(void)
     }
 
     s_can_driver_ready = false;
+    s_active_bitrate = 0;
 }
 
 
@@ -453,4 +456,50 @@ bool canbus_has_recent_oil_pressure(void)
 {
     int64_t last = s_last_oil_pressure_rx_us;
     return last != 0 && (esp_timer_get_time() - last) <= CAN_OPTIONAL_SIGNAL_TIMEOUT_US;
+}
+
+void canbus_get_diagnostics(canbus_diagnostics_t *diagnostics)
+{
+    if (!diagnostics) {
+        return;
+    }
+
+    memset(diagnostics, 0, sizeof(*diagnostics));
+    diagnostics->controller_state = CANBUS_CONTROLLER_OFFLINE;
+    diagnostics->live_data = canbus_has_live_data();
+    diagnostics->obd2_active = s_obd2_active;
+    diagnostics->drivetrain_live = canbus_has_live_drivetrain();
+    diagnostics->gear_live = canbus_has_live_gear();
+    diagnostics->oil_pressure_recent = canbus_has_recent_oil_pressure();
+    diagnostics->bitrate = s_active_bitrate;
+
+    int64_t last_rx_us = s_last_can_rx_us;
+    if (last_rx_us > 0) {
+        int64_t age_ms = (esp_timer_get_time() - last_rx_us) / 1000;
+        diagnostics->last_frame_age_ms = age_ms > UINT32_MAX ? UINT32_MAX : (uint32_t)age_ms;
+    }
+
+    strlcpy(diagnostics->protocol, active_protocol ? active_protocol->name : "Detecting",
+            sizeof(diagnostics->protocol));
+
+    if (!s_can_driver_ready) {
+        return;
+    }
+
+    twai_status_info_t status;
+    if (twai_get_status_info(&status) != ESP_OK) {
+        return;
+    }
+
+    switch (status.state) {
+        case TWAI_STATE_STOPPED: diagnostics->controller_state = CANBUS_CONTROLLER_STOPPED; break;
+        case TWAI_STATE_RUNNING: diagnostics->controller_state = CANBUS_CONTROLLER_RUNNING; break;
+        case TWAI_STATE_BUS_OFF: diagnostics->controller_state = CANBUS_CONTROLLER_BUS_OFF; break;
+        case TWAI_STATE_RECOVERING: diagnostics->controller_state = CANBUS_CONTROLLER_RECOVERING; break;
+        default: diagnostics->controller_state = CANBUS_CONTROLLER_OFFLINE; break;
+    }
+    diagnostics->queued_frames = status.msgs_to_rx;
+    diagnostics->receive_missed_count = status.rx_missed_count;
+    diagnostics->bus_error_count = status.bus_error_count;
+    diagnostics->rx_error_counter = status.rx_error_counter;
 }
