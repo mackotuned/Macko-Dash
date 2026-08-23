@@ -9,22 +9,24 @@ from tkinter import filedialog, messagebox, ttk
 
 from serial.tools import list_ports
 
+ADDONS_ROOT = Path(__file__).resolve().parent.parent
+if str(ADDONS_ROOT) not in sys.path:
+    sys.path.insert(0, str(ADDONS_ROOT))
+
 from firmware import FirmwareInfo, FirmwareValidationError, flash_firmware, validate_firmware
+from utility_ui import (
+    LINE,
+    PANEL,
+    WHITE,
+    build_brand_header,
+    build_step_tile,
+    configure_mackodash_style,
+    set_details_visible,
+)
 
 
 def configure_update_flasher_style(root: tk.Misc) -> None:
-    style = ttk.Style(root)
-    style.theme_use("clam")
-    style.configure("TFrame", background="#101214")
-    style.configure("TLabel", background="#101214", foreground="#f3f4f6", font=("Segoe UI", 10))
-    style.configure("Title.TLabel", font=("Segoe UI Semibold", 21), foreground="#ffffff")
-    style.configure("Hint.TLabel", foreground="#a5abb3")
-    style.configure("Good.TLabel", foreground="#55d98b")
-    style.configure("TButton", font=("Segoe UI Semibold", 10), padding=(12, 8))
-    style.configure("Accent.TButton", background="#e22936", foreground="#ffffff")
-    style.map("Accent.TButton", background=[("active", "#ff3b47"), ("disabled", "#603038")])
-    style.configure("TEntry", fieldbackground="#1b1f23", foreground="#ffffff", insertcolor="#ffffff", padding=7)
-    style.configure("TCombobox", fieldbackground="#1b1f23", foreground="#ffffff", padding=7)
+    configure_mackodash_style(root)
 
 
 class UpdateFlasherFrame(ttk.Frame):
@@ -44,44 +46,60 @@ class UpdateFlasherFrame(ttk.Frame):
         self.after(75, self._process_events)
 
     def _build_ui(self) -> None:
-        frame = ttk.Frame(self, padding=24)
+        frame = ttk.Frame(self, padding=(26, 20))
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="MackoDash USB Update Flasher", style="Title.TLabel").grid(
-            row=0, column=0, columnspan=3, sticky="w"
-        )
-        ttk.Label(
+        header = build_brand_header(
             frame,
-            text="Installs a complete validated ESP32-P4 firmware ZIP. NVS settings, odometer data, SD-card themes, and the C6 are preserved.",
-            style="Hint.TLabel",
-            wraplength=750,
-        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 20))
+            "Firmware Update",
+            "A guided full update for your MackoDash. Settings, odometer data, SD themes, and the ESP32-C6 are preserved.",
+        )
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
 
-        ttk.Label(frame, text="Firmware").grid(row=2, column=0, sticky="w", pady=7)
-        self.firmware_entry = ttk.Entry(frame, textvariable=self.firmware_path, state="readonly")
-        self.firmware_entry.grid(row=2, column=1, sticky="ew", padx=(14, 8), pady=7)
-        self.browse_button = ttk.Button(frame, text="Browse", command=self._choose_firmware)
-        self.browse_button.grid(row=2, column=2, pady=7)
-
-        ttk.Label(frame, text="USB port").grid(row=3, column=0, sticky="w", pady=7)
-        self.port_combo = ttk.Combobox(frame, textvariable=self.port, state="readonly")
-        self.port_combo.grid(row=3, column=1, sticky="ew", padx=(14, 8), pady=7)
-        self.refresh_button = ttk.Button(frame, text="Refresh", command=self._refresh_ports)
-        self.refresh_button.grid(row=3, column=2, pady=7)
+        firmware_tile, firmware_body = build_step_tile(
+            frame, 1, "Choose the update", "Select the official MackoDash-Firmware.zip. Do not extract it."
+        )
+        firmware_tile.grid(row=1, column=0, sticky="ew", pady=5)
+        self.firmware_entry = ttk.Entry(firmware_body, textvariable=self.firmware_path, state="readonly")
+        self.firmware_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self.browse_button = ttk.Button(firmware_body, text="Choose ZIP", command=self._choose_firmware)
+        self.browse_button.grid(row=0, column=1)
 
         self.metadata = ttk.Label(
-            frame,
+            firmware_body,
             text="No firmware validated.",
-            style="Hint.TLabel",
-            wraplength=750,
+            style="TileHint.TLabel",
+            wraplength=700,
             justify="left",
         )
-        self.metadata.grid(row=4, column=0, columnspan=3, sticky="w", pady=(12, 14))
+        self.metadata.grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
+
+        port_tile, port_body = build_step_tile(
+            frame, 2, "Connect the dashboard", "Power the dash, connect its USB update cable, then select the COM port."
+        )
+        port_tile.grid(row=2, column=0, sticky="ew", pady=5)
+        self.port_combo = ttk.Combobox(port_body, textvariable=self.port, state="readonly")
+        self.port_combo.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self.refresh_button = ttk.Button(port_body, text="Refresh ports", command=self._refresh_ports)
+        self.refresh_button.grid(row=0, column=1)
+
+        flash_tile, flash_body = build_step_tile(
+            frame, 3, "Install and verify", "Keep dashboard power and USB connected until the success message appears."
+        )
+        flash_tile.grid(row=3, column=0, sticky="ew", pady=5)
+        self.flash_button = ttk.Button(
+            flash_body, text="Install Firmware", style="Accent.TButton", command=self._confirm_flash, state="disabled"
+        )
+        self.flash_button.grid(row=0, column=0, sticky="w")
+        ttk.Label(flash_body, textvariable=self.status, style="TileHint.TLabel", wraplength=500).grid(
+            row=0, column=1, sticky="w", padx=(16, 0)
+        )
+        flash_body.columnconfigure(1, weight=1)
 
         warning = tk.Frame(frame, background="#21181a", highlightbackground="#553038", highlightthickness=1)
-        warning.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(0, 16))
+        warning.grid(row=4, column=0, sticky="ew", pady=(8, 6))
         tk.Label(
             warning,
-            text="Keep the dashboard powered and the USB cable connected until verification finishes.",
+            text="Do not unplug USB or dashboard power while an update is running.",
             background="#21181a",
             foreground="#f4c5ca",
             font=("Segoe UI Semibold", 10),
@@ -89,31 +107,39 @@ class UpdateFlasherFrame(ttk.Frame):
             pady=12,
         ).pack(anchor="w")
 
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(0, 12))
-        self.flash_button = ttk.Button(
-            buttons, text="Flash ESP32-P4 Firmware", style="Accent.TButton", command=self._confirm_flash, state="disabled"
+        self.details_button = ttk.Button(
+            frame, text="Show technical details", style="Quiet.TButton", command=self._toggle_details
         )
-        self.flash_button.pack(side="left")
-        ttk.Label(buttons, textvariable=self.status, style="Hint.TLabel", wraplength=490).pack(
-            side="left", padx=(14, 0)
-        )
+        self.details_button.grid(row=5, column=0, sticky="w", pady=(4, 5))
+
+        self.details_frame = ttk.Frame(frame, style="Tile.TFrame", padding=1)
+        self.details_frame.grid(row=6, column=0, sticky="nsew")
 
         self.log = tk.Text(
-            frame,
-            height=18,
-            bg="#171a1e",
-            fg="#d9dde2",
-            insertbackground="#ffffff",
+            self.details_frame,
+            height=10,
+            bg=PANEL,
+            fg=WHITE,
+            insertbackground=WHITE,
+            highlightbackground=LINE,
+            highlightthickness=1,
             relief="flat",
             padx=12,
             pady=10,
             font=("Cascadia Mono", 9),
             state="disabled",
         )
-        self.log.grid(row=7, column=0, columnspan=3, sticky="nsew")
-        frame.columnconfigure(1, weight=1)
-        frame.rowconfigure(7, weight=1)
+        self.log.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(6, weight=1)
+        set_details_visible(self.details_button, self.details_frame, False)
+
+    def _toggle_details(self) -> None:
+        set_details_visible(
+            self.details_button,
+            self.details_frame,
+            not self.details_frame.winfo_ismapped(),
+        )
 
     def _choose_firmware(self) -> None:
         selected = filedialog.askopenfilename(
@@ -137,7 +163,7 @@ class UpdateFlasherFrame(ttk.Frame):
         except (FirmwareValidationError, OSError) as error:
             self.firmware_info = None
             self.firmware_path.set("")
-            self.metadata.configure(text="No firmware validated.", style="Hint.TLabel")
+            self.metadata.configure(text="No firmware validated.", style="TileHint.TLabel")
             self._update_flash_state()
             if show_error:
                 messagebox.showerror("Firmware rejected", str(error))
@@ -158,7 +184,7 @@ class UpdateFlasherFrame(ttk.Frame):
                 f"Payload: {info.size:,} bytes    Bundle SHA-256: {info.sha256}\n"
                 f"{image_summary}"
             ),
-            style="Good.TLabel",
+            style="Good.Tile.TLabel",
         )
         self.status.set("Full firmware ZIP validated. Connect the dashboard and select its USB port.")
         self._append_log(f"Validated {info.path.name}")
@@ -262,18 +288,3 @@ class UpdateFlasherFrame(ttk.Frame):
         self.log.insert("end", line + "\n")
         self.log.see("end")
         self.log.configure(state="disabled")
-
-
-class UpdateFlasher(tk.Tk):
-    def __init__(self) -> None:
-        super().__init__()
-        self.title("MackoDash USB Update Flasher")
-        self.geometry("820x650")
-        self.minsize(720, 580)
-        self.configure(background="#101214")
-        configure_update_flasher_style(self)
-        UpdateFlasherFrame(self).pack(fill="both", expand=True)
-
-
-if __name__ == "__main__":
-    UpdateFlasher().mainloop()

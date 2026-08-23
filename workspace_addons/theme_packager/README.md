@@ -1,7 +1,8 @@
 # MackoDash Theme Builder
 
-Theme Builder converts a one-screen SquareLine Studio C export into a validated
-`.mdtheme.zip` package for `/MACKODASH/THEMES` on the dashboard SD card.
+The Theme Builder workflow inside `MackoDashUtility.exe` converts a one-screen
+SquareLine Studio C export into a validated `.mdtheme.zip` package for
+`/MACKODASH/THEMES` on the dashboard SD card.
 
 ## Customer workflow
 
@@ -9,9 +10,12 @@ Theme Builder converts a one-screen SquareLine Studio C export into a validated
 2. Follow `../references/MackoDash_SquareLine_Customer_Instructions.txt` for
   the complete Label, Bar, Arc, unit, and settings-button name lists.
 3. Export the complete C project and ZIP the exported folder.
-4. Open MackoDash Theme Builder and select that ZIP.
-5. Enter a unique lowercase theme ID and build the package.
+4. Open MackoDash Utility, choose **Build a Theme**, and select that ZIP.
+5. Enter a theme name and unique lowercase theme ID, then select **Build Theme**.
 6. Use **Copy to SD Card** and select the SD card drive.
+
+Output location, canvas overrides, font substitution, and the conversion report
+are available under **Show technical details**. Most customers do not need them.
 
 Strict mode is the customer default. It stops on custom generated fonts because
 SquareLine exports compiled LVGL font C files, not the original TTF/OTF files.
@@ -41,12 +45,5 @@ package.
 The command-line converter is `convert_squareline_export.py`. Run it with
 `--help` for automation options.
 
-## Standalone Windows application
-
-The customer executable is:
-
-`dist/MackoDashThemeBuilder.exe`
-
-It is self-contained and does not require Python or ESP-IDF. Developers can
-rebuild it with `build_windows.ps1`; the build requires `C:\Python314` with
-Tkinter and PyInstaller.
+The customer executable is `MackoDashUtility.exe`. There is no separate Theme
+Builder download.

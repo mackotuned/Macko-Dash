@@ -1,27 +1,31 @@
 import argparse
 import json
 import shutil
+import sys
 import threading
 import tkinter as tk
 import zipfile
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+ADDONS_ROOT = Path(__file__).resolve().parent.parent
+if str(ADDONS_ROOT) not in sys.path:
+    sys.path.insert(0, str(ADDONS_ROOT))
+
 from convert_squareline_export import ConversionError, convert
+from utility_ui import (
+    LINE,
+    PANEL,
+    WHITE,
+    build_brand_header,
+    build_step_tile,
+    configure_mackodash_style,
+    set_details_visible,
+)
 
 
 def configure_theme_builder_style(root: tk.Misc) -> None:
-    style = ttk.Style(root)
-    style.theme_use("clam")
-    style.configure("TFrame", background="#101214")
-    style.configure("TLabel", background="#101214", foreground="#f3f4f6", font=("Segoe UI", 10))
-    style.configure("Title.TLabel", font=("Segoe UI Semibold", 21), foreground="#ffffff")
-    style.configure("Hint.TLabel", foreground="#a5abb3")
-    style.configure("TButton", font=("Segoe UI Semibold", 10), padding=(12, 8))
-    style.configure("Accent.TButton", background="#e22936", foreground="#ffffff")
-    style.map("Accent.TButton", background=[("active", "#ff3b47"), ("disabled", "#603038")])
-    style.configure("TEntry", fieldbackground="#1b1f23", foreground="#ffffff", insertcolor="#ffffff", padding=7)
-    style.configure("TCheckbutton", background="#101214", foreground="#f3f4f6")
+    configure_mackodash_style(root)
 
 
 class ThemeBuilderFrame(ttk.Frame):
@@ -40,38 +44,99 @@ class ThemeBuilderFrame(ttk.Frame):
         self._build_ui()
 
     def _build_ui(self) -> None:
-        frame = ttk.Frame(self, padding=24)
+        frame = ttk.Frame(self, padding=(26, 20))
         frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text="MackoDash Theme Builder", style="Title.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
-        ttk.Label(frame, text="Convert one-screen SquareLine exports into validated SD-card themes.", style="Hint.TLabel").grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 20))
+        header = build_brand_header(
+            frame,
+            "Theme Builder",
+            "Turn a SquareLine Studio export into a MackoDash theme and copy it directly to an SD card.",
+        )
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 12))
 
-        self._file_row(frame, 2, "SquareLine export", self.source, self._choose_source)
-        self._file_row(frame, 3, "Output package", self.output, self._choose_output)
-        self._entry_row(frame, 4, "Theme name", self.theme_name)
-        self._entry_row(frame, 5, "Theme ID", self.theme_id)
+        source_tile, source_body = build_step_tile(
+            frame, 1, "Choose your design", "Select the ZIP containing your complete one-screen SquareLine export."
+        )
+        source_tile.grid(row=1, column=0, sticky="ew", pady=5)
+        ttk.Entry(source_body, textvariable=self.source, state="readonly").grid(
+            row=0, column=0, sticky="ew", padx=(0, 10)
+        )
+        ttk.Button(source_body, text="Choose ZIP", command=self._choose_source).grid(row=0, column=1)
 
-        ttk.Label(frame, text="Canvas size").grid(row=6, column=0, sticky="w", pady=7)
-        size = ttk.Frame(frame)
-        size.grid(row=6, column=1, sticky="w", pady=7)
+        identity_tile, identity_body = build_step_tile(
+            frame, 2, "Name the theme", "Choose the display name customers see and a unique lowercase theme ID."
+        )
+        identity_tile.grid(row=2, column=0, sticky="ew", pady=5)
+        ttk.Label(identity_body, text="Theme name", style="Tile.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Entry(identity_body, textvariable=self.theme_name).grid(row=0, column=1, sticky="ew", padx=(12, 0))
+        ttk.Label(identity_body, text="Theme ID", style="Tile.TLabel").grid(row=1, column=0, sticky="w", pady=(9, 0))
+        ttk.Entry(identity_body, textvariable=self.theme_id).grid(row=1, column=1, sticky="ew", padx=(12, 0), pady=(9, 0))
+        identity_body.columnconfigure(1, weight=1)
+
+        build_tile, build_body = build_step_tile(
+            frame, 3, "Build and install", "Build the validated package, then copy it to the dashboard SD card."
+        )
+        build_tile.grid(row=3, column=0, sticky="ew", pady=5)
+        self.convert_button = ttk.Button(
+            build_body, text="Build Theme", style="Accent.TButton", command=self._start_conversion
+        )
+        self.convert_button.grid(row=0, column=0, sticky="w")
+        self.copy_button = ttk.Button(build_body, text="Copy to SD Card", command=self._copy_to_sd, state="disabled")
+        self.copy_button.grid(row=0, column=1, sticky="w", padx=(10, 0))
+        ttk.Label(build_body, textvariable=self.status, style="TileHint.TLabel", wraplength=430).grid(
+            row=0, column=2, sticky="w", padx=(16, 0)
+        )
+        build_body.columnconfigure(2, weight=1)
+
+        self.details_button = ttk.Button(
+            frame, text="Show technical details", style="Quiet.TButton", command=self._toggle_details
+        )
+        self.details_button.grid(row=4, column=0, sticky="w", pady=(8, 5))
+        self.details_frame = ttk.Frame(frame, style="Tile.TFrame", padding=16)
+        self.details_frame.grid(row=5, column=0, sticky="nsew")
+        self.details_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(self.details_frame, text="Output package", style="Tile.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Entry(self.details_frame, textvariable=self.output).grid(row=0, column=1, sticky="ew", padx=(12, 8))
+        ttk.Button(self.details_frame, text="Choose", command=self._choose_output).grid(row=0, column=2)
+
+        ttk.Label(self.details_frame, text="Canvas size", style="Tile.TLabel").grid(row=1, column=0, sticky="w", pady=(10, 0))
+        size = ttk.Frame(self.details_frame, style="Tile.TFrame")
+        size.grid(row=1, column=1, sticky="w", pady=(10, 0), padx=(12, 0))
         ttk.Entry(size, textvariable=self.width, width=8).pack(side="left")
-        ttk.Label(size, text=" x ").pack(side="left")
+        ttk.Label(size, text=" x ", style="Tile.TLabel").pack(side="left")
         ttk.Entry(size, textvariable=self.height, width=8).pack(side="left")
 
-        ttk.Checkbutton(frame, text="Allow custom-font substitution (development only)", variable=self.allow_fonts).grid(row=7, column=1, columnspan=2, sticky="w", pady=(8, 3))
-        ttk.Label(frame, text="Leave this off for customer packages. Missing exact fonts will stop conversion.", style="Hint.TLabel").grid(row=8, column=1, columnspan=2, sticky="w")
+        ttk.Checkbutton(
+            self.details_frame,
+            text="Allow custom-font substitution (development only)",
+            variable=self.allow_fonts,
+        ).grid(row=2, column=1, columnspan=2, sticky="w", pady=(10, 6))
+        self.report = tk.Text(
+            self.details_frame,
+            height=8,
+            bg=PANEL,
+            fg=WHITE,
+            insertbackground=WHITE,
+            highlightbackground=LINE,
+            highlightthickness=1,
+            relief="flat",
+            padx=12,
+            pady=10,
+            font=("Cascadia Mono", 9),
+            state="disabled",
+        )
+        self.report.grid(row=3, column=0, columnspan=3, sticky="nsew", pady=(6, 0))
+        self.details_frame.rowconfigure(3, weight=1)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(5, weight=1)
+        set_details_visible(self.details_button, self.details_frame, False)
 
-        buttons = ttk.Frame(frame)
-        buttons.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(20, 12))
-        self.convert_button = ttk.Button(buttons, text="Build Theme", style="Accent.TButton", command=self._start_conversion)
-        self.convert_button.pack(side="left")
-        self.copy_button = ttk.Button(buttons, text="Copy to SD Card", command=self._copy_to_sd, state="disabled")
-        self.copy_button.pack(side="left", padx=10)
-
-        ttk.Label(frame, textvariable=self.status, style="Hint.TLabel", wraplength=690).grid(row=10, column=0, columnspan=3, sticky="w", pady=(0, 8))
-        self.report = tk.Text(frame, height=13, bg="#171a1e", fg="#d9dde2", insertbackground="#ffffff", relief="flat", padx=12, pady=10, font=("Cascadia Mono", 9), state="disabled")
-        self.report.grid(row=11, column=0, columnspan=3, sticky="nsew")
-        frame.columnconfigure(1, weight=1)
-        frame.rowconfigure(11, weight=1)
+    def _toggle_details(self) -> None:
+        set_details_visible(
+            self.details_button,
+            self.details_frame,
+            not self.details_frame.winfo_ismapped(),
+        )
 
     def _file_row(self, parent: ttk.Frame, row: int, label: str, variable: tk.StringVar, command) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=7)
@@ -86,7 +151,7 @@ class ThemeBuilderFrame(ttk.Frame):
         selected = filedialog.askopenfilename(title="Choose SquareLine export", filetypes=[("ZIP exports", "*.zip"), ("All files", "*.*")])
         if selected:
             self.source.set(selected)
-            if not self.output.get():
+            if not self.output.get() or self.output.get().endswith(".mdtheme.zip"):
                 self.output.set(str(Path(selected).with_suffix(".mdtheme.zip")))
 
     def _choose_output(self) -> None:
@@ -151,18 +216,3 @@ class ThemeBuilderFrame(ttk.Frame):
             messagebox.showerror("Copy failed", str(error))
             return
         messagebox.showinfo("Theme copied", f"Copied to:\n{destination}")
-
-
-class ThemeBuilder(tk.Tk):
-    def __init__(self) -> None:
-        super().__init__()
-        self.title("MackoDash Theme Builder")
-        self.geometry("760x620")
-        self.minsize(680, 560)
-        self.configure(background="#101214")
-        configure_theme_builder_style(self)
-        ThemeBuilderFrame(self).pack(fill="both", expand=True)
-
-
-if __name__ == "__main__":
-    ThemeBuilder().mainloop()

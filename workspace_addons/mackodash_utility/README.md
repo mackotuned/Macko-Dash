@@ -1,7 +1,8 @@
 # MackoDash Utility
 
 MackoDash Utility combines the customer Theme Builder and ESP32-P4 USB Update
-Flasher in one standalone Windows application with top tabs.
+Flasher in one Windows application. Its Home screen presents two
+large task tiles so customers choose a job before seeing any controls.
 
 - **Theme Builder** converts validated SquareLine C exports to `.mdtheme.zip`
   packages and copies them to the SD card.
@@ -11,5 +12,5 @@ Flasher in one standalone Windows application with top tabs.
   remain untouched.
 
 Run from source with `C:\Python314\python.exe mackodash_utility.py`. Build the
-standalone customer distribution with `build_windows.ps1`. The existing
-standalone Theme Builder and Update Flasher remain available and unchanged.
+customer distribution with `build_windows.ps1`. `MackoDashUtility.exe` is the
+only customer application; the workflow modules are internal components.

@@ -236,7 +236,7 @@ EXPORT AND BUILD
 2. Export the complete C project, not a screenshot or preview image.
 3. ZIP the entire exported project folder with its screens, images, and project
    information intact.
-4. Open MackoDashThemeBuilder.exe.
+4. Open MackoDashUtility.exe and choose Build a Theme.
 5. Select the SquareLine export ZIP.
 6. Enter the theme display name and a unique lowercase Theme ID.
 7. Leave strict validation enabled for customer packages.

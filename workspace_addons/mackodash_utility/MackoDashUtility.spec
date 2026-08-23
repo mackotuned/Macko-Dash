@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+datas = [('C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons\\mackodash_logo.png', '.')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('esptool')
@@ -12,7 +12,7 @@ datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons\\mackodash_utility\\mackodash_utility.py'],
-    pathex=['C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons\\theme_packager', 'C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons\\update_flasher'],
+    pathex=['C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons', 'C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons\\theme_packager', 'C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons\\update_flasher'],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

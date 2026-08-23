@@ -7,26 +7,26 @@ Keep all files in this folder together:
   CUSTOMER_INSTRUCTIONS.txt
   MackoDash_SquareLine_Customer_Instructions.txt
 
-THEME BUILDER TAB
------------------
+BUILD A THEME
+-------------
 1. Export the complete one-screen project from SquareLine Studio.
 2. ZIP the exported folder.
-3. Open MackoDash Utility and select the Theme Builder tab.
+3. Open MackoDash Utility and choose Build a Theme.
 4. Choose the SquareLine ZIP and enter the theme name and ID.
 5. Select Build Theme, then Copy to SD Card.
 
 See MackoDash_SquareLine_Customer_Instructions.txt for all supported object
 names, Bars, Arcs, values, ranges, and design rules.
 
-FIRMWARE UPDATE TAB
--------------------
+UPDATE FIRMWARE
+---------------
 1. Connect MackoDash to the Windows PC with its update USB cable.
 2. Keep the dashboard powered for the entire update.
-3. Open the Firmware Update tab.
+3. Open MackoDash Utility and choose Update Firmware.
 4. Select the official MackoDash-Firmware.zip downloaded from GitHub and
   confirm that it shows as Validated.
 5. Confirm the dashboard COM port.
-6. Select Flash ESP32-P4 Firmware and wait for verification to finish.
+6. Select Install Firmware and wait for verification to finish.
 
 The update replaces the ESP32-P4 bootloader, partition table, OTA metadata,
 application, and onboard SPIFFS. It preserves NVS settings, odometer data,

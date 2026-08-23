@@ -19,8 +19,10 @@ if (-not (Test-Path (Join-Path $buildDir 'mackodash.bin'))) {
 & $python -c "import tkinter, esptool, serial; print('Tk', tkinter.Tcl().call('info', 'patchlevel')); print('esptool', esptool.__version__)"
 & $python -m PyInstaller --noconfirm --clean --onefile --windowed `
     --name MackoDashUtility `
+    --paths $addonsRoot `
     --paths $themePackager `
     --paths $updateFlasher `
+    --add-data "$(Join-Path $addonsRoot 'mackodash_logo.png');." `
     --collect-all esptool `
     --collect-all serial `
     --distpath (Join-Path $root 'dist') `
