@@ -13,7 +13,9 @@ BUILD A THEME
 2. ZIP the exported folder.
 3. Open MackoDash Utility and choose Build a Theme.
 4. Choose the SquareLine ZIP and enter the theme name and ID.
-5. Select Build Theme, then Copy to SD Card.
+5. Select Build Theme, then Preview Theme. Check both value modes and fix any
+  reported clipping, unsupported controls, or missing Settings/REC buttons.
+6. Select Copy to SD Card.
 
 See MackoDash_SquareLine_Customer_Instructions.txt for all supported object
 names, Bars, Arcs, values, ranges, and design rules.

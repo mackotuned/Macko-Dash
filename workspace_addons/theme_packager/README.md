@@ -12,7 +12,12 @@ SquareLine Studio C export into a validated `.mdtheme.zip` package for
 3. Export the complete C project and ZIP the exported folder.
 4. Open MackoDash Utility, choose **Build a Theme**, and select that ZIP.
 5. Enter a theme name and unique lowercase theme ID, then select **Build Theme**.
-6. Use **Copy to SD Card** and select the SD card drive.
+6. Select **Preview Theme** to inspect the dashboard with typical and longest simulated values.
+7. Use **Copy to SD Card** and select the SD card drive.
+
+The preview highlights objects that extend beyond the canvas or may clip their
+longest live value. Its checks also report unsupported controls, unresolved
+`dash_` binding names, and missing Settings or REC buttons before installation.
 
 Output location, canvas overrides, font substitution, and the conversion report
 are available under **Show technical details**. Most customers do not need them.

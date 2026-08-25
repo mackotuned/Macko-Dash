@@ -107,10 +107,10 @@ CONTROLS
 Canonical name          SquareLine object       Behavior
 
 dash_settings_button    Button                  Opens MackoDash settings
+dash_record_button      Button                  Starts or stops SD CSV logging
 
-Every usable theme should include dash_settings_button. This gives the user a
-reliable way to return to the Theme page. MackoDash may add a fallback settings
-button when one is missing.
+Every usable theme should include dash_settings_button and dash_record_button.
+MackoDash adds fallback controls when either one is missing.
 
 UNITS AND STATIC LABELS
 -----------------------
@@ -153,6 +153,7 @@ These common alternatives are accepted:
   fuel_level_value                  -> dash_fuel_value
   odometer_value                    -> dash_odo_value
   settings_button                   -> dash_settings_button
+  record_button, logging_button     -> dash_record_button
 
 TYPO-TOLERANCE RULES
 --------------------
@@ -175,7 +176,7 @@ DO NOT DO THIS
 - Do not use dash_ names for purely decorative objects.
 - Do not rename live objects after packaging without rechecking this guide.
 - Do not place scripts or custom C code in a theme package.
-- Do not depend on a custom event for the settings button.
+- Do not depend on custom events for the settings or record buttons.
 
 PACKAGE MANIFEST
 ----------------
@@ -241,7 +242,9 @@ Example:
      "width":944, "height":24, "min":0, "max":9000,
      "color":"#E4002B", "track_color":"#25282D"},
     {"type":"button", "name":"dash_settings_button", "x":900, "y":520,
-     "width":100, "height":60, "text":"Settings", "background":"#151619"}
+     "width":100, "height":60, "text":"Settings", "background":"#151619"},
+    {"type":"button", "name":"dash_record_button", "x":820, "y":520,
+     "width":70, "height":60, "text":"REC", "background":"#4A0413"}
   ]
 }
 
@@ -256,7 +259,7 @@ DESIGNER CHECKLIST
 [ ] Every live object uses a name from this guide.
 [ ] Object types match the naming table.
 [ ] Duplicate live values use _2, _3, and so on.
-[ ] A dash_settings_button is present and easy to reach.
+[ ] dash_settings_button and dash_record_button are present and easy to reach.
 [ ] Important text fits at both short and longest expected values.
 [ ] RPM gauges cover at least the configured engine range.
 [ ] Theme is exported and packaged as .mdtheme.zip.

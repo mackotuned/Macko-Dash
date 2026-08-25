@@ -5,7 +5,7 @@ Flasher in one Windows application. Its Home screen presents two
 large task tiles so customers choose a job before seeing any controls.
 
 - **Theme Builder** converts validated SquareLine C exports to `.mdtheme.zip`
-  packages and copies them to the SD card.
+  packages, previews simulated dashboard values, and copies them to the SD card.
 - **Firmware Update** validates and flashes the complete MackoDash ESP32-P4
   firmware ZIP: bootloader, partition table, OTA metadata, application, and
   SPIFFS. NVS settings, odometer data, SD-card themes, and ESP32-C6 firmware

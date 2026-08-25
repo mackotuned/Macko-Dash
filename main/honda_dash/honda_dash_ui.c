@@ -23,6 +23,8 @@
 #include "ota_update.h"
 #include "dash_sim.h"
 #include "dash_config.h"
+#include "data_logger.h"
+#include "session_peaks.h"
 #include "theme_storage.h"
 #include "runtime_theme.h"
 #include "warning_chime.h"
@@ -231,6 +233,7 @@ static honda_dash_data_t s_last_data;
 static bool s_have_last_data = false;
 
 static void add_press_feedback(lv_obj_t *obj);
+static void record_btn_cb(lv_event_t *event);
 static void update_theme_modern(const honda_dash_data_t *data, int rpm, bool limiter_hit, bool vtec_on, float fuel);
 
 static void odo_tiles_refresh_display(void)
@@ -346,6 +349,7 @@ static lv_obj_t *s_page_main;
 static lv_obj_t *s_page_theme;
 static lv_obj_t *s_page_brightness;
 static lv_obj_t *s_page_info;
+static lv_obj_t *s_page_peaks;
 static lv_obj_t *s_page_update;
 static lv_obj_t *s_page_config;
 static lv_obj_t *s_page_warning_audio;
@@ -357,6 +361,21 @@ static lv_obj_t *s_page_ecu;
 static lv_obj_t *s_page_theme_resets;
 static lv_obj_t *s_diagnostics_values[6];
 static lv_timer_t *s_diagnostics_timer;
+static lv_obj_t *s_peaks_scroll;
+enum {
+    PEAK_RPM = 0,
+    PEAK_SPEED,
+    PEAK_BOOST,
+    PEAK_COOLANT,
+    PEAK_INTAKE,
+    PEAK_DUTY,
+    PEAK_KNOCK,
+    PEAK_AFR_MIN,
+    PEAK_OIL_MIN,
+    PEAK_BATTERY_MIN,
+    PEAK_VALUE_COUNT,
+};
+static lv_obj_t *s_peak_values[PEAK_VALUE_COUNT];
 
 /* ---- config page widget handles + pending (not-yet-saved) state ---- */
 typedef enum {
@@ -1052,6 +1071,7 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_add_flag(s_page_theme, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_brightness, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_info, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_page_peaks, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_update, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_config, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_warning_audio, LV_OBJ_FLAG_HIDDEN);
@@ -1110,6 +1130,7 @@ static void settings_close_cb(lv_event_t *e)
 
 static void settings_open_theme_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_theme); }
 static void settings_diagnostics_refresh(void);
+static void settings_peaks_refresh(void);
 static void settings_open_info_cb(lv_event_t *e)
 {
     (void)e;
@@ -1117,6 +1138,13 @@ static void settings_open_info_cb(lv_event_t *e)
     settings_diagnostics_refresh();
 }
 static void settings_open_warning_audio_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_warning_audio); }
+static void settings_open_peaks_cb(lv_event_t *e)
+{
+    (void)e;
+    settings_show_page(s_page_peaks);
+    lv_obj_scroll_to_y(s_peaks_scroll, 0, LV_ANIM_OFF);
+    settings_peaks_refresh();
+}
 static void settings_open_ecu_cb(lv_event_t *e)
 {
     (void)e;
@@ -1947,7 +1975,7 @@ static void activate_theme(int idx, bool persist)
     if (idx >= 100) {
         const theme_storage_package_t *package = theme_storage_get_package((size_t)(idx - 100));
         esp_err_t err = package && package->manifest_valid ?
-                        runtime_theme_load(s_cluster, package, settings_btn_cb) : ESP_ERR_INVALID_ARG;
+                runtime_theme_load(s_cluster, package, settings_btn_cb, record_btn_cb) : ESP_ERR_INVALID_ARG;
         if (err != ESP_OK) {
             ESP_LOGW("THEME", "Cannot load SD theme %d: %s; using MackoDash V1", idx, esp_err_to_name(err));
             runtime_theme_unload();
@@ -2552,6 +2580,48 @@ static void settings_diagnostics_timer_cb(lv_timer_t *timer)
     settings_diagnostics_refresh();
 }
 
+static void peak_set_text(int index, bool valid, const char *format, double value)
+{
+    char text[32];
+    if (valid) snprintf(text, sizeof(text), format, value);
+    else snprintf(text, sizeof(text), "--");
+    lv_label_set_text(s_peak_values[index], text);
+    lv_obj_set_style_text_color(s_peak_values[index], valid ? C_WHITE : C_LABEL, LV_PART_MAIN);
+}
+
+static void settings_peaks_refresh(void)
+{
+    if (!s_page_peaks) return;
+    session_peaks_t peaks;
+    session_peaks_get(&peaks);
+    bool metric_speed = dash_config_get_speed_kph();
+    bool metric_temp = dash_config_get_temperature_celsius();
+    bool metric_pressure = dash_config_get_pressure_kpa();
+    double speed = metric_speed ? peaks.max_speed_mph * 1.60934 : peaks.max_speed_mph;
+    double coolant = metric_temp ? (peaks.max_coolant_f - 32.0) * (5.0 / 9.0) : peaks.max_coolant_f;
+    double intake = metric_temp ? (peaks.max_intake_f - 32.0) * (5.0 / 9.0) : peaks.max_intake_f;
+    double boost = metric_pressure ? peaks.max_boost_psi * 6.89476 : peaks.max_boost_psi;
+    double oil = metric_pressure ? peaks.min_oil_psi * 6.89476 : peaks.min_oil_psi;
+
+    peak_set_text(PEAK_RPM, peaks.has_data, "%.0f RPM", peaks.max_rpm);
+    peak_set_text(PEAK_SPEED, peaks.has_data, metric_speed ? "%.1f KPH" : "%.1f MPH", speed);
+    peak_set_text(PEAK_BOOST, peaks.has_data, metric_pressure ? "%.1f kPa" : "%.1f PSI", boost);
+    peak_set_text(PEAK_COOLANT, peaks.has_data, metric_temp ? "%.1f C" : "%.1f F", coolant);
+    peak_set_text(PEAK_INTAKE, peaks.has_data, metric_temp ? "%.1f C" : "%.1f F", intake);
+    peak_set_text(PEAK_DUTY, peaks.duty_valid, "%.1f%%", peaks.max_duty_pct);
+    peak_set_text(PEAK_KNOCK, peaks.knock_valid, "%.1f deg", peaks.max_knock_deg);
+    peak_set_text(PEAK_AFR_MIN, peaks.afr_valid, "%.2f AFR", peaks.min_afr);
+    peak_set_text(PEAK_OIL_MIN, peaks.oil_valid, metric_pressure ? "%.1f kPa" : "%.1f PSI", oil);
+    peak_set_text(PEAK_BATTERY_MIN, peaks.battery_valid, "%.2f V", peaks.min_battery_v);
+}
+
+static void settings_peaks_reset_cb(lv_event_t *event)
+{
+    (void)event;
+    session_peaks_reset();
+    settings_peaks_refresh();
+}
+
 static void build_config_section_header(lv_obj_t *parent, const char *title)
 {
     lv_obj_t *label = make_label(parent, title, DASH_FONT_LABEL, C_LABEL_DIM);
@@ -2563,6 +2633,77 @@ static lv_obj_t *s_sim_btn_instances[MAX_SIM_BTN_INSTANCES];
 static int s_sim_btn_count = 0;
 static bool s_sim_active = false;
 static lv_obj_t *s_sim_mode_modal;
+#define MAX_RECORD_BTN_INSTANCES 7
+static lv_obj_t *s_record_btn_instances[MAX_RECORD_BTN_INSTANCES];
+static int s_record_btn_count;
+static lv_obj_t *s_record_toast;
+static lv_timer_t *s_record_toast_timer;
+
+static void record_toast_close_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    s_record_toast_timer = NULL;
+    if (s_record_toast) {
+        lv_obj_del(s_record_toast);
+        s_record_toast = NULL;
+    }
+}
+
+static void record_show_toast(const char *title, const char *detail, bool error)
+{
+    if (s_record_toast_timer) {
+        lv_timer_del(s_record_toast_timer);
+        s_record_toast_timer = NULL;
+    }
+    if (s_record_toast) lv_obj_del(s_record_toast);
+    s_record_toast = lv_obj_create(s_cluster);
+    lv_obj_add_flag(s_record_toast, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_size(s_record_toast, 460, 76);
+    lv_obj_align(s_record_toast, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_set_style_bg_color(s_record_toast, error ? C_RED_DEEP : C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_record_toast, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_record_toast, 2, LV_PART_MAIN);
+    lv_obj_set_style_border_color(s_record_toast, error ? C_RED : C_GREEN, LV_PART_MAIN);
+    lv_obj_set_style_radius(s_record_toast, 10, LV_PART_MAIN);
+    lv_obj_clear_flag(s_record_toast, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(s_record_toast, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(s_record_toast, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    make_label(s_record_toast, title, DASH_FONT_LABEL14, C_WHITE);
+    make_label(s_record_toast, detail, DASH_FONT_LABEL, error ? C_AMBER : C_LABEL);
+    lv_obj_move_foreground(s_record_toast);
+    s_record_toast_timer = lv_timer_create(record_toast_close_cb, 2200, NULL);
+    lv_timer_set_repeat_count(s_record_toast_timer, 1);
+}
+
+static void record_buttons_refresh(void)
+{
+    bool recording = data_logger_is_recording();
+    for (int index = 0; index < s_record_btn_count; ++index) {
+        lv_obj_t *button = s_record_btn_instances[index];
+        lv_obj_set_style_bg_color(button, recording ? C_RED : C_RED_DEEP, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(button, recording ? LV_OPA_COVER : LV_OPA_70, LV_PART_MAIN);
+        lv_obj_set_style_border_color(button, C_RED, LV_PART_MAIN);
+    }
+}
+
+static void record_btn_cb(lv_event_t *event)
+{
+    (void)event;
+    char filename[20] = {0};
+    esp_err_t err;
+    if (data_logger_is_recording()) {
+        err = data_logger_stop(filename, sizeof(filename));
+        if (err == ESP_OK) record_show_toast("LOGGING STOPPED", filename, false);
+        else record_show_toast("STOP FAILED", esp_err_to_name(err), true);
+    } else {
+        err = data_logger_start(filename, sizeof(filename));
+        if (err == ESP_OK) record_show_toast("LOGGING STARTED", filename, false);
+        else if (err == ESP_ERR_NOT_FOUND) record_show_toast("LOGGING FAILED", "SD card not found", true);
+        else record_show_toast("LOGGING FAILED", esp_err_to_name(err), true);
+    }
+    record_buttons_refresh();
+}
 
 static void sim_btn_apply_visual(lv_obj_t *btn)
 {
@@ -2710,7 +2851,7 @@ static void sim_buttons_apply_visibility(void)
 
 static void build_settings_button(lv_obj_t *parent)
 {
-    /* wraps both buttons together so they occupy the same grid slot
+    /* wraps the controls together so they occupy the same grid slot
        every theme's bottom strip already reserves for the settings
        button, and share one vertical-position fix */
     lv_obj_t *cluster = make_plain_container(parent);
@@ -2747,6 +2888,24 @@ static void build_settings_button(lv_obj_t *parent)
     if (!dash_config_get_show_sim_button()) {
         lv_obj_add_flag(sim_btn, LV_OBJ_FLAG_HIDDEN);
     }
+
+    lv_obj_t *record_btn = lv_obj_create(cluster);
+    lv_obj_set_size(record_btn, 40, 40);
+    lv_obj_set_style_radius(record_btn, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_border_width(record_btn, 2, LV_PART_MAIN);
+    lv_obj_clear_flag(record_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(record_btn, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(record_btn, record_btn_cb, LV_EVENT_CLICKED, NULL);
+    add_press_feedback(record_btn);
+    lv_obj_t *record_label = lv_label_create(record_btn);
+    lv_label_set_text(record_label, "REC");
+    lv_obj_set_style_text_font(record_label, DASH_FONT_LABEL, LV_PART_MAIN);
+    lv_obj_set_style_text_color(record_label, C_WHITE, LV_PART_MAIN);
+    lv_obj_center(record_label);
+    if (s_record_btn_count < MAX_RECORD_BTN_INSTANCES) {
+        s_record_btn_instances[s_record_btn_count++] = record_btn;
+    }
+    record_buttons_refresh();
 
     /* --- settings button (unchanged besides living in the cluster now) --- */
     lv_obj_t *btn = lv_obj_create(cluster);
@@ -3032,6 +3191,58 @@ static void build_settings_overlay(lv_obj_t *cluster)
     build_settings_back_btn(s_page_info);
     s_diagnostics_timer = lv_timer_create(settings_diagnostics_timer_cb, 1000, NULL);
 
+    s_page_peaks = make_plain_container(panel);
+    lv_obj_set_size(s_page_peaks, LV_PCT(100), LV_PCT(100));
+    lv_obj_add_flag(s_page_peaks, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_flex_flow(s_page_peaks, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_page_peaks, 10, LV_PART_MAIN);
+    make_label(s_page_peaks, "SESSION PEAKS", DASH_FONT_LABEL14, C_LABEL);
+
+    s_peaks_scroll = lv_obj_create(s_page_peaks);
+    lv_obj_set_size(s_peaks_scroll, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_flex_grow(s_peaks_scroll, 1);
+    lv_obj_set_style_bg_opa(s_peaks_scroll, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_peaks_scroll, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(s_peaks_scroll, 0, LV_PART_MAIN);
+    lv_obj_set_flex_flow(s_peaks_scroll, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(s_peaks_scroll, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START,
+                          LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_column(s_peaks_scroll, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_row(s_peaks_scroll, 10, LV_PART_MAIN);
+    lv_obj_set_scroll_dir(s_peaks_scroll, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(s_peaks_scroll, LV_SCROLLBAR_MODE_AUTO);
+    s_peak_values[PEAK_RPM] = build_diagnostics_tile(s_peaks_scroll, "MAX RPM");
+    s_peak_values[PEAK_SPEED] = build_diagnostics_tile(s_peaks_scroll, "MAX SPEED");
+    s_peak_values[PEAK_BOOST] = build_diagnostics_tile(s_peaks_scroll, "MAX BOOST / MAP");
+    s_peak_values[PEAK_COOLANT] = build_diagnostics_tile(s_peaks_scroll, "MAX COOLANT");
+    s_peak_values[PEAK_INTAKE] = build_diagnostics_tile(s_peaks_scroll, "MAX INTAKE TEMP");
+    s_peak_values[PEAK_DUTY] = build_diagnostics_tile(s_peaks_scroll, "MAX INJECTOR DUTY");
+    s_peak_values[PEAK_KNOCK] = build_diagnostics_tile(s_peaks_scroll, "MAX KNOCK");
+    s_peak_values[PEAK_AFR_MIN] = build_diagnostics_tile(s_peaks_scroll, "MIN AFR");
+    s_peak_values[PEAK_OIL_MIN] = build_diagnostics_tile(s_peaks_scroll, "MIN OIL PRESSURE");
+    s_peak_values[PEAK_BATTERY_MIN] = build_diagnostics_tile(s_peaks_scroll, "MIN BATTERY");
+
+    lv_obj_t *peaks_actions = make_plain_container(s_page_peaks);
+    lv_obj_set_size(peaks_actions, LV_PCT(100), 60);
+    lv_obj_set_flex_flow(peaks_actions, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(peaks_actions, 14, LV_PART_MAIN);
+    lv_obj_t *peaks_back = build_back_btn(peaks_actions, settings_warning_audio_back_cb);
+    lv_obj_set_flex_grow(peaks_back, 1);
+    lv_obj_set_width(peaks_back, 100);
+    lv_obj_t *peaks_reset = lv_obj_create(peaks_actions);
+    lv_obj_set_flex_grow(peaks_reset, 1);
+    lv_obj_set_size(peaks_reset, 100, 60);
+    lv_obj_set_style_bg_color(peaks_reset, C_RED_DEEP, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(peaks_reset, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(peaks_reset, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(peaks_reset, C_RED, LV_PART_MAIN);
+    lv_obj_set_style_radius(peaks_reset, 12, LV_PART_MAIN);
+    lv_obj_clear_flag(peaks_reset, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(peaks_reset, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(peaks_reset, settings_peaks_reset_cb, LV_EVENT_CLICKED, NULL);
+    add_press_feedback(peaks_reset);
+    lv_obj_center(make_label(peaks_reset, "Reset Session", DASH_FONT_LABEL14, C_WHITE));
+
     lv_obj_t *units_content = build_config_subpage(panel, &s_page_units, "UNITS");
     lv_obj_t *display_content = build_config_subpage(panel, &s_page_display, "DISPLAY");
     lv_obj_t *odometer_content = build_config_subpage(panel, &s_page_odometer, "ODOMETER & TRIPS");
@@ -3211,6 +3422,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
 
     build_config_section_header(cfg_scroll, "GENERAL");
     build_config_menu_row(cfg_scroll, "Diagnostics", settings_open_info_cb);
+    build_config_menu_row(cfg_scroll, "Session Peaks", settings_open_peaks_cb);
 
     /* --- independent unit controls --- */
     static const char *const unit_titles[UNIT_SETTING_COUNT] = {

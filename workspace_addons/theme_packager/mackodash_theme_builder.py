@@ -13,6 +13,7 @@ if str(ADDONS_ROOT) not in sys.path:
     sys.path.insert(0, str(ADDONS_ROOT))
 
 from convert_squareline_export import ConversionError, convert
+from theme_preview import ThemePreviewWindow
 from utility_ui import (
     LINE,
     PANEL,
@@ -82,10 +83,12 @@ class ThemeBuilderFrame(ttk.Frame):
         self.convert_button.grid(row=0, column=0, sticky="w")
         self.copy_button = ttk.Button(build_body, text="Copy to SD Card", command=self._copy_to_sd, state="disabled")
         self.copy_button.grid(row=0, column=1, sticky="w", padx=(10, 0))
+        self.preview_button = ttk.Button(build_body, text="Preview Theme", command=self._open_preview, state="disabled")
+        self.preview_button.grid(row=0, column=2, sticky="w", padx=(10, 0))
         ttk.Label(build_body, textvariable=self.status, style="TileHint.TLabel", wraplength=430).grid(
-            row=0, column=2, sticky="w", padx=(16, 0)
+            row=1, column=0, columnspan=4, sticky="w", pady=(12, 0)
         )
-        build_body.columnconfigure(2, weight=1)
+        build_body.columnconfigure(3, weight=1)
 
         self.details_button = ttk.Button(
             frame, text="Show technical details", style="Quiet.TButton", command=self._toggle_details
@@ -173,6 +176,7 @@ class ThemeBuilderFrame(ttk.Frame):
         )
         self.convert_button.configure(state="disabled")
         self.copy_button.configure(state="disabled")
+        self.preview_button.configure(state="disabled")
         self.status.set("Validating and converting SquareLine export...")
         threading.Thread(target=self._convert_worker, args=(args,), daemon=True).start()
 
@@ -199,8 +203,17 @@ class ThemeBuilderFrame(ttk.Frame):
         self.last_output = output
         self.convert_button.configure(state="normal")
         self.copy_button.configure(state="normal")
+        self.preview_button.configure(state="normal")
         self.status.set(f"Theme created: {output}")
         self._set_report(json.dumps(report, indent=2))
+
+    def _open_preview(self) -> None:
+        if not self.last_output or not self.last_output.exists():
+            return
+        try:
+            ThemePreviewWindow(self, self.last_output)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError, zipfile.BadZipFile) as error:
+            messagebox.showerror("Preview unavailable", str(error))
 
     def _copy_to_sd(self) -> None:
         if not self.last_output or not self.last_output.exists():

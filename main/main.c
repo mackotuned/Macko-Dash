@@ -13,6 +13,8 @@
 #include "ota_c6_hosted_bridge.h"
 #include "dash_sim.h"
 #include "dash_config.h"
+#include "data_logger.h"
+#include "session_peaks.h"
 #include "theme_storage.h"
 #include "warning_chime.h"
 
@@ -122,6 +124,7 @@ void gauge_timer(lv_timer_t * t) {
         return;
     }
 
+    bool drivetrain_live = dash_sim_is_enabled();
     if (dash_sim_is_enabled()) {
         dash_sim_step(&d);
         d.oil_valid = true;
@@ -133,6 +136,7 @@ void gauge_timer(lv_timer_t * t) {
 
     int gear = 0;
     bool can_live = canbus_has_live_data();
+    drivetrain_live = canbus_has_live_drivetrain();
     bool can_gear_live = canbus_has_live_gear();
 
     if (can_live && can_gear_live && can_data.gear > 0.0f && can_data.gear < 10.0f) {
@@ -176,6 +180,9 @@ void gauge_timer(lv_timer_t * t) {
     d.odo_miles  = odometer_get_miles();
     d.fuel_pct   = can_data.fuel_level;
     }
+
+    data_logger_submit(&d);
+    session_peaks_update(&d, drivetrain_live);
 
     bool changed = dash_config_get_value_smoothing() ||
                    (!g_last_ui_valid) || ui_data_changed_significantly(&g_last_ui_data, &d);
@@ -316,6 +323,7 @@ void dashboard_runtime_set_render_paused(bool paused)
 
 void app_main(void) {
     dash_config_init();
+    session_peaks_init();
     warning_chime_init();
 
     bsp_display_cfg_t cfg = {
@@ -341,6 +349,7 @@ void app_main(void) {
 
     esp_err_t theme_storage_err = theme_storage_init();
     ESP_LOGI("main", "Theme storage initialization -> %s", esp_err_to_name(theme_storage_err));
+    data_logger_init();
 
 #if CONFIG_HONDA_DASH_ENABLE_WIFI_OTA
     esp_err_t bridge_err = ota_c6_hosted_bridge_register();

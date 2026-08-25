@@ -50,6 +50,7 @@ typedef enum {
     BIND_TPS_UNIT,
     BIND_OIL_UNIT,
     BIND_SETTINGS_BUTTON,
+    BIND_RECORD_BUTTON,
 } binding_id_t;
 
 typedef enum {
@@ -116,6 +117,7 @@ static const binding_name_t BINDING_NAMES[] = {
     {BIND_TPS_UNIT, "dash_tps_unit", {"tps_unit", NULL}},
     {BIND_OIL_UNIT, "dash_oil_unit", {"oil_unit", NULL}},
     {BIND_SETTINGS_BUTTON, "dash_settings_button", {"settings_button", NULL}},
+    {BIND_RECORD_BUTTON, "dash_record_button", {"record_button", "logging_button", NULL}},
 };
 
 static lv_obj_t *s_root;
@@ -374,7 +376,8 @@ static void align_to_canvas(lv_obj_t *object, lv_align_t align, int x, int y)
     lv_obj_align(object, align, scaled_x, scaled_y);
 }
 
-static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition, lv_event_cb_t settings_cb)
+static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
+                              lv_event_cb_t settings_cb, lv_event_cb_t record_cb)
 {
     cJSON *type_item = cJSON_GetObjectItemCaseSensitive(definition, "type");
     cJSON *name_item = cJSON_GetObjectItemCaseSensitive(definition, "name");
@@ -434,9 +437,11 @@ static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition, lv_event_cb_t
         lv_obj_set_style_bg_color(object, lv_color_hex(json_color(definition, "background", 0x151619)), LV_PART_MAIN);
         cJSON *text = cJSON_GetObjectItemCaseSensitive(definition, "text");
         lv_obj_t *label = lv_label_create(object);
-        lv_label_set_text(label, cJSON_IsString(text) ? text->valuestring : "Settings");
+        const char *default_text = binding == BIND_RECORD_BUTTON ? "REC" : "Settings";
+        lv_label_set_text(label, cJSON_IsString(text) ? text->valuestring : default_text);
         lv_obj_center(label);
         if (binding == BIND_SETTINGS_BUTTON && settings_cb) lv_obj_add_event_cb(object, settings_cb, LV_EVENT_CLICKED, NULL);
+        if (binding == BIND_RECORD_BUTTON && record_cb) lv_obj_add_event_cb(object, record_cb, LV_EVENT_CLICKED, NULL);
     } else {
         object = lv_obj_create(parent);
         lv_obj_set_style_bg_color(object, lv_color_hex(json_color(definition, "color", 0xe4002b)), LV_PART_MAIN);
@@ -515,7 +520,7 @@ void runtime_theme_unload(void)
 }
 
 esp_err_t runtime_theme_load(lv_obj_t *parent, const theme_storage_package_t *package,
-                             lv_event_cb_t settings_cb)
+                             lv_event_cb_t settings_cb, lv_event_cb_t record_cb)
 {
     if (!parent || !package || !package->manifest_valid || !package->layout_path[0]) return ESP_ERR_INVALID_ARG;
     uint8_t *layout_data = NULL;
@@ -556,14 +561,15 @@ esp_err_t runtime_theme_load(lv_obj_t *parent, const theme_storage_package_t *pa
 
     cJSON *definition = NULL;
     cJSON_ArrayForEach(definition, objects) {
-        if (cJSON_IsObject(definition)) build_object(s_root, definition, settings_cb);
+        if (cJSON_IsObject(definition)) build_object(s_root, definition, settings_cb, record_cb);
     }
     bool has_settings_button = false;
+    bool has_record_button = false;
     for (size_t i = 0; i < s_binding_count; ++i) {
         if (s_bindings[i].id == BIND_SETTINGS_BUTTON) {
             has_settings_button = true;
-            break;
         }
+        if (s_bindings[i].id == BIND_RECORD_BUTTON) has_record_button = true;
     }
     if (!has_settings_button && settings_cb) {
         lv_obj_t *button = lv_btn_create(s_root);
@@ -577,6 +583,21 @@ esp_err_t runtime_theme_load(lv_obj_t *parent, const theme_storage_package_t *pa
         lv_label_set_text(label, LV_SYMBOL_SETTINGS);
         lv_obj_center(label);
         ESP_LOGW(TAG, "Theme has no settings button; added fallback control");
+    }
+    if (!has_record_button && record_cb) {
+        lv_obj_t *button = lv_btn_create(s_root);
+        lv_obj_add_flag(button, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_set_size(button, 56, 56);
+        lv_obj_set_pos(button, 888, 528);
+        lv_obj_set_style_bg_color(button, lv_color_hex(0x4a0413), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(button, 2, LV_PART_MAIN);
+        lv_obj_set_style_border_color(button, lv_color_hex(0xe4002b), LV_PART_MAIN);
+        lv_obj_add_event_cb(button, record_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_t *label = lv_label_create(button);
+        lv_label_set_text(label, "REC");
+        lv_obj_center(label);
+        ESP_LOGW(TAG, "Theme has no record button; added fallback control");
     }
     cJSON_Delete(layout);
     ESP_LOGI(TAG, "Loaded %s (%ux%u at %.2fx, offset %d,%d) with %u live binding(s)",

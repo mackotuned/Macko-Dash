@@ -24,7 +24,8 @@ QUICK START
 7. Export the complete C project from SquareLine.
 8. ZIP the entire exported folder.
 9. Open MackoDash Theme Builder and select the SquareLine ZIP.
-10. Build the .mdtheme.zip package, then use Copy to SD Card.
+10. Build the .mdtheme.zip package, use Preview Theme to check both simulated
+  value modes and warnings, then use Copy to SD Card.
 
 SquareLine normally adds ui_ to generated variable names. That is okay.
 For example, an object named dash_rpm_value may export as ui_dash_rpm_value.
@@ -135,6 +136,17 @@ MackoDash connects this Button to the dashboard Settings menu. The button may
 use any supported position, size, color, and text. Keep it easy to reach.
 
 
+REQUIRED RECORD BUTTON
+======================
+Every customer theme should contain one SquareLine Button named:
+
+  dash_record_button
+
+MackoDash connects this Button to SD-card CSV logging. Each press starts or
+stops recording and displays a confirmation message. MackoDash adds a fallback
+record control when this Button is missing.
+
+
 USING THE SAME LIVE VALUE MORE THAN ONCE
 ========================================
 Add _2 through _9 when a value appears more than once. This works with Labels,
@@ -196,6 +208,7 @@ dash_knock_value            knock_value
 dash_fuel_value             fuel_level_value
 dash_odo_value              odometer_value
 dash_settings_button        settings_button
+dash_record_button          record_button, logging_button
 
 For Bars and Arcs, the accepted short name is the preferred name without
 dash_. Coolant also accepts coolant_bar and coolant_arc. Intake temperature
@@ -241,7 +254,9 @@ EXPORT AND BUILD
 6. Enter the theme display name and a unique lowercase Theme ID.
 7. Leave strict validation enabled for customer packages.
 8. Select Build Theme Package.
-9. Select Copy to SD Card and choose the SD card drive.
+9. Select Preview Theme. Check Typical Values, Longest Values, and any reported
+  clipping, unsupported controls, or missing Settings/REC buttons.
+10. Select Copy to SD Card and choose the SD card drive.
 10. Insert the SD card into MackoDash and reboot.
 
 The finished file is placed in:
@@ -262,6 +277,7 @@ FINAL CUSTOMER CHECKLIST
 [ ] Duplicate values use _2, _3, and so on.
 [ ] Static/decorative objects do not start with dash_.
 [ ] dash_settings_button is present and easy to tap.
+[ ] dash_record_button is present and easy to tap.
 [ ] Labels fit the longest example values.
 [ ] Theme Builder strict validation passes without warnings.
 [ ] The finished theme is tested on MackoDash before distribution.
