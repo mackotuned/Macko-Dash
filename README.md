@@ -50,7 +50,7 @@ Before driving with MackoDash:
 4. Set the vehicle's VTEC point, redline, and warning thresholds.
 5. Use a simulation mode to become familiar with the selected theme and warning behavior.
 6. With the vehicle stationary, start the engine and verify every displayed value against a trusted source.
-7. Confirm warning audio, brightness, and screen visibility before road use.
+7. Confirm brightness, screen visibility, and visual warnings before road use.
 
 Settings, theme selection, odometer data, and trip data are retained after power is removed.
 
@@ -61,7 +61,7 @@ Settings, theme selection, odometer data, and trip data are retained after power
 - Live RPM, speed, gear, coolant, intake air, AFR, timing, boost/MAP, battery, throttle, oil pressure, injector duty, knock, and fuel data
 - Reassignable gauge channels on built-in themes
 - Independent speed, temperature, pressure, and distance units
-- Configurable VTEC point, redline, warning thresholds, and warning chimes
+- Configurable VTEC point, redline, and warning thresholds
 - Selectable redline screen-flash color
 - Persistent odometer plus Trip A and Trip B
 - Adjustable display brightness and value smoothing

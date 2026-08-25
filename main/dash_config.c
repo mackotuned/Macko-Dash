@@ -13,8 +13,6 @@
 #define KEY_CAN_PROTOCOL "cfg_can_proto"
 #define KEY_VTEC_RPM     "cfg_vtec_rpm"
 #define KEY_REDLINE_RPM  "cfg_redline"
-#define KEY_CHIME_MASK   "cfg_chime_m"
-#define KEY_CHIME_VOLUME "cfg_chime_v"
 #define KEY_BRIGHTNESS   "cfg_bright"
 #define KEY_SHOW_SIM     "cfg_show_sim"
 #define KEY_VALUE_SMOOTH "cfg_smooth"
@@ -27,9 +25,6 @@
 #define VTEC_RPM_MAX        7500
 #define REDLINE_RPM_MIN     6000
 #define REDLINE_RPM_MAX     11000
-#define CHIME_VOLUME_MIN    0
-#define CHIME_VOLUME_MAX    100
-#define DEFAULT_CHIME_VOLUME 60
 #define DEFAULT_BRIGHTNESS 95
 #define DEFAULT_REDLINE_FLASH_COLOR 0xe4002b
 
@@ -87,8 +82,6 @@ static bool s_distance_km = false;
 static char s_can_protocol[32] = "hondata";
 static int  s_vtec_rpm = DEFAULT_VTEC_RPM;
 static int  s_redline_rpm = DEFAULT_REDLINE_RPM;
-static uint32_t s_chime_warning_mask = DASH_CONFIG_CHIME_WARNING_ALL;
-static int s_chime_volume = DEFAULT_CHIME_VOLUME;
 static int s_brightness = DEFAULT_BRIGHTNESS;
 static bool s_show_sim_button = true;
 static bool s_value_smoothing = false;
@@ -138,12 +131,6 @@ void dash_config_init(void)
     }
     if (nvs_get_i32(h, KEY_REDLINE_RPM, &val) == ESP_OK && val >= REDLINE_RPM_MIN && val <= REDLINE_RPM_MAX) {
         s_redline_rpm = (int)val;
-    }
-    if (nvs_get_i32(h, KEY_CHIME_MASK, &val) == ESP_OK) {
-        s_chime_warning_mask = ((uint32_t)val) & DASH_CONFIG_CHIME_WARNING_ALL;
-    }
-    if (nvs_get_i32(h, KEY_CHIME_VOLUME, &val) == ESP_OK && val >= CHIME_VOLUME_MIN && val <= CHIME_VOLUME_MAX) {
-        s_chime_volume = (int)val;
     }
     if (nvs_get_i32(h, KEY_BRIGHTNESS, &val) == ESP_OK && val >= 20 && val <= 100) {
         s_brightness = (int)val;
@@ -316,60 +303,6 @@ void dash_config_set_redline_rpm(int rpm)
         return;
     }
     nvs_set_i32(h, KEY_REDLINE_RPM, (int32_t)s_redline_rpm);
-    nvs_commit(h);
-    nvs_close(h);
-}
-
-uint32_t dash_config_get_chime_warning_mask(void)
-{
-    return s_chime_warning_mask;
-}
-
-bool dash_config_get_chime_warning_enabled(uint32_t mask_bit)
-{
-    return (s_chime_warning_mask & mask_bit) != 0;
-}
-
-void dash_config_set_chime_warning_mask(uint32_t mask)
-{
-    s_chime_warning_mask = mask & DASH_CONFIG_CHIME_WARNING_ALL;
-
-    nvs_handle_t h;
-    if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) {
-        return;
-    }
-    nvs_set_i32(h, KEY_CHIME_MASK, (int32_t)s_chime_warning_mask);
-    nvs_commit(h);
-    nvs_close(h);
-}
-
-void dash_config_set_chime_warning_enabled(uint32_t mask_bit, bool enabled)
-{
-    uint32_t next_mask = s_chime_warning_mask;
-    if (enabled) {
-        next_mask |= mask_bit;
-    } else {
-        next_mask &= ~mask_bit;
-    }
-    dash_config_set_chime_warning_mask(next_mask);
-}
-
-int dash_config_get_chime_volume(void)
-{
-    return s_chime_volume;
-}
-
-void dash_config_set_chime_volume(int volume)
-{
-    if (volume < CHIME_VOLUME_MIN) volume = CHIME_VOLUME_MIN;
-    if (volume > CHIME_VOLUME_MAX) volume = CHIME_VOLUME_MAX;
-    s_chime_volume = volume;
-
-    nvs_handle_t h;
-    if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) {
-        return;
-    }
-    nvs_set_i32(h, KEY_CHIME_VOLUME, (int32_t)s_chime_volume);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -677,8 +610,6 @@ void dash_config_factory_reset(void)
     s_distance_km = false;
     s_vtec_rpm = DEFAULT_VTEC_RPM;
     s_redline_rpm = DEFAULT_REDLINE_RPM;
-    s_chime_warning_mask = DASH_CONFIG_CHIME_WARNING_ALL;
-    s_chime_volume = DEFAULT_CHIME_VOLUME;
     s_brightness = DEFAULT_BRIGHTNESS;
     s_show_sim_button = true;
     s_value_smoothing = false;
@@ -704,8 +635,6 @@ void dash_config_factory_reset(void)
     nvs_set_i32(h, KEY_DISTANCE_KM, 0);
     nvs_set_i32(h, KEY_VTEC_RPM, (int32_t)s_vtec_rpm);
     nvs_set_i32(h, KEY_REDLINE_RPM, (int32_t)s_redline_rpm);
-    nvs_set_i32(h, KEY_CHIME_MASK, (int32_t)s_chime_warning_mask);
-    nvs_set_i32(h, KEY_CHIME_VOLUME, (int32_t)s_chime_volume);
     nvs_set_i32(h, KEY_BRIGHTNESS, (int32_t)s_brightness);
     nvs_set_i32(h, KEY_SHOW_SIM, 1);
     nvs_set_i32(h, KEY_VALUE_SMOOTH, 0);

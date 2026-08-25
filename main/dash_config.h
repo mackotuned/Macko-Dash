@@ -15,17 +15,6 @@ extern "C" {
 
 void dash_config_init(void);
 
-typedef enum {
-   DASH_CONFIG_CHIME_WARNING_COOLANT = 1u << 0,
-   DASH_CONFIG_CHIME_WARNING_OIL     = 1u << 1,
-   DASH_CONFIG_CHIME_WARNING_KNOCK   = 1u << 2,
-   DASH_CONFIG_CHIME_WARNING_CEL     = 1u << 3,
-} dash_config_chime_warning_t;
-
-#define DASH_CONFIG_CHIME_WARNING_ALL \
-   (DASH_CONFIG_CHIME_WARNING_COOLANT | DASH_CONFIG_CHIME_WARNING_OIL | \
-    DASH_CONFIG_CHIME_WARNING_KNOCK | DASH_CONFIG_CHIME_WARNING_CEL)
-
 /* Legacy aggregate preference retained for compatibility. */
 bool dash_config_get_metric(void);
 void dash_config_set_metric(bool metric);
@@ -59,12 +48,6 @@ int  dash_config_get_redline_rpm(void);
 void dash_config_set_vtec_rpm(int rpm);
 void dash_config_set_redline_rpm(int rpm);
 
-uint32_t dash_config_get_chime_warning_mask(void);
-bool dash_config_get_chime_warning_enabled(uint32_t mask_bit);
-void dash_config_set_chime_warning_mask(uint32_t mask);
-void dash_config_set_chime_warning_enabled(uint32_t mask_bit, bool enabled);
-int dash_config_get_chime_volume(void);
-void dash_config_set_chime_volume(int volume);
 int dash_config_get_brightness(void);
 void dash_config_set_brightness(int brightness);
 bool dash_config_get_show_sim_button(void);

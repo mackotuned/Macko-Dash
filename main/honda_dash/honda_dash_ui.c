@@ -27,7 +27,6 @@
 #include "session_peaks.h"
 #include "theme_storage.h"
 #include "runtime_theme.h"
-#include "warning_chime.h"
 #include "odometer/odometer.h"
 #include "dashboard_runtime.h"
 #include "canbus.h"
@@ -352,7 +351,6 @@ static lv_obj_t *s_page_info;
 static lv_obj_t *s_page_peaks;
 static lv_obj_t *s_page_update;
 static lv_obj_t *s_page_config;
-static lv_obj_t *s_page_warning_audio;
 static lv_obj_t *s_page_units;
 static lv_obj_t *s_page_display;
 static lv_obj_t *s_page_odometer;
@@ -396,13 +394,7 @@ static lv_obj_t *s_cfg_vtec_label;
 static lv_obj_t *s_cfg_vtec_slider;
 static lv_obj_t *s_cfg_redline_label;
 static lv_obj_t *s_cfg_redline_slider;
-static lv_obj_t *s_cfg_chime_coolant_switch;
-static lv_obj_t *s_cfg_chime_oil_switch;
-static lv_obj_t *s_cfg_chime_knock_switch;
-static lv_obj_t *s_cfg_chime_cel_switch;
 static lv_obj_t *s_cfg_restart_note;
-static lv_obj_t *s_cfg_chime_volume_label;
-static lv_obj_t *s_cfg_chime_volume_slider;
 static lv_obj_t *s_cfg_sim_button_switch;
 static lv_obj_t *s_cfg_value_smoothing_switch;
 static lv_obj_t *s_cfg_redline_flash_switch;
@@ -1074,7 +1066,6 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_add_flag(s_page_peaks, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_update, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_config, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(s_page_warning_audio, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_units, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_ecu, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_theme_resets, LV_OBJ_FLAG_HIDDEN);
@@ -1137,7 +1128,6 @@ static void settings_open_info_cb(lv_event_t *e)
     settings_show_page(s_page_info);
     settings_diagnostics_refresh();
 }
-static void settings_open_warning_audio_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_warning_audio); }
 static void settings_open_peaks_cb(lv_event_t *e)
 {
     (void)e;
@@ -1199,35 +1189,6 @@ static void settings_open_config_cb(lv_event_t *e)
         }
     }
 
-    struct {
-        lv_obj_t *sw;
-        uint32_t mask;
-    } chime_switches[] = {
-        { s_cfg_chime_coolant_switch, DASH_CONFIG_CHIME_WARNING_COOLANT },
-        { s_cfg_chime_oil_switch,     DASH_CONFIG_CHIME_WARNING_OIL },
-        { s_cfg_chime_knock_switch,   DASH_CONFIG_CHIME_WARNING_KNOCK },
-        { s_cfg_chime_cel_switch,     DASH_CONFIG_CHIME_WARNING_CEL },
-    };
-    for (size_t i = 0; i < sizeof(chime_switches) / sizeof(chime_switches[0]); ++i) {
-        if (!chime_switches[i].sw) {
-            continue;
-        }
-        if (dash_config_get_chime_warning_enabled(chime_switches[i].mask)) {
-            lv_obj_add_state(chime_switches[i].sw, LV_STATE_CHECKED);
-        } else {
-            lv_obj_clear_state(chime_switches[i].sw, LV_STATE_CHECKED);
-        }
-    }
-
-    int chime_volume = dash_config_get_chime_volume();
-    if (s_cfg_chime_volume_slider) {
-        lv_slider_set_value(s_cfg_chime_volume_slider, chime_volume, LV_ANIM_OFF);
-    }
-    if (s_cfg_chime_volume_label) {
-        char vol_buf[24];
-        snprintf(vol_buf, sizeof(vol_buf), "%d%%", chime_volume);
-        lv_label_set_text(s_cfg_chime_volume_label, vol_buf);
-    }
     if (s_brightness_slider) {
         lv_slider_set_value(s_brightness_slider, dash_config_get_brightness(), LV_ANIM_OFF);
     }
@@ -1323,28 +1284,6 @@ static void cfg_protocol_tile_cb(lv_event_t *e)
     lv_obj_clear_flag(s_ecu_restart_note, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void cfg_chime_switch_cb(lv_event_t *e)
-{
-    lv_obj_t *sw = lv_event_get_target(e);
-    uint32_t mask_bit = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
-    bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
-    dash_config_set_chime_warning_enabled(mask_bit, enabled);
-}
-
-static void cfg_chime_volume_slider_cb(lv_event_t *e)
-{
-    lv_obj_t *slider = lv_event_get_target(e);
-    int volume = lv_slider_get_value(slider);
-    dash_config_set_chime_volume(volume);
-    warning_chime_set_volume(volume);
-
-    if (s_cfg_chime_volume_label) {
-        char buf[24];
-        snprintf(buf, sizeof(buf), "%d%%", volume);
-        lv_label_set_text(s_cfg_chime_volume_label, buf);
-    }
-}
-
 static void cfg_sim_button_switch_cb(lv_event_t *e)
 {
     bool show = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
@@ -1381,13 +1320,6 @@ static void cfg_redline_flash_color_cb(lv_event_t *e)
     uint32_t rgb = (uint32_t)(uintptr_t)lv_event_get_user_data(e);
     dash_config_set_redline_flash_color(rgb);
     redline_flash_color_swatches_refresh();
-}
-
-static void cfg_chime_test_cb(lv_event_t *e)
-{
-    (void)e;
-    ESP_LOGD("honda_dash_ui", "Config Test Chime button pressed");
-    warning_chime_test();
 }
 
 static void cfg_reboot_cb(lv_event_t *e)
@@ -1510,16 +1442,6 @@ static void cfg_factory_reset_cb(lv_event_t *e)
     s_cfg_pending_redline_rpm = dash_config_get_redline_rpm();
     if (s_cfg_vtec_slider) lv_slider_set_value(s_cfg_vtec_slider, s_cfg_pending_vtec_rpm, LV_ANIM_OFF);
     if (s_cfg_redline_slider) lv_slider_set_value(s_cfg_redline_slider, s_cfg_pending_redline_rpm, LV_ANIM_OFF);
-    if (s_cfg_chime_coolant_switch) lv_obj_add_state(s_cfg_chime_coolant_switch, LV_STATE_CHECKED);
-    if (s_cfg_chime_oil_switch) lv_obj_add_state(s_cfg_chime_oil_switch, LV_STATE_CHECKED);
-    if (s_cfg_chime_knock_switch) lv_obj_add_state(s_cfg_chime_knock_switch, LV_STATE_CHECKED);
-    if (s_cfg_chime_cel_switch) lv_obj_add_state(s_cfg_chime_cel_switch, LV_STATE_CHECKED);
-    if (s_cfg_chime_volume_slider) lv_slider_set_value(s_cfg_chime_volume_slider, dash_config_get_chime_volume(), LV_ANIM_OFF);
-    if (s_cfg_chime_volume_label) {
-        char vol_buf[24];
-        snprintf(vol_buf, sizeof(vol_buf), "%d%%", dash_config_get_chime_volume());
-        lv_label_set_text(s_cfg_chime_volume_label, vol_buf);
-    }
     if (s_brightness_slider) lv_slider_set_value(s_brightness_slider, dash_config_get_brightness(), LV_ANIM_OFF);
     if (s_brightness_value_label) lv_label_set_text(s_brightness_value_label, "95%");
     if (s_cfg_sim_button_switch) lv_obj_add_state(s_cfg_sim_button_switch, LV_STATE_CHECKED);
@@ -1557,7 +1479,6 @@ static void cfg_factory_reset_cb(lv_event_t *e)
     }
     bsp_display_brightness_set(dash_config_get_brightness());
     sim_buttons_apply_visibility();
-    warning_chime_set_volume(dash_config_get_chime_volume());
     char buf[48];
     snprintf(buf, sizeof(buf), "%d RPM", s_cfg_pending_vtec_rpm);
     lv_label_set_text(s_cfg_vtec_label, buf);
@@ -1714,7 +1635,7 @@ static void settings_back_cb(lv_event_t *e)
     settings_show_page(s_page_main);
 }
 
-static void settings_warning_audio_back_cb(lv_event_t *e)
+static void settings_config_back_cb(lv_event_t *e)
 {
     (void)e;
     settings_show_page(s_page_config);
@@ -3226,7 +3147,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_set_size(peaks_actions, LV_PCT(100), 60);
     lv_obj_set_flex_flow(peaks_actions, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(peaks_actions, 14, LV_PART_MAIN);
-    lv_obj_t *peaks_back = build_back_btn(peaks_actions, settings_warning_audio_back_cb);
+    lv_obj_t *peaks_back = build_back_btn(peaks_actions, settings_config_back_cb);
     lv_obj_set_flex_grow(peaks_back, 1);
     lv_obj_set_width(peaks_back, 100);
     lv_obj_t *peaks_reset = lv_obj_create(peaks_actions);
@@ -3291,91 +3212,6 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_add_flag(s_ecu_restart_note, LV_OBJ_FLAG_HIDDEN);
     build_settings_back_btn(s_page_ecu);
     cfg_protocol_tiles_refresh();
-
-    /* ---- page: warning audio -- opened from Config ---- */
-    s_page_warning_audio = make_plain_container(panel);
-    lv_obj_set_size(s_page_warning_audio, LV_PCT(100), LV_PCT(100));
-    lv_obj_add_flag(s_page_warning_audio, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_flex_flow(s_page_warning_audio, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(s_page_warning_audio, 14, LV_PART_MAIN);
-    make_label(s_page_warning_audio, "WARNING AUDIO", DASH_FONT_LABEL14, C_LABEL);
-
-    lv_obj_t *warning_card = lv_obj_create(s_page_warning_audio);
-    lv_obj_set_size(warning_card, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_flex_grow(warning_card, 1);
-    lv_obj_set_style_bg_color(warning_card, C_PANEL, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(warning_card, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(warning_card, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(warning_card, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(warning_card, 12, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(warning_card, 18, LV_PART_MAIN);
-    lv_obj_clear_flag(warning_card, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(warning_card, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(warning_card, 10, LV_PART_MAIN);
-
-    make_label(warning_card, "Warning Chime", DASH_FONT_LABEL14, C_LABEL_DIM);
-
-    struct {
-        const char *label;
-        uint32_t mask;
-        lv_obj_t **sw_out;
-    } warning_rows[] = {
-        { "Coolant Temp", DASH_CONFIG_CHIME_WARNING_COOLANT, &s_cfg_chime_coolant_switch },
-        { "Oil Pressure", DASH_CONFIG_CHIME_WARNING_OIL, &s_cfg_chime_oil_switch },
-        { "Knock Retard", DASH_CONFIG_CHIME_WARNING_KNOCK, &s_cfg_chime_knock_switch },
-        { "Check Engine", DASH_CONFIG_CHIME_WARNING_CEL, &s_cfg_chime_cel_switch },
-    };
-
-    for (size_t i = 0; i < sizeof(warning_rows) / sizeof(warning_rows[0]); ++i) {
-        lv_obj_t *row = make_plain_container(warning_card);
-        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
-        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        make_label(row, warning_rows[i].label, DASH_FONT_LABEL14, C_LABEL);
-
-        lv_obj_t *sw = lv_switch_create(row);
-        lv_obj_set_style_bg_color(sw, C_RED, LV_PART_INDICATOR | LV_STATE_CHECKED);
-        if (dash_config_get_chime_warning_enabled(warning_rows[i].mask)) {
-            lv_obj_add_state(sw, LV_STATE_CHECKED);
-        }
-        lv_obj_add_event_cb(sw, cfg_chime_switch_cb, LV_EVENT_VALUE_CHANGED,
-                            (void *)(uintptr_t)warning_rows[i].mask);
-        *warning_rows[i].sw_out = sw;
-    }
-
-    lv_obj_t *vol_top = make_plain_container(warning_card);
-    lv_obj_set_size(vol_top, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(vol_top, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(vol_top, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_top(vol_top, 8, LV_PART_MAIN);
-    make_label(vol_top, "Chime Volume", DASH_FONT_LABEL14, C_LABEL_DIM);
-    char chime_volume_buf[8];
-    snprintf(chime_volume_buf, sizeof(chime_volume_buf), "%d%%", dash_config_get_chime_volume());
-    s_cfg_chime_volume_label = make_label(vol_top, chime_volume_buf, DASH_FONT_LABEL14, C_WHITE);
-
-    s_cfg_chime_volume_slider = lv_slider_create(warning_card);
-    configure_menu_slider(s_cfg_chime_volume_slider);
-    lv_obj_set_size(s_cfg_chime_volume_slider, LV_PCT(100), 16);
-    lv_slider_set_range(s_cfg_chime_volume_slider, 0, 100);
-    lv_slider_set_value(s_cfg_chime_volume_slider, dash_config_get_chime_volume(), LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(s_cfg_chime_volume_slider, C_RED, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(s_cfg_chime_volume_slider, C_WHITE, LV_PART_KNOB);
-    lv_obj_add_event_cb(s_cfg_chime_volume_slider, cfg_chime_volume_slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
-
-    lv_obj_t *test_btn = lv_obj_create(warning_card);
-    lv_obj_set_size(test_btn, LV_PCT(100), 44);
-    lv_obj_set_style_bg_color(test_btn, C_RED, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(test_btn, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(test_btn, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(test_btn, 10, LV_PART_MAIN);
-    lv_obj_clear_flag(test_btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(test_btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(test_btn, cfg_chime_test_cb, LV_EVENT_CLICKED, NULL);
-    add_press_feedback(test_btn);
-    lv_obj_t *test_lbl = make_label(test_btn, "Test Chime", DASH_FONT_LABEL14, C_WHITE);
-    lv_obj_center(test_lbl);
-
-    build_back_btn(s_page_warning_audio, settings_warning_audio_back_cb);
 
     /* ---- page: theme layout resets ---- */
     s_page_theme_resets = make_plain_container(panel);
@@ -3573,9 +3409,6 @@ static void build_settings_overlay(lv_obj_t *cluster)
         if (dash_config_get_show_sim_button()) lv_obj_add_state(s_cfg_sim_button_switch, LV_STATE_CHECKED);
         lv_obj_add_event_cb(s_cfg_sim_button_switch, cfg_sim_button_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
     }
-
-    build_config_section_header(cfg_scroll, "WARNINGS & AUDIO");
-    build_config_menu_row(cfg_scroll, "Warning Audio", settings_open_warning_audio_cb);
 
     build_config_section_header(cfg_scroll, "ODOMETER & TRIPS");
     build_config_menu_row(cfg_scroll, "Odometer & Trip Settings", settings_open_odometer_cb);
@@ -6561,21 +6394,6 @@ static void apply_value_smoothing(honda_dash_data_t *data)
 void honda_dash_ui_update(const honda_dash_data_t *data)
 {
     if (!data) return;
-
-    uint32_t active_warning_mask = 0;
-    if (data->ect_f > 225.0f) {
-        active_warning_mask |= DASH_CONFIG_CHIME_WARNING_COOLANT;
-    }
-    if (data->oil_psi < 15.0f) {
-        active_warning_mask |= DASH_CONFIG_CHIME_WARNING_OIL;
-    }
-    if (data->knock_deg > 1.5f) {
-        active_warning_mask |= DASH_CONFIG_CHIME_WARNING_KNOCK;
-    }
-    if (data->cel) {
-        active_warning_mask |= DASH_CONFIG_CHIME_WARNING_CEL;
-    }
-    warning_chime_process(active_warning_mask);
 
     /* apply the user's unit preference once here, rather than touching
        every theme's individual rendering code -- all five themes read

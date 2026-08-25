@@ -84,7 +84,6 @@ idf_component_register(
         "session_peaks.c"
         "theme_storage.c"
         "runtime_theme.c"
-        "warning_chime.c"
         "ota_update.c"
         "ota_c6_hosted_bridge.c"
         "honda_dash/honda_dash_ui.c"
@@ -103,7 +102,6 @@ idf_component_register(
         ${CAN_PROTOCOL_JSON}
 
     REQUIRES
-        bsp_extra
         esp32_p4_wifi6_touch_lcd_4_3
         esp_driver_twai
         esp_app_format
@@ -131,7 +129,6 @@ idf_component_register(
         "session_peaks.c"
         "theme_storage.c"
         "runtime_theme.c"
-        "warning_chime.c"
         "ota_update_stub.c"
         "honda_dash/honda_dash_ui.c"
         "odometer/odometer.c"
@@ -149,7 +146,6 @@ idf_component_register(
         ${CAN_PROTOCOL_JSON}
 
     REQUIRES
-        bsp_extra
         esp32_p4_wifi6_touch_lcd_4_3
         esp_driver_twai
         esp_app_format

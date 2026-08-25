@@ -148,7 +148,7 @@ static bool bsp_touch_link_stable(esp_lcd_touch_handle_t touch)
         },                     \
     }
 
-/* This configuration is used by default in `bsp_extra_audio_init()` */
+/* Default board audio bus configuration. */
 #define BSP_I2S_DUPLEX_MONO_CFG(_sample_rate)                                                         \
     {                                                                                                 \
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(_sample_rate),                                          \

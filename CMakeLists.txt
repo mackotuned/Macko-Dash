@@ -2,11 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
-set(PROJECT_VER "1.1.3")
-
-set(EXTRA_COMPONENT_DIRS
-    ./components/bsp_extra
-    )
+set(PROJECT_VER "1.1.4")
 
 add_compile_options(-Wno-format)
 project(mackodash)

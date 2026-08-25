@@ -16,7 +16,6 @@
 #include "data_logger.h"
 #include "session_peaks.h"
 #include "theme_storage.h"
-#include "warning_chime.h"
 
 #define MIN_VALID_SPEED_MPH 3.0f
 #define BOOT_LOGO_DURATION_MS 1500
@@ -324,7 +323,6 @@ void dashboard_runtime_set_render_paused(bool paused)
 void app_main(void) {
     dash_config_init();
     session_peaks_init();
-    warning_chime_init();
 
     bsp_display_cfg_t cfg = {
         .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
