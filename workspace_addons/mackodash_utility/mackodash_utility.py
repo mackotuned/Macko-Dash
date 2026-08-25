@@ -9,12 +9,14 @@ from tkinter import messagebox, ttk
 ADDONS_ROOT = Path(__file__).resolve().parent.parent
 THEME_PACKAGER = ADDONS_ROOT / "theme_packager"
 UPDATE_FLASHER = ADDONS_ROOT / "update_flasher"
-for module_path in (ADDONS_ROOT, THEME_PACKAGER, UPDATE_FLASHER):
+LOG_VIEWER = ADDONS_ROOT / "log_viewer"
+for module_path in (ADDONS_ROOT, THEME_PACKAGER, UPDATE_FLASHER, LOG_VIEWER):
     path_text = str(module_path)
     if path_text not in sys.path:
         sys.path.insert(0, path_text)
 
 from mackodash_theme_builder import ThemeBuilderFrame, configure_theme_builder_style
+from mackodash_log_viewer import LogViewerFrame
 from mackodash_update_flasher import UpdateFlasherFrame, configure_update_flasher_style
 from utility_ui import (
     LINE,
@@ -49,12 +51,16 @@ class MackoDashUtility(tk.Tk):
 
         self.theme_page = self._build_workflow_page("Build a Theme")
         self.update_page = self._build_workflow_page("Update Firmware")
+        self.log_page = self._build_workflow_page("View Driving Logs")
         self.theme_page.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.update_page.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self.log_page.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.theme_builder = ThemeBuilderFrame(self.theme_page.workflow.content)
         self.update_flasher = UpdateFlasherFrame(self.update_page.workflow.content)
+        self.log_viewer = LogViewerFrame(self.log_page.workflow.content)
         self.theme_builder.pack(fill="both", expand=True)
         self.update_flasher.pack(fill="both", expand=True)
+        self.log_viewer.pack(fill="both", expand=True)
         self._show_page(self.home_page)
         self.protocol("WM_DELETE_WINDOW", self._close)
 
@@ -68,7 +74,7 @@ class MackoDashUtility(tk.Tk):
 
         choices = ttk.Frame(self.home_page)
         choices.pack(fill="both", expand=True)
-        choices.columnconfigure((0, 1), weight=1, uniform="tools")
+        choices.columnconfigure((0, 1, 2), weight=1, uniform="tools")
         choices.rowconfigure(0, weight=1)
         self._build_home_tile(
             choices,
@@ -86,6 +92,14 @@ class MackoDashUtility(tk.Tk):
             "SquareLine ZIP + SD card",
             lambda: self._show_page(self.theme_page),
         )
+        self._build_home_tile(
+            choices,
+            2,
+            "VIEW DRIVING LOGS",
+            "Explore recorded sessions with selectable dyno-style graphs.",
+            "MackoDash CSV log or SD card",
+            lambda: self._show_page(self.log_page),
+        )
 
     def _build_home_tile(
         self,
@@ -97,7 +111,7 @@ class MackoDashUtility(tk.Tk):
         command,
     ) -> None:
         tile = tk.Frame(parent, background=PANEL, highlightbackground=LINE, highlightthickness=1, cursor="hand2")
-        tile.grid(row=0, column=column, sticky="nsew", padx=(0, 10) if column == 0 else (10, 0))
+        tile.grid(row=0, column=column, sticky="nsew", padx=(0, 7) if column == 0 else ((7, 7) if column == 1 else (7, 0)))
         accent = tk.Frame(tile, background=RED, height=7)
         accent.pack(fill="x")
         body = tk.Frame(tile, background=PANEL, padx=28, pady=28)
@@ -109,12 +123,12 @@ class MackoDashUtility(tk.Tk):
         number.pack(anchor="w")
         heading = tk.Label(
             body, text=title, background=PANEL, foreground=WHITE,
-            font=("Segoe UI Semibold", 20), justify="left",
+            font=("Segoe UI Semibold", 17), justify="left", wraplength=220,
         )
         heading.pack(anchor="w", pady=(24, 10))
         copy = tk.Label(
             body, text=description, background=PANEL, foreground="#b0b2b8",
-            font=("Segoe UI", 11), wraplength=310, justify="left",
+            font=("Segoe UI", 10), wraplength=220, justify="left",
         )
         copy.pack(anchor="w")
         need = tk.Label(

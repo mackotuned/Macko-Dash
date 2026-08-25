@@ -20,6 +20,19 @@ BUILD A THEME
 See MackoDash_SquareLine_Customer_Instructions.txt for all supported object
 names, Bars, Arcs, values, ranges, and design rules.
 
+VIEW DRIVING LOGS
+-----------------
+1. Open MackoDash Utility and choose View Driving Logs.
+2. Select Open CSV for one log, or Find on SD Card to list its recorded logs.
+3. Drag the time-scale control and use the bottom scrollbar to move through
+  the recording horizontally.
+4. Hover over any point to see the exact values from that recorded sample.
+5. Open Select Channels to choose a tuning preset or build a Custom view.
+
+The AFR / Timing / Boost, Boost / Timing, Temps / RPM / Boost, Fuel & Ignition,
+Engine Health, and Driver Inputs presets keep related signals together. Invalid
+oil pressure, injector duty, and knock samples appear as gaps instead of zero.
+
 UPDATE FIRMWARE
 ---------------
 1. Connect MackoDash to the Windows PC with its update USB cable.

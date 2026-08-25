@@ -5,6 +5,7 @@ $addonsRoot = Resolve-Path (Join-Path $root '..')
 $projectRoot = Resolve-Path (Join-Path $root '..\..')
 $themePackager = Join-Path $addonsRoot 'theme_packager'
 $updateFlasher = Join-Path $addonsRoot 'update_flasher'
+$logViewer = Join-Path $addonsRoot 'log_viewer'
 $buildDir = Join-Path $projectRoot 'build'
 $firmwareBundle = Join-Path $root 'dist\MackoDash-Firmware.zip'
 $themeInstructions = Join-Path $addonsRoot 'references\MackoDash_SquareLine_Customer_Instructions.txt'
@@ -22,6 +23,7 @@ if (-not (Test-Path (Join-Path $buildDir 'mackodash.bin'))) {
     --paths $addonsRoot `
     --paths $themePackager `
     --paths $updateFlasher `
+    --paths $logViewer `
     --add-data "$(Join-Path $addonsRoot 'mackodash_logo.png');." `
     --collect-all esptool `
     --collect-all serial `
