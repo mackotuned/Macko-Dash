@@ -174,6 +174,69 @@ def object_rect(item: dict, design_width: int, design_height: int) -> tuple[floa
     return anchor_x + x, anchor_y + y, float(width), float(height)
 
 
+def image_runtime_rect(item: dict, design_width: int, design_height: int,
+                       preview_width: int = TARGET_WIDTH) -> tuple[float, float, float, float]:
+    source_width = item.get("source_width")
+    source_height = item.get("source_height")
+    if not isinstance(source_width, int) or not isinstance(source_height, int):
+        return object_rect(item, design_width, design_height)
+
+    runtime_scale = min(TARGET_WIDTH / design_width, TARGET_HEIGHT / design_height)
+    preview_scale = preview_width / TARGET_WIDTH
+    width = item.get("width")
+    height = item.get("height")
+    zoom = item.get("zoom")
+    if isinstance(zoom, (int, float)):
+        runtime_zoom = max(1, min(768, round(zoom * runtime_scale)))
+    elif isinstance(width, (int, float)) and isinstance(height, (int, float)):
+        scaled_width = max(1, round(width * runtime_scale))
+        scaled_height = max(1, round(height * runtime_scale))
+        runtime_zoom = max(1, min(768, min(scaled_width * 256 // source_width,
+                                           scaled_height * 256 // source_height)))
+    else:
+        runtime_zoom = max(1, min(768, round(256 * runtime_scale)))
+    rendered_width = source_width * runtime_zoom / 256
+    rendered_height = source_height * runtime_zoom / 256
+
+    x = item.get("x", 0) if isinstance(item.get("x", 0), (int, float)) else 0
+    y = item.get("y", 0) if isinstance(item.get("y", 0), (int, float)) else 0
+    scaled_canvas_width = round(design_width * runtime_scale)
+    scaled_canvas_height = round(design_height * runtime_scale)
+    offset_x = (TARGET_WIDTH - scaled_canvas_width) / 2
+    offset_y = (TARGET_HEIGHT - scaled_canvas_height) / 2
+    align = item.get("object_align")
+    anchors = {
+        "top_left": (offset_x, offset_y),
+        "top_mid": (TARGET_WIDTH / 2, offset_y),
+        "top_right": (TARGET_WIDTH - offset_x, offset_y),
+        "left_mid": (offset_x, TARGET_HEIGHT / 2),
+        "center": (TARGET_WIDTH / 2, TARGET_HEIGHT / 2),
+        "right_mid": (TARGET_WIDTH - offset_x, TARGET_HEIGHT / 2),
+        "bottom_left": (offset_x, TARGET_HEIGHT - offset_y),
+        "bottom_mid": (TARGET_WIDTH / 2, TARGET_HEIGHT - offset_y),
+        "bottom_right": (TARGET_WIDTH - offset_x, TARGET_HEIGHT - offset_y),
+    }
+    if align in anchors:
+        anchor_x, anchor_y = anchors[align]
+        horizontal = "left" if align.endswith("left") else "right" if align.endswith("right") else "center"
+        vertical = "top" if align.startswith("top") else "bottom" if align.startswith("bottom") else "center"
+        runtime_x = anchor_x + x * runtime_scale
+        runtime_y = anchor_y + y * runtime_scale
+        if horizontal == "center":
+            runtime_x -= rendered_width / 2
+        elif horizontal == "right":
+            runtime_x -= rendered_width
+        if vertical == "center":
+            runtime_y -= rendered_height / 2
+        elif vertical == "bottom":
+            runtime_y -= rendered_height
+    else:
+        runtime_x = offset_x + x * runtime_scale
+        runtime_y = offset_y + y * runtime_scale
+    return (runtime_x * preview_scale, runtime_y * preview_scale,
+            rendered_width * preview_scale, rendered_height * preview_scale)
+
+
 def display_text(item: dict, scenario: str) -> str:
     binding = resolve_binding(str(item.get("name", "")))
     return SIMULATED_VALUES.get(scenario, SIMULATED_VALUES["typical"]).get(binding, str(item.get("text", "--")))
@@ -321,17 +384,23 @@ class ThemePreviewWindow(tk.Toplevel):
         for index, item in enumerate(self.theme.layout.get("objects", [])):
             if not isinstance(item, dict):
                 continue
-            x, y, width, height = self._runtime_rect(item)
             object_type = item.get("type", "label")
+            if object_type == "image":
+                x, y, width, height = image_runtime_rect(
+                    item, self.theme.design_width, self.theme.design_height, self.PREVIEW_WIDTH)
+            else:
+                x, y, width, height = self._runtime_rect(item)
             color = str(item.get("color", "#ffffff"))
             if object_type not in SUPPORTED_TYPES:
                 self.canvas.create_rectangle(x, y, x + width, y + height, fill="#4a0413", outline="#ffb020", width=3)
                 self.canvas.create_line(x, y, x + width, y + height, fill="#ffb020", width=3)
                 self.canvas.create_line(x + width, y, x, y + height, fill="#ffb020", width=3)
             elif object_type == "image":
-                self._draw_image(item, x, y)
+                self._draw_image(item, x, y, width, height)
             elif object_type == "label":
-                font_size = max(6, round(float(item.get("font_size", 14)) * width / max(float(item.get("width", width)), 1)))
+                runtime_scale = min(TARGET_WIDTH / self.theme.design_width, TARGET_HEIGHT / self.theme.design_height)
+                preview_scale = self.PREVIEW_WIDTH / TARGET_WIDTH
+                font_size = max(6, round(float(item.get("font_size", 14)) * runtime_scale * preview_scale))
                 anchor = {"left": "w", "right": "e"}.get(item.get("align"), "center")
                 text_x = x + (0 if anchor == "w" else width if anchor == "e" else width / 2)
                 self.canvas.create_text(text_x, y + height / 2, text=display_text(item, self.scenario.get()), fill=color,
@@ -356,7 +425,7 @@ class ThemePreviewWindow(tk.Toplevel):
             if index in problematic:
                 self.canvas.create_rectangle(x, y, x + width, y + height, outline="#ffb020", width=3)
 
-    def _draw_image(self, item: dict, x: float, y: float) -> None:
+    def _draw_image(self, item: dict, x: float, y: float, width: float, height: float) -> None:
         asset_name = item.get("asset")
         data = self.theme.assets.get(asset_name)
         source_width = item.get("source_width")
@@ -365,11 +434,8 @@ class ThemePreviewWindow(tk.Toplevel):
         if not data or not isinstance(source_width, int) or not isinstance(source_height, int) or image_format not in {"rgb565", "rgb565a8"}:
             return
         try:
-            preview_scale = self.PREVIEW_WIDTH / TARGET_WIDTH
-            runtime_scale = min(TARGET_WIDTH / self.theme.design_width, TARGET_HEIGHT / self.theme.design_height)
-            zoom = float(item.get("zoom", 256)) / 256 * runtime_scale * preview_scale
-            output_width = max(1, round(source_width * zoom))
-            output_height = max(1, round(source_height * zoom))
+            output_width = max(1, round(width))
+            output_height = max(1, round(height))
             image = tk.PhotoImage(data=raw_image_png(data, source_width, source_height, image_format,
                                                      output_width, output_height))
         except (tk.TclError, ValueError):

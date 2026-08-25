@@ -6,7 +6,8 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from theme_preview import ThemePackage, analyze_theme, display_text, load_theme_package, raw_image_png, resolve_binding
+from theme_preview import (ThemePackage, analyze_theme, display_text, image_runtime_rect,
+                           load_theme_package, raw_image_png, resolve_binding)
 
 
 class ThemePreviewTests(unittest.TestCase):
@@ -60,6 +61,18 @@ class ThemePreviewTests(unittest.TestCase):
     def test_rgb565_decoder_produces_png(self) -> None:
         png = raw_image_png(b"\x00\xf8", 1, 1, "rgb565")
         self.assertTrue(png.startswith(b"\x89PNG\r\n\x1a\n"))
+
+    def test_centered_image_uses_rendered_dimensions_for_alignment(self) -> None:
+        item = {
+            "type": "image", "object_align": "center", "x": -269, "y": 12,
+            "width": "content", "height": "content", "source_width": 473,
+            "source_height": 503, "zoom": 110,
+        }
+        x, y, width, height = image_runtime_rect(item, 1024, 600)
+        self.assertAlmostEqual(x, 141.37, places=1)
+        self.assertAlmostEqual(y, 203.93, places=1)
+        self.assertAlmostEqual(width, 203.24, places=1)
+        self.assertAlmostEqual(height, 216.13, places=1)
 
 
 if __name__ == "__main__":
