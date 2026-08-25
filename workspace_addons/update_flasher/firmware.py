@@ -51,6 +51,7 @@ class FirmwareValidationError(ValueError):
 class BundleImage:
     definition: ImageDefinition
     path: Path
+    archive_name: str
     size: int
     sha256: str
 
@@ -208,14 +209,25 @@ def validate_firmware(path: str | Path) -> FirmwareInfo:
         raise FirmwareValidationError(f"Invalid or damaged firmware ZIP: {error}") from error
 
     with archive:
-        names = archive.namelist()
+        entries = [info for info in archive.infolist() if not info.is_dir()]
+        names = [info.filename for info in entries]
         expected_names = {BUNDLE_MANIFEST, *(definition.filename for definition in IMAGE_DEFINITIONS)}
-        if len(names) != len(set(names)) or set(names) != expected_names:
-            raise FirmwareValidationError("Firmware ZIP must contain only the manifest and five firmware images at its root.")
-        if any(info.is_dir() or info.file_size > MAX_BUNDLE_SIZE for info in archive.infolist()):
+        prefixes = {name.removesuffix(BUNDLE_MANIFEST) for name in names if name.endswith(BUNDLE_MANIFEST)}
+        prefix = prefixes.pop() if len(prefixes) == 1 else ""
+        expected_archive_names = {f"{prefix}{name}" for name in expected_names}
+        if (
+            len(names) != len(set(names))
+            or set(names) != expected_archive_names
+            or (prefix and (not prefix.endswith("/") or "/" in prefix.rstrip("/")))
+        ):
+            raise FirmwareValidationError(
+                "Firmware ZIP must contain only the manifest and five firmware images at its root "
+                "or inside one folder."
+            )
+        if any(info.file_size > MAX_BUNDLE_SIZE for info in entries):
             raise FirmwareValidationError("Firmware ZIP contains an invalid or oversized entry.")
         try:
-            manifest = json.loads(archive.read(BUNDLE_MANIFEST).decode("utf-8"))
+            manifest = json.loads(archive.read(f"{prefix}{BUNDLE_MANIFEST}").decode("utf-8"))
         except (KeyError, UnicodeDecodeError, json.JSONDecodeError) as error:
             raise FirmwareValidationError(f"Firmware bundle manifest is missing or invalid: {error}") from error
         manifest_files = _validate_manifest(manifest)
@@ -227,7 +239,8 @@ def validate_firmware(path: str | Path) -> FirmwareInfo:
             item = manifest_files[definition.name]
             if item.get("file") != definition.filename or item.get("offset") != definition.offset:
                 raise FirmwareValidationError(f"Invalid file or flash offset for '{definition.name}'.")
-            data = archive.read(definition.filename)
+            archive_name = f"{prefix}{definition.filename}"
+            data = archive.read(archive_name)
             size = len(data)
             total_size += size
             if size == 0 or size > definition.max_size or (definition.exact_size and size != definition.max_size):
@@ -239,7 +252,7 @@ def validate_firmware(path: str | Path) -> FirmwareInfo:
             if item.get("size") != size or item.get("sha256") != digest:
                 raise FirmwareValidationError(f"Checksum or size mismatch for '{definition.filename}'.")
             image_data[definition.name] = data
-            bundle_images.append(BundleImage(definition, bundle_path, size, digest))
+            bundle_images.append(BundleImage(definition, bundle_path, archive_name, size, digest))
 
     project_name, version, compile_date, compile_time, idf_version = _validate_application(
         image_data["application"]
@@ -293,7 +306,7 @@ def flash_firmware(port: str, firmware: FirmwareInfo, log: Callable[[str], None]
         extract_root = Path(directory)
         with zipfile.ZipFile(firmware.path) as archive:
             for image in firmware.images:
-                (extract_root / image.definition.filename).write_bytes(archive.read(image.definition.filename))
+                (extract_root / image.definition.filename).write_bytes(archive.read(image.archive_name))
 
         arguments = [
             "--chip", "esp32p4",

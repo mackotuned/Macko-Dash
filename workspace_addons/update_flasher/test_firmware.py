@@ -48,6 +48,28 @@ class FirmwareValidationTests(unittest.TestCase):
             [definition.offset for definition in IMAGE_DEFINITIONS],
         )
 
+    def test_single_github_wrapper_folder_is_accepted_and_flashable(self) -> None:
+        wrapped = Path(self.directory.name) / "github-download.zip"
+        with zipfile.ZipFile(self.bundle) as source, zipfile.ZipFile(wrapped, "w", zipfile.ZIP_DEFLATED) as output:
+            output.writestr("MackoDash-main/", b"")
+            for name in source.namelist():
+                output.writestr(f"MackoDash-main/{name}", source.read(name))
+
+        info = validate_firmware(wrapped)
+        self.assertTrue(all(image.archive_name.startswith("MackoDash-main/") for image in info.images))
+        with patch("firmware.esptool.main") as main:
+            flash_firmware("COM10", info, lambda _line: None)
+        self.assertEqual(main.call_count, 1)
+
+    def test_multiple_wrapper_folders_are_rejected(self) -> None:
+        wrapped = Path(self.directory.name) / "ambiguous.zip"
+        with zipfile.ZipFile(self.bundle) as source, zipfile.ZipFile(wrapped, "w", zipfile.ZIP_DEFLATED) as output:
+            for name in source.namelist():
+                output.writestr(f"first/{name}", source.read(name))
+            output.writestr("second/readme.txt", "unexpected")
+        with self.assertRaisesRegex(FirmwareValidationError, "inside one folder"):
+            validate_firmware(wrapped)
+
     def test_corrupted_image_is_rejected(self) -> None:
         def corrupt(entries: dict[str, bytes]) -> None:
             data = bytearray(entries["storage.bin"])

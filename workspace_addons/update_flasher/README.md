@@ -21,7 +21,8 @@ details** when troubleshooting is needed.
 The ZIP contains the bootloader, partition table, OTA metadata, application,
 and SPIFFS storage images plus a checksum manifest. The flasher rejects missing,
 damaged, unexpected, oversized, wrong-offset, wrong-chip, and wrong-project
-bundles before enabling the flash button.
+bundles before enabling the flash button. The required files may be at the ZIP
+root or inside one top-level folder, as produced by GitHub downloads.
 
 The full flash replaces ESP32-P4 SPIFFS storage. It does not erase or write NVS,
 so settings and odometer data remain intact. SD-card themes and ESP32-C6 firmware
