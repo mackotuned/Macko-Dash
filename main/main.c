@@ -10,6 +10,7 @@
 #include "odometer/odometer.h"
 #include "canbus.h"
 #include "dashboard_runtime.h"
+#include "uart_file_transfer.h"
 #include "ota_c6_hosted_bridge.h"
 #include "dash_sim.h"
 #include "dash_config.h"
@@ -348,6 +349,7 @@ void app_main(void) {
     esp_err_t theme_storage_err = theme_storage_init();
     ESP_LOGI("main", "Theme storage initialization -> %s", esp_err_to_name(theme_storage_err));
     data_logger_init();
+    ESP_ERROR_CHECK_WITHOUT_ABORT(uart_file_transfer_start());
 
 #if CONFIG_HONDA_DASH_ENABLE_WIFI_OTA
     esp_err_t bridge_err = ota_c6_hosted_bridge_register();

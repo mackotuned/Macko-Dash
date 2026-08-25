@@ -5,6 +5,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from device_transfer_ui import open_log_download
 from log_data import LogFormatError, LogSession, SIGNALS, find_logs, load_log, nearest_row_index, sampled_row_indices
 from utility_ui import AMBER, GREEN, LABEL, LINE, PANEL, RED, VOID, WHITE, build_brand_header
 
@@ -68,13 +69,16 @@ class LogViewerFrame(ttk.Frame):
         controls.pack(fill="x", pady=(0, 10))
         ttk.Button(controls, text="Open CSV", style="Accent.TButton", command=self._choose_file).grid(row=0, column=0)
         ttk.Button(controls, text="Find on SD Card", command=self._choose_sd).grid(row=0, column=1, padx=(8, 0))
+        ttk.Button(controls, text="Download from Dashboard", command=lambda: open_log_download(self, self._load)).grid(
+            row=0, column=2, padx=(8, 0)
+        )
         self.log_combo = ttk.Combobox(controls, textvariable=self.log_choice, state="readonly", width=24)
-        self.log_combo.grid(row=0, column=2, sticky="ew", padx=(12, 0))
+        self.log_combo.grid(row=0, column=3, sticky="ew", padx=(12, 0))
         self.log_combo.bind("<<ComboboxSelected>>", self._select_discovered_log)
         ttk.Label(controls, textvariable=self.status, style="TileHint.TLabel", wraplength=650).grid(
-            row=1, column=0, columnspan=3, sticky="w", pady=(9, 0)
+            row=1, column=0, columnspan=4, sticky="w", pady=(9, 0)
         )
-        controls.columnconfigure(2, weight=1)
+        controls.columnconfigure(3, weight=1)
 
         summary = ttk.Frame(frame)
         summary.pack(fill="x", pady=(0, 10))

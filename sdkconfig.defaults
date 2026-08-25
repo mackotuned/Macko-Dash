@@ -25,8 +25,8 @@ CONFIG_ESP_HOSTED_GPIO_SLAVE_RESET_SLAVE=32
 # CONFIG_ESP_PHY_IRAM_OPT is not set
 # CONFIG_PM_SLEEP_FUNC_IN_IRAM is not set
 # CONFIG_PM_SLP_IRAM_OPT is not set
-# CONFIG_LOG_DYNAMIC_LEVEL_CONTROL is not set
-CONFIG_LOG_TAG_LEVEL_IMPL_NONE=y
+CONFIG_LOG_DYNAMIC_LEVEL_CONTROL=y
+CONFIG_LOG_TAG_LEVEL_IMPL_LINKED_LIST=y
 # This file was generated using idf.py save-defconfig. It can be edited manually.
 # Espressif IoT Development Framework (ESP-IDF) 5.4.0 Project Minimal Configuration
 #

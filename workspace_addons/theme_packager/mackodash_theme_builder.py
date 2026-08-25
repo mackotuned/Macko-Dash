@@ -14,6 +14,7 @@ if str(ADDONS_ROOT) not in sys.path:
 
 from convert_squareline_export import ConversionError, convert
 from theme_preview import ThemePreviewWindow
+from device_transfer_ui import open_theme_upload
 from utility_ui import (
     LINE,
     PANEL,
@@ -85,10 +86,12 @@ class ThemeBuilderFrame(ttk.Frame):
         self.copy_button.grid(row=0, column=1, sticky="w", padx=(10, 0))
         self.preview_button = ttk.Button(build_body, text="Preview Theme", command=self._open_preview, state="disabled")
         self.preview_button.grid(row=0, column=2, sticky="w", padx=(10, 0))
+        self.send_button = ttk.Button(build_body, text="Send over USB", command=self._send_over_usb)
+        self.send_button.grid(row=0, column=3, sticky="w", padx=(10, 0))
         ttk.Label(build_body, textvariable=self.status, style="TileHint.TLabel", wraplength=430).grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(12, 0)
+            row=1, column=0, columnspan=5, sticky="w", pady=(12, 0)
         )
-        build_body.columnconfigure(3, weight=1)
+        build_body.columnconfigure(4, weight=1)
 
         self.details_button = ttk.Button(
             frame, text="Show technical details", style="Quiet.TButton", command=self._toggle_details
@@ -229,3 +232,7 @@ class ThemeBuilderFrame(ttk.Frame):
             messagebox.showerror("Copy failed", str(error))
             return
         messagebox.showinfo("Theme copied", f"Copied to:\n{destination}")
+
+    def _send_over_usb(self) -> None:
+        package = self.last_output if self.last_output and self.last_output.exists() else None
+        open_theme_upload(self, package)

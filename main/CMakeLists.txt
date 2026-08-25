@@ -81,6 +81,8 @@ idf_component_register(
         "dash_sim.c"
         "dash_config.c"
         "data_logger.c"
+        "device_log_viewer.c"
+        "uart_file_transfer.c"
         "session_peaks.c"
         "theme_storage.c"
         "runtime_theme.c"
@@ -104,6 +106,7 @@ idf_component_register(
     REQUIRES
         esp32_p4_wifi6_touch_lcd_4_3
         esp_driver_twai
+        esp_driver_uart
         esp_app_format
         esp_event
         esp_netif
@@ -126,6 +129,8 @@ idf_component_register(
         "dash_sim.c"
         "dash_config.c"
         "data_logger.c"
+        "device_log_viewer.c"
+        "uart_file_transfer.c"
         "session_peaks.c"
         "theme_storage.c"
         "runtime_theme.c"
@@ -148,6 +153,7 @@ idf_component_register(
     REQUIRES
         esp32_p4_wifi6_touch_lcd_4_3
         esp_driver_twai
+        esp_driver_uart
         esp_app_format
         esp_event
         esp_netif

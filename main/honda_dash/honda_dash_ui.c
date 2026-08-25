@@ -24,6 +24,7 @@
 #include "dash_sim.h"
 #include "dash_config.h"
 #include "data_logger.h"
+#include "device_log_viewer.h"
 #include "session_peaks.h"
 #include "theme_storage.h"
 #include "runtime_theme.h"
@@ -349,6 +350,7 @@ static lv_obj_t *s_page_theme;
 static lv_obj_t *s_page_brightness;
 static lv_obj_t *s_page_info;
 static lv_obj_t *s_page_peaks;
+static lv_obj_t *s_page_logs;
 static lv_obj_t *s_page_update;
 static lv_obj_t *s_page_config;
 static lv_obj_t *s_page_units;
@@ -374,6 +376,18 @@ enum {
     PEAK_VALUE_COUNT,
 };
 static lv_obj_t *s_peak_values[PEAK_VALUE_COUNT];
+static device_log_file_t s_log_files[DEVICE_LOG_MAX_FILES];
+static size_t s_log_file_count;
+static device_log_chart_t s_log_chart_data;
+static lv_obj_t *s_log_file_dropdown;
+static lv_obj_t *s_log_preset_dropdown;
+static lv_obj_t *s_log_status_label;
+static lv_obj_t *s_log_readout_label;
+static lv_obj_t *s_log_chart_view;
+static lv_obj_t *s_log_chart_content;
+static lv_obj_t *s_log_charts[DEVICE_LOG_MAX_SERIES];
+static lv_chart_series_t *s_log_chart_series[DEVICE_LOG_MAX_SERIES];
+static lv_chart_cursor_t *s_log_chart_cursors[DEVICE_LOG_MAX_SERIES];
 
 /* ---- config page widget handles + pending (not-yet-saved) state ---- */
 typedef enum {
@@ -1064,6 +1078,7 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_add_flag(s_page_brightness, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_info, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_peaks, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_page_logs, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_update, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_config, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_units, LV_OBJ_FLAG_HIDDEN);
@@ -1122,6 +1137,7 @@ static void settings_close_cb(lv_event_t *e)
 static void settings_open_theme_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_theme); }
 static void settings_diagnostics_refresh(void);
 static void settings_peaks_refresh(void);
+static void settings_logs_refresh(void);
 static void settings_open_info_cb(lv_event_t *e)
 {
     (void)e;
@@ -1134,6 +1150,12 @@ static void settings_open_peaks_cb(lv_event_t *e)
     settings_show_page(s_page_peaks);
     lv_obj_scroll_to_y(s_peaks_scroll, 0, LV_ANIM_OFF);
     settings_peaks_refresh();
+}
+static void settings_open_logs_cb(lv_event_t *e)
+{
+    (void)e;
+    settings_show_page(s_page_logs);
+    settings_logs_refresh();
 }
 static void settings_open_ecu_cb(lv_event_t *e)
 {
@@ -2543,6 +2565,152 @@ static void settings_peaks_reset_cb(lv_event_t *event)
     settings_peaks_refresh();
 }
 
+static void settings_log_format_value(char *buffer, size_t size, size_t series, int32_t value)
+{
+    const char *unit = s_log_chart_data.series_units[series];
+    if (value == INT16_MIN) {
+        snprintf(buffer, size, "--");
+    } else if (strcmp(unit, "rpm") == 0) {
+        snprintf(buffer, size, "%ld rpm", (long)value);
+    } else if (strcmp(unit, ":1") == 0 || strcmp(unit, "V") == 0) {
+        snprintf(buffer, size, "%.2f %s", (double)value / 100.0, unit);
+    } else {
+        snprintf(buffer, size, "%.1f %s", (double)value / 10.0, unit);
+    }
+}
+
+static void settings_log_show_point(size_t point)
+{
+    if (point >= s_log_chart_data.point_count) return;
+    char readout[256];
+    unsigned seconds = s_log_chart_data.point_count > 1 ?
+        (unsigned)(((uint64_t)s_log_chart_data.duration_ms * point) /
+                   (s_log_chart_data.point_count - 1) / 1000) : 0;
+    int written = snprintf(readout, sizeof(readout), "%u:%02u", seconds / 60, seconds % 60);
+    for (size_t series = 0; series < s_log_chart_data.series_count && written > 0 &&
+         (size_t)written < sizeof(readout); ++series) {
+        char value[32];
+        settings_log_format_value(value, sizeof(value), series, s_log_chart_data.values[series][point]);
+        written += snprintf(readout + written, sizeof(readout) - (size_t)written,
+                            "   %s %s", s_log_chart_data.series_names[series], value);
+        lv_chart_set_cursor_point(s_log_charts[series], s_log_chart_cursors[series],
+                                  s_log_chart_series[series], (uint16_t)point);
+    }
+    lv_label_set_text(s_log_readout_label, readout);
+}
+
+static void settings_log_chart_press_cb(lv_event_t *event)
+{
+    if (s_log_chart_data.point_count == 0) return;
+    lv_obj_t *chart = lv_event_get_target(event);
+    lv_indev_t *input = lv_indev_get_act();
+    if (!input) return;
+    lv_point_t touch;
+    lv_area_t area;
+    lv_indev_get_point(input, &touch);
+    lv_obj_get_content_coords(chart, &area);
+    int32_t width = lv_area_get_width(&area);
+    int32_t relative_x = touch.x - area.x1;
+    if (relative_x < 0) relative_x = 0;
+    if (relative_x >= width) relative_x = width - 1;
+    size_t point = width > 1 ?
+        (size_t)(((int64_t)relative_x * (s_log_chart_data.point_count - 1)) / (width - 1)) : 0;
+    settings_log_show_point(point);
+}
+
+static void settings_log_render_chart(void)
+{
+    lv_obj_clean(s_log_chart_content);
+    memset(s_log_charts, 0, sizeof(s_log_charts));
+    int32_t chart_width = (int32_t)s_log_chart_data.point_count * 6;
+    if (chart_width < 790) chart_width = 790;
+    lv_obj_set_width(s_log_chart_content, chart_width);
+    static const uint32_t colors[DEVICE_LOG_MAX_SERIES] = {
+        0xe4002b, 0x39ff8c, 0x00c8ff, 0xffb020,
+    };
+    for (size_t series = 0; series < s_log_chart_data.series_count; ++series) {
+        lv_obj_t *chart = lv_chart_create(s_log_chart_content);
+        s_log_charts[series] = chart;
+        lv_obj_set_size(chart, LV_PCT(100), 64);
+        lv_obj_set_style_bg_color(chart, lv_color_hex(0x101216), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(chart, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(chart, C_LINE, LV_PART_MAIN);
+        lv_obj_set_style_radius(chart, 0, LV_PART_MAIN);
+        lv_obj_set_style_line_color(chart, C_LINE, LV_PART_MAIN);
+        lv_obj_set_style_line_opa(chart, LV_OPA_50, LV_PART_MAIN);
+        lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
+        lv_chart_set_div_line_count(chart, 3, 8);
+        lv_chart_set_point_count(chart, (uint16_t)s_log_chart_data.point_count);
+        lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y,
+                           s_log_chart_data.minimums[series], s_log_chart_data.maximums[series]);
+        lv_chart_series_t *line = lv_chart_add_series(chart, lv_color_hex(colors[series]),
+                                                      LV_CHART_AXIS_PRIMARY_Y);
+        s_log_chart_series[series] = line;
+        lv_chart_set_ext_y_array(chart, line, s_log_chart_data.values[series]);
+        s_log_chart_cursors[series] = lv_chart_add_cursor(chart, C_WHITE, LV_DIR_VER);
+        lv_obj_add_event_cb(chart, settings_log_chart_press_cb, LV_EVENT_PRESSING, NULL);
+        lv_obj_add_event_cb(chart, settings_log_chart_press_cb, LV_EVENT_PRESSED, NULL);
+        lv_obj_t *label = make_label(chart, s_log_chart_data.series_names[series], DASH_FONT_LABEL, C_WHITE);
+        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 8, 4);
+    }
+    lv_obj_scroll_to_x(s_log_chart_view, 0, LV_ANIM_OFF);
+    settings_log_show_point(0);
+}
+
+static void settings_log_load_selected(void)
+{
+    if (s_log_file_count == 0) return;
+    uint16_t file_index = lv_dropdown_get_selected(s_log_file_dropdown);
+    uint16_t preset_index = lv_dropdown_get_selected(s_log_preset_dropdown);
+    if (file_index >= s_log_file_count || preset_index >= DEVICE_LOG_PRESET_COUNT) return;
+    lv_label_set_text(s_log_status_label, "Loading log...");
+    esp_err_t error = device_log_load_chart(s_log_files[file_index].filename,
+                                            (device_log_preset_t)preset_index,
+                                            &s_log_chart_data);
+    if (error != ESP_OK) {
+        char status[64];
+        snprintf(status, sizeof(status), "Could not load log: %s", esp_err_to_name(error));
+        lv_label_set_text(s_log_status_label, status);
+        return;
+    }
+    char status[96];
+    snprintf(status, sizeof(status), "%s   %u samples   %u:%02u",
+             s_log_chart_data.filename, (unsigned)s_log_chart_data.source_rows,
+             (unsigned)(s_log_chart_data.duration_ms / 60000),
+             (unsigned)((s_log_chart_data.duration_ms / 1000) % 60));
+    lv_label_set_text(s_log_status_label, status);
+    settings_log_render_chart();
+}
+
+static void settings_log_selection_cb(lv_event_t *event)
+{
+    (void)event;
+    settings_log_load_selected();
+}
+
+static void settings_logs_refresh(void)
+{
+    s_log_file_count = device_log_list(s_log_files, DEVICE_LOG_MAX_FILES);
+    if (s_log_file_count == 0) {
+        lv_dropdown_set_options(s_log_file_dropdown, "No logs found");
+        lv_label_set_text(s_log_status_label, "No driving logs found on the SD card.");
+        lv_obj_clean(s_log_chart_content);
+        return;
+    }
+    static char options[DEVICE_LOG_MAX_FILES * 12];
+    size_t used = 0;
+    for (size_t index = 0; index < s_log_file_count; ++index) {
+        int written = snprintf(options + used, sizeof(options) - used, "%s%s",
+                               index ? "\n" : "", s_log_files[index].filename);
+        if (written < 0 || (size_t)written >= sizeof(options) - used) break;
+        used += (size_t)written;
+    }
+    lv_dropdown_set_options(s_log_file_dropdown, options);
+    lv_dropdown_set_selected(s_log_file_dropdown, 0);
+    settings_log_load_selected();
+}
+
 static void build_config_section_header(lv_obj_t *parent, const char *title)
 {
     lv_obj_t *label = make_label(parent, title, DASH_FONT_LABEL, C_LABEL_DIM);
@@ -3164,6 +3332,53 @@ static void build_settings_overlay(lv_obj_t *cluster)
     add_press_feedback(peaks_reset);
     lv_obj_center(make_label(peaks_reset, "Reset Session", DASH_FONT_LABEL14, C_WHITE));
 
+    s_page_logs = make_plain_container(panel);
+    lv_obj_set_size(s_page_logs, LV_PCT(100), LV_PCT(100));
+    lv_obj_add_flag(s_page_logs, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_flex_flow(s_page_logs, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_page_logs, 8, LV_PART_MAIN);
+    make_label(s_page_logs, "DRIVING LOGS", DASH_FONT_LABEL14, C_LABEL);
+
+    lv_obj_t *log_controls = make_plain_container(s_page_logs);
+    lv_obj_set_size(log_controls, LV_PCT(100), 48);
+    lv_obj_set_flex_flow(log_controls, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(log_controls, 10, LV_PART_MAIN);
+    s_log_file_dropdown = lv_dropdown_create(log_controls);
+    lv_obj_set_flex_grow(s_log_file_dropdown, 1);
+    lv_obj_set_height(s_log_file_dropdown, 44);
+    lv_dropdown_set_options(s_log_file_dropdown, "No logs found");
+    lv_obj_add_event_cb(s_log_file_dropdown, settings_log_selection_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    s_log_preset_dropdown = lv_dropdown_create(log_controls);
+    lv_obj_set_flex_grow(s_log_preset_dropdown, 1);
+    lv_obj_set_height(s_log_preset_dropdown, 44);
+    lv_dropdown_set_options(s_log_preset_dropdown,
+                            "AFR / Timing / Boost\nBoost / Timing\nTemps / RPM / Boost\nEngine Health");
+    lv_obj_add_event_cb(s_log_preset_dropdown, settings_log_selection_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    s_log_status_label = make_label(s_page_logs, "Select a recorded log", DASH_FONT_LABEL, C_LABEL);
+    lv_obj_set_width(s_log_status_label, LV_PCT(100));
+    s_log_readout_label = make_label(s_page_logs, "Touch a graph for exact values", DASH_FONT_LABEL, C_WHITE);
+    lv_obj_set_width(s_log_readout_label, LV_PCT(100));
+    lv_label_set_long_mode(s_log_readout_label, LV_LABEL_LONG_DOT);
+
+    s_log_chart_view = lv_obj_create(s_page_logs);
+    lv_obj_set_size(s_log_chart_view, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_flex_grow(s_log_chart_view, 1);
+    lv_obj_set_style_bg_color(s_log_chart_view, C_VOID, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_log_chart_view, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_log_chart_view, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(s_log_chart_view, C_LINE, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(s_log_chart_view, 0, LV_PART_MAIN);
+    lv_obj_set_scroll_dir(s_log_chart_view, LV_DIR_HOR);
+    lv_obj_set_scrollbar_mode(s_log_chart_view, LV_SCROLLBAR_MODE_ACTIVE);
+    s_log_chart_content = make_plain_container(s_log_chart_view);
+    lv_obj_set_size(s_log_chart_content, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_flex_flow(s_log_chart_content, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_log_chart_content, 4, LV_PART_MAIN);
+    lv_obj_clear_flag(s_log_chart_content, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *logs_back = build_back_btn(s_page_logs, settings_config_back_cb);
+    lv_obj_set_height(logs_back, 48);
+
     lv_obj_t *units_content = build_config_subpage(panel, &s_page_units, "UNITS");
     lv_obj_t *display_content = build_config_subpage(panel, &s_page_display, "DISPLAY");
     lv_obj_t *odometer_content = build_config_subpage(panel, &s_page_odometer, "ODOMETER & TRIPS");
@@ -3259,6 +3474,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     build_config_section_header(cfg_scroll, "GENERAL");
     build_config_menu_row(cfg_scroll, "Diagnostics", settings_open_info_cb);
     build_config_menu_row(cfg_scroll, "Session Peaks", settings_open_peaks_cb);
+    build_config_menu_row(cfg_scroll, "Driving Logs", settings_open_logs_cb);
 
     /* --- independent unit controls --- */
     static const char *const unit_titles[UNIT_SETTING_COUNT] = {
