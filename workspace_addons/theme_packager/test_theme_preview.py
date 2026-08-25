@@ -7,7 +7,8 @@ import zipfile
 from pathlib import Path
 
 from theme_preview import (ThemePackage, analyze_theme, display_text, image_runtime_rect,
-                           load_theme_package, raw_image_png, resolve_binding)
+                           load_theme_package, raw_image_png, resolve_binding, rotated_polygon,
+                           runtime_font_size)
 
 
 class ThemePreviewTests(unittest.TestCase):
@@ -73,6 +74,28 @@ class ThemePreviewTests(unittest.TestCase):
         self.assertAlmostEqual(y, 203.93, places=1)
         self.assertAlmostEqual(width, 203.24, places=1)
         self.assertAlmostEqual(height, 216.13, places=1)
+
+    def test_font_size_matches_firmware_clamp_and_font_ladder(self) -> None:
+        self.assertEqual(runtime_font_size(280, 1024, 600, 768), 33)
+        self.assertEqual(runtime_font_size(30, 1024, 600, 768), 21)
+        self.assertEqual(runtime_font_size(20, 1024, 600, 768), 10)
+
+    def test_rotated_bar_keeps_its_center(self) -> None:
+        points = rotated_polygon(100, 200, 140, 100, -90)
+        xs = points[0::2]
+        ys = points[1::2]
+        self.assertAlmostEqual((min(xs) + max(xs)) / 2, 170)
+        self.assertAlmostEqual((min(ys) + max(ys)) / 2, 250)
+        self.assertAlmostEqual(max(xs) - min(xs), 100)
+        self.assertAlmostEqual(max(ys) - min(ys), 140)
+
+        indicator = rotated_polygon(100, 200, 70, 100, -90, (170, 250))
+        indicator_xs = indicator[0::2]
+        indicator_ys = indicator[1::2]
+        self.assertAlmostEqual(min(indicator_xs), 120)
+        self.assertAlmostEqual(max(indicator_xs), 220)
+        self.assertAlmostEqual(min(indicator_ys), 250)
+        self.assertAlmostEqual(max(indicator_ys), 320)
 
 
 if __name__ == "__main__":

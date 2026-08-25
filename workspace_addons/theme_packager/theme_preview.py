@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import struct
 import tkinter as tk
@@ -242,6 +243,38 @@ def display_text(item: dict, scenario: str) -> str:
     return SIMULATED_VALUES.get(scenario, SIMULATED_VALUES["typical"]).get(binding, str(item.get("text", "--")))
 
 
+def runtime_font_size(font_size: object, design_width: int, design_height: int,
+                      preview_width: int = TARGET_WIDTH) -> int:
+    requested = float(font_size) if isinstance(font_size, (int, float)) else 14
+    requested = max(8, min(96, requested))
+    runtime_scale = min(TARGET_WIDTH / design_width, TARGET_HEIGHT / design_height)
+    scaled_size = max(1, round(requested * runtime_scale))
+    if scaled_size >= 36:
+        actual_size = 44
+    elif scaled_size >= 21:
+        actual_size = 28
+    elif scaled_size >= 14:
+        actual_size = 14
+    else:
+        actual_size = 12
+    return max(6, round(actual_size * preview_width / TARGET_WIDTH))
+
+
+def rotated_polygon(x: float, y: float, width: float, height: float, angle: float,
+                    center: tuple[float, float] | None = None) -> list[float]:
+    center_x, center_y = center or (x + width / 2, y + height / 2)
+    radians = math.radians(angle)
+    cosine = math.cos(radians)
+    sine = math.sin(radians)
+    points = []
+    for point_x, point_y in ((x, y), (x + width, y), (x + width, y + height), (x, y + height)):
+        offset_x = point_x - center_x
+        offset_y = point_y - center_y
+        points.extend((center_x + offset_x * cosine - offset_y * sine,
+                       center_y + offset_x * sine + offset_y * cosine))
+    return points
+
+
 def analyze_theme(theme: ThemePackage) -> list[PreviewIssue]:
     issues = []
     objects = theme.layout.get("objects")
@@ -267,12 +300,13 @@ def analyze_theme(theme: ThemePackage) -> list[PreviewIssue]:
             issues.append(PreviewIssue("error", f"{name}: extends outside the {theme.design_width} x {theme.design_height} canvas", index))
         if object_type == "label":
             text = display_text(item, "longest")
-            font_size = item.get("font_size", 14)
-            font_size = font_size if isinstance(font_size, (int, float)) else 14
-            estimated_width = len(text) * font_size * 0.62
-            estimated_height = font_size * 1.25
+            runtime_scale = min(TARGET_WIDTH / theme.design_width, TARGET_HEIGHT / theme.design_height)
+            actual_font_size = runtime_font_size(item.get("font_size", 14), theme.design_width,
+                                                 theme.design_height)
+            estimated_width = len(text) * actual_font_size * 0.62
+            estimated_height = actual_font_size * 1.25
             if isinstance(item.get("width"), (int, float)) and isinstance(item.get("height"), (int, float)) and (
-                estimated_width > width or estimated_height > height
+                estimated_width > width * runtime_scale or estimated_height > height * runtime_scale
             ):
                 issues.append(PreviewIssue("warning", f"{name}: longest value '{text}' may be clipped", index))
     if "settings" not in bindings:
@@ -381,9 +415,13 @@ class ThemePreviewWindow(tk.Toplevel):
         background = str(self.theme.layout.get("background", "#08090a"))
         self.canvas.configure(background=background)
         problematic = {issue.object_index for issue in self.issues if issue.object_index is not None}
+        rendered_bindings = set()
         for index, item in enumerate(self.theme.layout.get("objects", [])):
             if not isinstance(item, dict):
                 continue
+            binding = resolve_binding(str(item.get("name", "")))
+            if binding:
+                rendered_bindings.add(binding)
             object_type = item.get("type", "label")
             if object_type == "image":
                 x, y, width, height = image_runtime_rect(
@@ -398,20 +436,22 @@ class ThemePreviewWindow(tk.Toplevel):
             elif object_type == "image":
                 self._draw_image(item, x, y, width, height)
             elif object_type == "label":
-                runtime_scale = min(TARGET_WIDTH / self.theme.design_width, TARGET_HEIGHT / self.theme.design_height)
-                preview_scale = self.PREVIEW_WIDTH / TARGET_WIDTH
-                font_size = max(6, round(float(item.get("font_size", 14)) * runtime_scale * preview_scale))
+                font_size = runtime_font_size(item.get("font_size", 14), self.theme.design_width,
+                                              self.theme.design_height, self.PREVIEW_WIDTH)
                 anchor = {"left": "w", "right": "e"}.get(item.get("align"), "center")
                 text_x = x + (0 if anchor == "w" else width if anchor == "e" else width / 2)
                 self.canvas.create_text(text_x, y + height / 2, text=display_text(item, self.scenario.get()), fill=color,
-                                        width=width, anchor=anchor, font=("Segoe UI", font_size, "bold"))
+                                        anchor=anchor, font=("Segoe UI", font_size, "bold"))
             elif object_type == "bar":
-                self.canvas.create_rectangle(x, y, x + width, y + height, fill=str(item.get("track_color", "#25282d")), outline="")
-                binding = resolve_binding(str(item.get("name", "")))
+                angle = float(item.get("transform_angle", 0))
+                transform_center = (x + width / 2, y + height / 2)
+                self.canvas.create_polygon(rotated_polygon(x, y, width, height, angle),
+                                           fill=str(item.get("track_color", "#25282d")), outline="")
                 value = float(SIMULATED_VALUES[self.scenario.get()].get(binding, item.get("min", 0)))
                 minimum, maximum = float(item.get("min", 0)), float(item.get("max", 100))
                 fraction = max(0.0, min(1.0, (value - minimum) / max(maximum - minimum, 1)))
-                self.canvas.create_rectangle(x, y, x + width * fraction, y + height, fill=color, outline="")
+                self.canvas.create_polygon(rotated_polygon(x, y, width * fraction, height, angle, transform_center),
+                                           fill=color, outline="")
             elif object_type == "arc":
                 self.canvas.create_arc(x, y, x + width, y + height, start=90 - float(item.get("rotation", 135)),
                                        extent=-float(item.get("sweep", 270)), style="arc", outline=str(item.get("track_color", "#25282d")), width=max(2, round(min(width, height) * 0.08)))
@@ -423,7 +463,25 @@ class ThemePreviewWindow(tk.Toplevel):
                 if object_type == "button":
                     self.canvas.create_text(x + width / 2, y + height / 2, text=item.get("text", "Settings"), fill="#ffffff", font=("Segoe UI", max(7, round(height * 0.22)), "bold"))
             if index in problematic:
-                self.canvas.create_rectangle(x, y, x + width, y + height, outline="#ffb020", width=3)
+                if object_type == "bar":
+                    self.canvas.create_polygon(rotated_polygon(x, y, width, height,
+                                                               float(item.get("transform_angle", 0))),
+                                               fill="", outline="#ffb020", width=3)
+                else:
+                    self.canvas.create_rectangle(x, y, x + width, y + height, outline="#ffb020", width=3)
+        if "record" not in rendered_bindings:
+            self._draw_fallback_button(888, "REC", "#4a0413", "#e4002b")
+        if "settings" not in rendered_bindings:
+            self._draw_fallback_button(952, "\u2699", "#151619", "#151619")
+
+    def _draw_fallback_button(self, runtime_x: int, text: str, fill: str, outline: str) -> None:
+        scale = self.PREVIEW_WIDTH / TARGET_WIDTH
+        x = runtime_x * scale
+        y = 528 * scale
+        size = 56 * scale
+        self.canvas.create_rectangle(x, y, x + size, y + size, fill=fill, outline=outline, width=2)
+        self.canvas.create_text(x + size / 2, y + size / 2, text=text, fill="#ffffff",
+                                font=("Segoe UI", max(7, round(12 * scale)), "bold"))
 
     def _draw_image(self, item: dict, x: float, y: float, width: float, height: float) -> None:
         asset_name = item.get("asset")
