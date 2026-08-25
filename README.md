@@ -89,7 +89,7 @@ Use the official Windows updater from [MackoDash Flash Tools](https://github.com
 1. Connect the dashboard to the Windows PC with its update USB cable.
 2. Keep the dashboard powered and the USB cable connected throughout the update.
 3. Open the **Firmware Update** tab in MackoDash Utility.
-4. Select the official `MackoDash-Firmware.zip` downloaded from GitHub and confirm that it shows as **Validated**.
+4. Select **Download Latest** to fetch and validate the current official firmware, or use **Choose ZIP** for a bundle already on the PC.
 5. Confirm the dashboard COM port.
 6. Select **Flash ESP32-P4 Firmware** and wait for verification to finish.
 

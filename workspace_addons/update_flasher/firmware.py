@@ -11,6 +11,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from urllib.request import Request, urlopen
 
 import esptool
 from esptool.bin_image import LoadFirmwareImage
@@ -22,6 +23,10 @@ EXPECTED_PROJECT = "mackodash"
 BUNDLE_SCHEMA = 1
 BUNDLE_MANIFEST = "manifest.json"
 MAX_BUNDLE_SIZE = 16 * 1024 * 1024
+LATEST_FIRMWARE_URL = (
+    "https://raw.githubusercontent.com/mackotuned/"
+    "MackoDash-Flash-Tools/MackoDash/MackoDash-Firmware.zip"
+)
 
 
 @dataclass(frozen=True)
@@ -170,6 +175,38 @@ def create_firmware_bundle(build_dir: str | Path, output_path: str | Path) -> Pa
             write_entry(definition.filename, payloads[definition.filename])
     validate_firmware(output)
     return output
+
+
+def download_latest_firmware(destination: str | Path) -> Path:
+    output = Path(destination).expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    request = Request(LATEST_FIRMWARE_URL, headers={"User-Agent": "MackoDashUtility"})
+    temporary_path: Path | None = None
+    try:
+        with urlopen(request, timeout=30) as response:
+            content_length = response.headers.get("Content-Length")
+            if content_length and int(content_length) > MAX_BUNDLE_SIZE:
+                raise FirmwareValidationError("The downloaded firmware ZIP is unexpectedly large.")
+            with tempfile.NamedTemporaryFile(
+                mode="wb", suffix=".zip", prefix="mackodash-download-",
+                dir=output.parent, delete=False,
+            ) as temporary:
+                temporary_path = Path(temporary.name)
+                total_size = 0
+                while chunk := response.read(64 * 1024):
+                    total_size += len(chunk)
+                    if total_size > MAX_BUNDLE_SIZE:
+                        raise FirmwareValidationError("The downloaded firmware ZIP is unexpectedly large.")
+                    temporary.write(chunk)
+        if not temporary_path or temporary_path.stat().st_size == 0:
+            raise FirmwareValidationError("GitHub returned an empty firmware download.")
+        validate_firmware(temporary_path)
+        temporary_path.replace(output)
+        temporary_path = None
+        return output
+    finally:
+        if temporary_path:
+            temporary_path.unlink(missing_ok=True)
 
 
 def _validate_manifest(manifest: object) -> dict[str, dict[str, object]]:

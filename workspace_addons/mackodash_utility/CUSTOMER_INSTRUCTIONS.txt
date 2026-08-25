@@ -25,8 +25,8 @@ UPDATE FIRMWARE
 1. Connect MackoDash to the Windows PC with its update USB cable.
 2. Keep the dashboard powered for the entire update.
 3. Open MackoDash Utility and choose Update Firmware.
-4. Select the official MackoDash-Firmware.zip downloaded from GitHub and
-  confirm that it shows as Validated.
+4. Select Download Latest to fetch and validate the current official firmware,
+  or use Choose ZIP for a bundle already on the PC.
 5. Confirm the dashboard COM port.
 6. Select Install Firmware and wait for verification to finish.
 

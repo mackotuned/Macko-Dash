@@ -13,7 +13,13 @@ ADDONS_ROOT = Path(__file__).resolve().parent.parent
 if str(ADDONS_ROOT) not in sys.path:
     sys.path.insert(0, str(ADDONS_ROOT))
 
-from firmware import FirmwareInfo, FirmwareValidationError, flash_firmware, validate_firmware
+from firmware import (
+    FirmwareInfo,
+    FirmwareValidationError,
+    download_latest_firmware,
+    flash_firmware,
+    validate_firmware,
+)
 from utility_ui import (
     LINE,
     PANEL,
@@ -63,6 +69,8 @@ class UpdateFlasherFrame(ttk.Frame):
         self.firmware_entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
         self.browse_button = ttk.Button(firmware_body, text="Choose ZIP", command=self._choose_firmware)
         self.browse_button.grid(row=0, column=1)
+        self.download_button = ttk.Button(firmware_body, text="Download Latest", command=self._start_download)
+        self.download_button.grid(row=0, column=2, padx=(10, 0))
 
         self.metadata = ttk.Label(
             firmware_body,
@@ -71,7 +79,7 @@ class UpdateFlasherFrame(ttk.Frame):
             wraplength=700,
             justify="left",
         )
-        self.metadata.grid(row=1, column=0, columnspan=2, sticky="w", pady=(10, 0))
+        self.metadata.grid(row=1, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
         port_tile, port_body = build_step_tile(
             frame, 2, "Connect the dashboard", "Power the dash, connect its USB update cable, then select the COM port."
@@ -156,6 +164,29 @@ class UpdateFlasherFrame(ttk.Frame):
         candidate = Path(sys.executable).with_name("MackoDash-Firmware.zip")
         if candidate.is_file():
             self._load_firmware(candidate, show_error=False)
+
+    def _start_download(self) -> None:
+        destination_directory = Path.home() / "Downloads"
+        if not destination_directory.is_dir():
+            destination_directory = Path.home()
+        destination = destination_directory / "MackoDash-Firmware.zip"
+        self._busy = True
+        self.browse_button.configure(state="disabled")
+        self.download_button.configure(state="disabled")
+        self.refresh_button.configure(state="disabled")
+        self.port_combo.configure(state="disabled")
+        self._update_flash_state()
+        self.status.set("Downloading the latest official firmware from GitHub...")
+        self._append_log(f"Downloading {destination.name} from the official MackoDash repository...")
+        threading.Thread(target=self._download_worker, args=(destination,), daemon=True).start()
+
+    def _download_worker(self, destination: Path) -> None:
+        try:
+            downloaded = download_latest_firmware(destination)
+        except BaseException as error:
+            self._events.put(("download_failed", str(error) or type(error).__name__))
+            return
+        self._events.put(("download_done", downloaded))
 
     def _load_firmware(self, selected: Path, show_error: bool) -> None:
         try:
@@ -264,6 +295,10 @@ class UpdateFlasherFrame(ttk.Frame):
                     self._finish_flash(False, str(payload))
                 elif event == "done":
                     self._finish_flash(True, "")
+                elif event == "download_failed":
+                    self._finish_download(None, str(payload))
+                elif event == "download_done":
+                    self._finish_download(Path(payload), "")
         except queue.Empty:
             pass
         self.after(75, self._process_events)
@@ -271,6 +306,7 @@ class UpdateFlasherFrame(ttk.Frame):
     def _finish_flash(self, success: bool, detail: str) -> None:
         self._busy = False
         self.browse_button.configure(state="normal")
+        self.download_button.configure(state="normal")
         self.refresh_button.configure(state="normal")
         self.port_combo.configure(state="readonly")
         self._update_flash_state()
@@ -282,6 +318,21 @@ class UpdateFlasherFrame(ttk.Frame):
             self.status.set("Update failed. Leave USB and power connected, review the log, and retry.")
             self._append_log(f"ERROR: {detail}")
             messagebox.showerror("Update failed", detail)
+
+    def _finish_download(self, downloaded: Path | None, detail: str) -> None:
+        self._busy = False
+        self.browse_button.configure(state="normal")
+        self.download_button.configure(state="normal")
+        self.refresh_button.configure(state="normal")
+        self.port_combo.configure(state="readonly")
+        if downloaded:
+            self._append_log(f"Downloaded to {downloaded}")
+            self._load_firmware(downloaded, show_error=True)
+        else:
+            self.status.set("Download failed. Check the internet connection and try again.")
+            self._append_log(f"ERROR: Download failed: {detail}")
+            self._update_flash_state()
+            messagebox.showerror("Download failed", detail)
 
     def _append_log(self, line: str) -> None:
         self.log.configure(state="normal")

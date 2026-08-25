@@ -8,8 +8,9 @@ ESP-IDF.
 
 1. Connect MackoDash to the Windows PC using its update USB port.
 2. Open MackoDash Utility and choose **Update Firmware**.
-3. Select the official `MackoDash-Firmware.zip` downloaded from GitHub. An
-   adjacent bundle is validated automatically when included with the EXE.
+3. Select **Download Latest** to fetch and validate the current official
+  firmware from GitHub, or use **Choose ZIP** for a bundle already on the PC.
+  An adjacent bundle is validated automatically when included with the EXE.
 4. Confirm the automatically selected dashboard COM port.
 5. Select **Install Firmware** and keep USB and power connected.
 6. Wait for hash verification and the success message.

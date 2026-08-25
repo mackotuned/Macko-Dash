@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 import zipfile
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ from firmware import (
     IMAGE_DEFINITIONS,
     FirmwareValidationError,
     create_firmware_bundle,
+    download_latest_firmware,
     flash_firmware,
     validate_firmware,
 )
@@ -47,6 +49,42 @@ class FirmwareValidationTests(unittest.TestCase):
             [image.definition.offset for image in info.images],
             [definition.offset for definition in IMAGE_DEFINITIONS],
         )
+
+    def test_latest_download_is_validated_before_replacing_destination(self) -> None:
+        destination = Path(self.directory.name) / "downloaded.zip"
+
+        class Response(BytesIO):
+            headers = {"Content-Length": str(self.bundle.stat().st_size)}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.close()
+
+        with patch("firmware.urlopen", return_value=Response(self.bundle.read_bytes())):
+            downloaded = download_latest_firmware(destination)
+        self.assertEqual(downloaded, destination)
+        self.assertEqual(validate_firmware(downloaded).version, validate_firmware(self.bundle).version)
+
+    def test_invalid_download_does_not_replace_existing_bundle(self) -> None:
+        destination = Path(self.directory.name) / "downloaded.zip"
+        destination.write_bytes(self.bundle.read_bytes())
+        original_digest = hashlib.sha256(destination.read_bytes()).hexdigest()
+
+        class Response(BytesIO):
+            headers = {"Content-Length": "9"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.close()
+
+        with patch("firmware.urlopen", return_value=Response(b"not a zip")):
+            with self.assertRaises(FirmwareValidationError):
+                download_latest_firmware(destination)
+        self.assertEqual(hashlib.sha256(destination.read_bytes()).hexdigest(), original_digest)
 
     def test_single_github_wrapper_folder_is_accepted_and_flashable(self) -> None:
         wrapped = Path(self.directory.name) / "github-download.zip"
