@@ -54,10 +54,8 @@ bool dash_config_get_show_sim_button(void);
 void dash_config_set_show_sim_button(bool show);
 bool dash_config_get_value_smoothing(void);
 void dash_config_set_value_smoothing(bool enabled);
-bool dash_config_get_redline_screen_flash(void);
-void dash_config_set_redline_screen_flash(bool enabled);
-uint32_t dash_config_get_redline_flash_color(void);
-void dash_config_set_redline_flash_color(uint32_t rgb);
+bool dash_config_get_auto_record(void);
+void dash_config_set_auto_record(bool enabled);
 
 #define DASH_CONFIG_HAL_FIELD_COUNT 8
 #define DASH_CONFIG_HAL_CHANNEL_COUNT 11

@@ -62,7 +62,9 @@ Settings, theme selection, odometer data, and trip data are retained after power
 - Reassignable gauge channels on built-in themes
 - Independent speed, temperature, pressure, and distance units
 - Configurable VTEC point, redline, and warning thresholds
-- Selectable redline screen-flash color
+- Compact prioritized critical-warning banner
+- Automatic SD logging when the engine is running, with manual REC control
+- Long-press Settings for Day, Dim, or Night brightness
 - Persistent odometer plus Trip A and Trip B
 - Adjustable display brightness and value smoothing
 - Idle, Cruise, Full Throttle, and Redline simulation modes

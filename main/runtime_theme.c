@@ -440,7 +440,10 @@ static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
         const char *default_text = binding == BIND_RECORD_BUTTON ? "REC" : "Settings";
         lv_label_set_text(label, cJSON_IsString(text) ? text->valuestring : default_text);
         lv_obj_center(label);
-        if (binding == BIND_SETTINGS_BUTTON && settings_cb) lv_obj_add_event_cb(object, settings_cb, LV_EVENT_CLICKED, NULL);
+        if (binding == BIND_SETTINGS_BUTTON && settings_cb) {
+            lv_obj_add_event_cb(object, settings_cb, LV_EVENT_SHORT_CLICKED, NULL);
+            lv_obj_add_event_cb(object, settings_cb, LV_EVENT_LONG_PRESSED, NULL);
+        }
         if (binding == BIND_RECORD_BUTTON && record_cb) lv_obj_add_event_cb(object, record_cb, LV_EVENT_CLICKED, NULL);
     } else {
         object = lv_obj_create(parent);
@@ -578,7 +581,8 @@ esp_err_t runtime_theme_load(lv_obj_t *parent, const theme_storage_package_t *pa
         lv_obj_set_pos(button, 952, 528);
         lv_obj_set_style_bg_color(button, lv_color_hex(0x151619), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(button, LV_OPA_80, LV_PART_MAIN);
-        lv_obj_add_event_cb(button, settings_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(button, settings_cb, LV_EVENT_SHORT_CLICKED, NULL);
+        lv_obj_add_event_cb(button, settings_cb, LV_EVENT_LONG_PRESSED, NULL);
         lv_obj_t *label = lv_label_create(button);
         lv_label_set_text(label, LV_SYMBOL_SETTINGS);
         lv_obj_center(label);

@@ -6,6 +6,7 @@
 
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "dash_config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -15,6 +16,10 @@
 #define DATA_LOG_ROOT "/sdcard/MACKODASH/LOGS"
 #define DATA_LOG_QUEUE_LENGTH 16
 #define DATA_LOG_PERIOD_US 100000
+#define AUTO_RECORD_START_DELAY_US 2000000
+#define AUTO_RECORD_STOP_DELAY_US 30000000
+#define AUTO_RECORD_RETRY_DELAY_US 10000000
+#define AUTO_RECORD_MIN_RPM 400
 
 typedef struct {
     int64_t timestamp_us;
@@ -30,6 +35,10 @@ static int64_t s_started_us;
 static int64_t s_last_submit_us;
 static unsigned s_rows_since_flush;
 static char s_filename[20];
+static bool s_auto_owned;
+static bool s_auto_suppressed;
+static int64_t s_auto_running_since_us;
+static int64_t s_auto_stopped_since_us;
 
 static void copy_filename(char *destination, size_t destination_size)
 {
@@ -162,4 +171,66 @@ void data_logger_submit(const honda_dash_data_t *data)
 bool data_logger_is_recording(void)
 {
     return s_recording;
+}
+
+void data_logger_note_manual_control(void)
+{
+    if (s_recording) s_auto_suppressed = true;
+    s_auto_owned = false;
+}
+
+bool data_logger_auto_update(const honda_dash_data_t *data, bool can_live)
+{
+    if (!data) return false;
+    if (!dash_config_get_auto_record()) {
+        bool changed = false;
+        if (s_auto_owned && s_recording) {
+            char filename[20];
+            changed = data_logger_stop(filename, sizeof(filename)) == ESP_OK;
+        }
+        s_auto_running_since_us = 0;
+        s_auto_stopped_since_us = 0;
+        s_auto_owned = false;
+        s_auto_suppressed = false;
+        return changed;
+    }
+
+    int64_t now_us = esp_timer_get_time();
+    bool engine_running = can_live && data->rpm >= AUTO_RECORD_MIN_RPM;
+    if (engine_running) {
+        s_auto_stopped_since_us = 0;
+        if (s_auto_running_since_us == 0) s_auto_running_since_us = now_us;
+        if (!s_recording && !s_auto_suppressed &&
+            now_us - s_auto_running_since_us >= AUTO_RECORD_START_DELAY_US) {
+            char filename[20];
+            esp_err_t error = data_logger_start(filename, sizeof(filename));
+            if (error == ESP_OK) {
+                s_auto_owned = true;
+                ESP_LOGI(TAG, "Automatic recording started: %s", filename);
+                return true;
+            }
+            s_auto_running_since_us = now_us + AUTO_RECORD_RETRY_DELAY_US -
+                                      AUTO_RECORD_START_DELAY_US;
+        }
+        return false;
+    }
+
+    s_auto_running_since_us = 0;
+    s_auto_suppressed = false;
+    if (!s_recording || !s_auto_owned) {
+        s_auto_stopped_since_us = 0;
+        return false;
+    }
+    if (s_auto_stopped_since_us == 0) s_auto_stopped_since_us = now_us;
+    if (now_us - s_auto_stopped_since_us < AUTO_RECORD_STOP_DELAY_US) return false;
+
+    char filename[20];
+    esp_err_t error = data_logger_stop(filename, sizeof(filename));
+    s_auto_owned = false;
+    s_auto_stopped_since_us = 0;
+    if (error == ESP_OK) {
+        ESP_LOGI(TAG, "Automatic recording stopped: %s", filename);
+        return true;
+    }
+    return false;
 }

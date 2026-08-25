@@ -16,8 +16,7 @@
 #define KEY_BRIGHTNESS   "cfg_bright"
 #define KEY_SHOW_SIM     "cfg_show_sim"
 #define KEY_VALUE_SMOOTH "cfg_smooth"
-#define KEY_REDLINE_FLASH "cfg_rl_flash"
-#define KEY_REDLINE_FLASH_COLOR "cfg_rl_color"
+#define KEY_AUTO_RECORD  "cfg_auto_rec"
 
 #define DEFAULT_VTEC_RPM    5600
 #define DEFAULT_REDLINE_RPM 8400
@@ -26,7 +25,6 @@
 #define REDLINE_RPM_MIN     6000
 #define REDLINE_RPM_MAX     11000
 #define DEFAULT_BRIGHTNESS 95
-#define DEFAULT_REDLINE_FLASH_COLOR 0xe4002b
 
 static const char *const THRESHOLD_KEYS[DASH_CONFIG_THRESHOLD_COUNT] = {
     "thr_ect_y", "thr_ect", "thr_iat_y", "thr_iat", "thr_afrr_y", "thr_afrr",
@@ -83,10 +81,9 @@ static char s_can_protocol[32] = "hondata";
 static int  s_vtec_rpm = DEFAULT_VTEC_RPM;
 static int  s_redline_rpm = DEFAULT_REDLINE_RPM;
 static int s_brightness = DEFAULT_BRIGHTNESS;
-static bool s_show_sim_button = true;
+static bool s_show_sim_button = false;
 static bool s_value_smoothing = false;
-static bool s_redline_screen_flash = true;
-static uint32_t s_redline_flash_color = DEFAULT_REDLINE_FLASH_COLOR;
+static bool s_auto_record = false;
 static int s_hal_field_channels[DASH_CONFIG_HAL_FIELD_COUNT] = {4, 2, 0, 1, 7, 10, 5, 6};
 static int s_modern_field_channels[DASH_CONFIG_MODERN_FIELD_COUNT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 static int s_race_field_channels[DASH_CONFIG_RACE_FIELD_COUNT] = {0, 1, 2, 4, 10, 5, 6};
@@ -141,11 +138,8 @@ void dash_config_init(void)
     if (nvs_get_i32(h, KEY_VALUE_SMOOTH, &val) == ESP_OK) {
         s_value_smoothing = (val != 0);
     }
-    if (nvs_get_i32(h, KEY_REDLINE_FLASH, &val) == ESP_OK) {
-        s_redline_screen_flash = (val != 0);
-    }
-    if (nvs_get_i32(h, KEY_REDLINE_FLASH_COLOR, &val) == ESP_OK && val >= 0 && val <= 0xffffff) {
-        s_redline_flash_color = (uint32_t)val;
+    if (nvs_get_i32(h, KEY_AUTO_RECORD, &val) == ESP_OK) {
+        s_auto_record = (val != 0);
     }
     for (int i = 0; i < DASH_CONFIG_THRESHOLD_COUNT; ++i) {
         if (nvs_get_i32(h, THRESHOLD_KEYS[i], &val) == ESP_OK &&
@@ -357,35 +351,18 @@ void dash_config_set_value_smoothing(bool enabled)
     nvs_close(h);
 }
 
-bool dash_config_get_redline_screen_flash(void)
+bool dash_config_get_auto_record(void)
 {
-    return s_redline_screen_flash;
+    return s_auto_record;
 }
 
-void dash_config_set_redline_screen_flash(bool enabled)
+void dash_config_set_auto_record(bool enabled)
 {
-    s_redline_screen_flash = enabled;
+    s_auto_record = enabled;
 
     nvs_handle_t h;
     if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_i32(h, KEY_REDLINE_FLASH, enabled ? 1 : 0);
-    nvs_commit(h);
-    nvs_close(h);
-}
-
-uint32_t dash_config_get_redline_flash_color(void)
-{
-    return s_redline_flash_color;
-}
-
-void dash_config_set_redline_flash_color(uint32_t rgb)
-{
-    if (rgb > 0xffffff) rgb = DEFAULT_REDLINE_FLASH_COLOR;
-    s_redline_flash_color = rgb;
-
-    nvs_handle_t h;
-    if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_i32(h, KEY_REDLINE_FLASH_COLOR, (int32_t)rgb);
+    nvs_set_i32(h, KEY_AUTO_RECORD, enabled ? 1 : 0);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -611,10 +588,9 @@ void dash_config_factory_reset(void)
     s_vtec_rpm = DEFAULT_VTEC_RPM;
     s_redline_rpm = DEFAULT_REDLINE_RPM;
     s_brightness = DEFAULT_BRIGHTNESS;
-    s_show_sim_button = true;
+    s_show_sim_button = false;
     s_value_smoothing = false;
-    s_redline_screen_flash = true;
-    s_redline_flash_color = DEFAULT_REDLINE_FLASH_COLOR;
+    s_auto_record = false;
     memcpy(s_hal_field_channels, HAL_FIELD_DEFAULTS, sizeof(s_hal_field_channels));
     memcpy(s_modern_field_channels, MODERN_FIELD_DEFAULTS, sizeof(s_modern_field_channels));
     memcpy(s_race_field_channels, RACE_FIELD_DEFAULTS, sizeof(s_race_field_channels));
@@ -636,10 +612,9 @@ void dash_config_factory_reset(void)
     nvs_set_i32(h, KEY_VTEC_RPM, (int32_t)s_vtec_rpm);
     nvs_set_i32(h, KEY_REDLINE_RPM, (int32_t)s_redline_rpm);
     nvs_set_i32(h, KEY_BRIGHTNESS, (int32_t)s_brightness);
-    nvs_set_i32(h, KEY_SHOW_SIM, 1);
+    nvs_set_i32(h, KEY_SHOW_SIM, 0);
     nvs_set_i32(h, KEY_VALUE_SMOOTH, 0);
-    nvs_set_i32(h, KEY_REDLINE_FLASH, 1);
-    nvs_set_i32(h, KEY_REDLINE_FLASH_COLOR, (int32_t)s_redline_flash_color);
+    nvs_set_i32(h, KEY_AUTO_RECORD, 0);
     for (int i = 0; i < DASH_CONFIG_HAL_FIELD_COUNT; ++i) {
         nvs_set_i32(h, HAL_FIELD_KEYS[i], (int32_t)s_hal_field_channels[i]);
     }

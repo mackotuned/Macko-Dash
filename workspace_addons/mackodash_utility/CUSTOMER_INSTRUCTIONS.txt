@@ -61,3 +61,12 @@ The USB update cable transfers files through the MackoDash Utility; the SD card
 does not appear as a Windows drive. Keep a working SD card inserted in the
 dashboard. Stop active drive recording before downloading logs or sending a
 theme. Downloads and uploads are CRC-verified before completion.
+
+DASHBOARD QUICK CONTROLS
+------------------------
+- Tap Settings to open the complete menu.
+- Hold Settings to choose Day, Dim, or Night brightness.
+- Enable Auto Record under Settings > System. Recording starts after the
+  engine is running and stops after a 30-second engine-off grace period.
+- Critical engine warnings appear in a compact banner without covering gauges.
+- Simulation is hidden by default and can be enabled under Display for setup.

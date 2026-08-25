@@ -125,6 +125,7 @@ void gauge_timer(lv_timer_t * t) {
     }
 
     bool drivetrain_live = dash_sim_is_enabled();
+    bool can_live = false;
     if (dash_sim_is_enabled()) {
         dash_sim_step(&d);
         d.oil_valid = true;
@@ -135,7 +136,7 @@ void gauge_timer(lv_timer_t * t) {
     displayRPM += 0.20f * (can_data.rpm - displayRPM);
 
     int gear = 0;
-    bool can_live = canbus_has_live_data();
+    can_live = canbus_has_live_data();
     drivetrain_live = canbus_has_live_drivetrain();
     bool can_gear_live = canbus_has_live_gear();
 
@@ -181,10 +182,11 @@ void gauge_timer(lv_timer_t * t) {
     d.fuel_pct   = can_data.fuel_level;
     }
 
+    bool recording_changed = data_logger_auto_update(&d, can_live && !dash_sim_is_enabled());
     data_logger_submit(&d);
     session_peaks_update(&d, drivetrain_live);
 
-    bool changed = dash_config_get_value_smoothing() ||
+    bool changed = recording_changed || dash_config_get_value_smoothing() ||
                    (!g_last_ui_valid) || ui_data_changed_significantly(&g_last_ui_data, &d);
     if (changed) {
         honda_dash_ui_update(&d);
