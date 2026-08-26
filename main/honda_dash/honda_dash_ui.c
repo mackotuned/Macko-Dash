@@ -3591,6 +3591,19 @@ static void build_settings_overlay(lv_obj_t *cluster)
                             "AFR / Timing / Boost\nBoost / Timing\nTemps / RPM / Boost\nEngine Health");
     lv_obj_add_event_cb(s_log_preset_dropdown, settings_log_selection_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
+    lv_obj_t *auto_record_control = make_plain_container(log_controls);
+    lv_obj_set_size(auto_record_control, 190, 44);
+    lv_obj_set_flex_flow(auto_record_control, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(auto_record_control, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    make_label(auto_record_control, "Auto Record", DASH_FONT_LABEL, C_LABEL);
+    s_cfg_auto_record_switch = lv_switch_create(auto_record_control);
+    lv_obj_set_style_bg_color(s_cfg_auto_record_switch, C_RED,
+                              LV_PART_INDICATOR | LV_STATE_CHECKED);
+    if (dash_config_get_auto_record()) lv_obj_add_state(s_cfg_auto_record_switch, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(s_cfg_auto_record_switch, cfg_auto_record_switch_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+
     s_log_status_label = make_label(s_page_logs, "Select a recorded log", DASH_FONT_LABEL, C_LABEL);
     lv_obj_set_width(s_log_status_label, LV_PCT(100));
     s_log_readout_label = make_label(s_page_logs, "Touch a graph for exact values", DASH_FONT_LABEL, C_WHITE);
@@ -3711,26 +3724,6 @@ static void build_settings_overlay(lv_obj_t *cluster)
     build_config_menu_row(cfg_scroll, "Diagnostics", settings_open_info_cb);
     build_config_menu_row(cfg_scroll, "Session Peaks", settings_open_peaks_cb);
     build_config_menu_row(cfg_scroll, "Driving Logs", settings_open_logs_cb);
-
-    lv_obj_t *auto_record_card = lv_obj_create(cfg_scroll);
-    lv_obj_set_size(auto_record_card, LV_PCT(100), 76);
-    lv_obj_set_style_bg_color(auto_record_card, C_PANEL, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(auto_record_card, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(auto_record_card, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(auto_record_card, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(auto_record_card, 10, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(auto_record_card, 14, LV_PART_MAIN);
-    lv_obj_clear_flag(auto_record_card, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(auto_record_card, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(auto_record_card, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    make_label(auto_record_card, "Auto Record", DASH_FONT_LABEL14, C_LABEL);
-    s_cfg_auto_record_switch = lv_switch_create(auto_record_card);
-    lv_obj_set_style_bg_color(s_cfg_auto_record_switch, C_RED,
-                              LV_PART_INDICATOR | LV_STATE_CHECKED);
-    if (dash_config_get_auto_record()) lv_obj_add_state(s_cfg_auto_record_switch, LV_STATE_CHECKED);
-    lv_obj_add_event_cb(s_cfg_auto_record_switch, cfg_auto_record_switch_cb,
-                        LV_EVENT_VALUE_CHANGED, NULL);
 
     /* --- independent unit controls --- */
     static const char *const unit_titles[UNIT_SETTING_COUNT] = {
