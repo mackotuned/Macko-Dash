@@ -56,16 +56,17 @@ Settings, theme selection, odometer data, and trip data are retained after power
 
 ## Dashboard Features
 
-- Five built-in themes: MackoDash V1, Race LCD, HalDash, Endurance, and Touring
+- Five built-in themes: MackoDash V1, Race LCD, HalDash, Endurance, and Rally Stage
 - Up to 30 custom themes from a FAT-formatted microSD card
 - Live RPM, speed, gear, coolant, intake air, AFR, timing, boost/MAP, battery, throttle, oil pressure, injector duty, knock, and fuel data
 - Reassignable gauge channels on built-in themes
 - Independent speed, temperature, pressure, and distance units
 - Configurable VTEC point, redline, and warning thresholds
-- Three-stage shift-light strip with configurable RPM, colors, brightness, and per-gear shift targets
+- Three-stage whole-bar shift colors on built-in RPM indicators, with configurable RPM, brightness, and redline flashing
 - Compact prioritized critical-warning banner
 - Automatic SD logging when the engine is running, with manual REC control
 - Long-press Settings for Day, Dim, or Night brightness
+- On-device Shortcuts & Tips guide under Settings > Display
 - Persistent odometer plus Trip A and Trip B
 - Adjustable display brightness and value smoothing
 - Idle, Cruise, Full Throttle, and Redline simulation modes

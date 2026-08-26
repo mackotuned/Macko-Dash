@@ -682,7 +682,7 @@ void runtime_theme_update(const honda_dash_data_t *data)
                 case BIND_VTEC_INDICATOR: visible = data->rpm >= dash_config_get_vtec_rpm(); break;
                 case BIND_SHIFT_INDICATOR:
                     visible = dash_config_get_shift_light_enabled() &&
-                              data->rpm >= dash_config_get_shift_target_rpm(data->gear);
+                              data->rpm >= dash_config_get_shift_stage_rpm(2);
                     break;
                 case BIND_OIL_INDICATOR: visible = data->oil_valid && data->oil_psi < 15.0f; break;
                 case BIND_KNOCK_INDICATOR: visible = data->knock_valid && data->knock_deg > 1.5f; break;

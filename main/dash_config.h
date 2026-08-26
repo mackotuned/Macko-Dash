@@ -49,7 +49,6 @@ void dash_config_set_vtec_rpm(int rpm);
 void dash_config_set_redline_rpm(int rpm);
 
 #define DASH_CONFIG_SHIFT_STAGE_COUNT 3
-#define DASH_CONFIG_SHIFT_GEAR_COUNT 6
 
 typedef enum {
    DASH_CONFIG_SHIFT_COLOR_GREEN = 0,
@@ -71,11 +70,8 @@ dash_config_shift_color_t dash_config_get_shift_stage_color(int stage);
 void dash_config_set_shift_stage_color(int stage, dash_config_shift_color_t color);
 int dash_config_get_shift_light_brightness(void);
 void dash_config_set_shift_light_brightness(int brightness);
-bool dash_config_get_shift_gear_enabled(void);
-void dash_config_set_shift_gear_enabled(bool enabled);
-int dash_config_get_shift_gear_rpm(int gear);
-void dash_config_set_shift_gear_rpm(int gear, int rpm);
-int dash_config_get_shift_target_rpm(int gear);
+bool dash_config_get_shift_redline_flash(void);
+void dash_config_set_shift_redline_flash(bool enabled);
 
 int dash_config_get_brightness(void);
 void dash_config_set_brightness(int brightness);

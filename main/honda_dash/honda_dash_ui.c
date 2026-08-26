@@ -91,6 +91,7 @@ static int VTEC_RPM     = 5600;
 /* screen is a fixed 1024x600 panel */
 #define SCR_W 1024
 #define SCR_H 600
+#define DASH_CONTROL_ROW_WIDTH 144
 
 /* ================= TILE DESCRIPTOR (mirrors the web version's `fields`) === */
 typedef enum {
@@ -233,11 +234,12 @@ static bool s_warning_have_data;
 static lv_obj_t *s_warning_banner;
 static lv_obj_t *s_warning_title;
 static lv_obj_t *s_warning_detail;
-#define SHIFT_LIGHT_SEG_COUNT 12
-static lv_obj_t *s_shift_light_strip;
-static lv_obj_t *s_shift_light_segments[SHIFT_LIGHT_SEG_COUNT];
-static int s_shift_light_last_count = -1;
+static int s_shift_light_last_theme = -1;
+static int s_shift_light_last_bucket = -1;
+static int s_shift_light_last_enabled = -1;
+static int s_shift_light_last_flash_on = -1;
 static int s_shift_light_last_brightness = -1;
+static int s_shift_light_last_rpms[DASH_CONFIG_SHIFT_STAGE_COUNT] = {-1, -1, -1};
 static int s_shift_light_last_colors[DASH_CONFIG_SHIFT_STAGE_COUNT] = {-1, -1, -1};
 
 static void add_press_feedback(lv_obj_t *obj);
@@ -336,14 +338,14 @@ static lv_obj_t *s_end_field_val[DASH_CONFIG_ENDURANCE_FIELD_COUNT];
 static char s_end_last_field_text[DASH_CONFIG_ENDURANCE_FIELD_COUNT][16];
 static void update_theme_endurance(const honda_dash_data_t *data, int rpm, bool limiter_hit, float fuel);
 
-/* ---- Touring theme widget handles ---- */
-#define TOURING_BLUE lv_color_hex(0x5aa9ff)
-static lv_obj_t *s_tour_rpm_arc;
+/* ---- Rally Stage theme widget handles (retains Touring's persisted slot) ---- */
+#define TOUR_SEG_COUNT 20
+#define RALLY_LIGHT_OFF lv_color_hex(0x25282b)
+#define RALLY_TEXT_DIM lv_color_hex(0x969b9f)
+static lv_obj_t *s_tour_segments[TOUR_SEG_COUNT];
 static lv_obj_t *s_tour_speed_val;
 static lv_obj_t *s_tour_speed_unit;
-static lv_obj_t *s_tour_gear_val;
 static lv_obj_t *s_tour_rpm_val;
-static lv_obj_t *s_tour_fuel_bar;
 static lv_obj_t *s_tour_odo_val;
 static lv_obj_t *s_tour_field_label[DASH_CONFIG_TOURING_FIELD_COUNT];
 static lv_obj_t *s_tour_field_unit[DASH_CONFIG_TOURING_FIELD_COUNT];
@@ -363,6 +365,7 @@ static lv_obj_t *s_page_update;
 static lv_obj_t *s_page_config;
 static lv_obj_t *s_page_units;
 static lv_obj_t *s_page_display;
+static lv_obj_t *s_page_shortcuts;
 static lv_obj_t *s_page_odometer;
 static lv_obj_t *s_page_engine_limits;
 static lv_obj_t *s_page_ecu;
@@ -426,9 +429,7 @@ static lv_obj_t *s_cfg_shift_stage_labels[DASH_CONFIG_SHIFT_STAGE_COUNT];
 static lv_obj_t *s_cfg_shift_color_dropdowns[DASH_CONFIG_SHIFT_STAGE_COUNT];
 static lv_obj_t *s_cfg_shift_brightness_slider;
 static lv_obj_t *s_cfg_shift_brightness_label;
-static lv_obj_t *s_cfg_shift_gear_switch;
-static lv_obj_t *s_cfg_shift_gear_sliders[DASH_CONFIG_SHIFT_GEAR_COUNT];
-static lv_obj_t *s_cfg_shift_gear_labels[DASH_CONFIG_SHIFT_GEAR_COUNT];
+static lv_obj_t *s_cfg_shift_flash_switch;
 static lv_obj_t *s_factory_reset_modal;
 static lv_obj_t *s_cfg_threshold_sliders[DASH_CONFIG_THRESHOLD_COUNT];
 static lv_obj_t *s_cfg_threshold_labels[DASH_CONFIG_THRESHOLD_COUNT];
@@ -1098,6 +1099,7 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_add_flag(s_page_ecu, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_theme_resets, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_display, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_page_shortcuts, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_odometer, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_engine_limits, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(page, LV_OBJ_FLAG_HIDDEN);
@@ -1282,6 +1284,7 @@ static void settings_open_theme_resets_cb(lv_event_t *e)
 }
 static void settings_open_units_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_units); }
 static void settings_open_display_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_display); }
+static void settings_open_shortcuts_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_shortcuts); }
 static void settings_open_odometer_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_odometer); }
 static void settings_open_engine_limits_cb(lv_event_t *e)
 {
@@ -1444,7 +1447,7 @@ static void cfg_auto_record_switch_cb(lv_event_t *e)
 static void cfg_shift_enable_cb(lv_event_t *e)
 {
     dash_config_set_shift_light_enabled(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
-    s_shift_light_last_count = -1;
+    s_shift_light_last_theme = -1;
 }
 
 static void cfg_shift_stage_slider_cb(lv_event_t *e)
@@ -1463,7 +1466,7 @@ static void cfg_shift_stage_released_cb(lv_event_t *e)
     int stage = (int)(intptr_t)lv_event_get_user_data(e);
     dash_config_set_shift_stage_rpm(stage, lv_slider_get_value(lv_event_get_target(e)));
     shift_settings_refresh();
-    s_shift_light_last_count = -1;
+    s_shift_light_last_theme = -1;
 }
 
 static void cfg_shift_color_cb(lv_event_t *e)
@@ -1491,29 +1494,10 @@ static void cfg_shift_brightness_released_cb(lv_event_t *e)
     s_shift_light_last_brightness = -1;
 }
 
-static void cfg_shift_gear_enable_cb(lv_event_t *e)
+static void cfg_shift_flash_cb(lv_event_t *e)
 {
-    dash_config_set_shift_gear_enabled(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
-    s_shift_light_last_count = -1;
-}
-
-static void cfg_shift_gear_slider_cb(lv_event_t *e)
-{
-    int gear = (int)(intptr_t)lv_event_get_user_data(e);
-    int rpm = lv_slider_get_value(lv_event_get_target(e));
-    rpm = ((rpm + 50) / 100) * 100;
-    lv_slider_set_value(lv_event_get_target(e), rpm, LV_ANIM_OFF);
-    char text[20];
-    snprintf(text, sizeof(text), "%d RPM", rpm);
-    lv_label_set_text(s_cfg_shift_gear_labels[gear - 1], text);
-}
-
-static void cfg_shift_gear_released_cb(lv_event_t *e)
-{
-    int gear = (int)(intptr_t)lv_event_get_user_data(e);
-    dash_config_set_shift_gear_rpm(gear, lv_slider_get_value(lv_event_get_target(e)));
-    shift_settings_refresh();
-    s_shift_light_last_count = -1;
+    dash_config_set_shift_redline_flash(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
+    s_shift_light_last_theme = -1;
 }
 
 static void shift_settings_refresh(void)
@@ -1542,18 +1526,9 @@ static void shift_settings_refresh(void)
         snprintf(text, sizeof(text), "%d%%", brightness);
         lv_label_set_text(s_cfg_shift_brightness_label, text);
     }
-    if (s_cfg_shift_gear_switch) {
-        if (dash_config_get_shift_gear_enabled()) lv_obj_add_state(s_cfg_shift_gear_switch, LV_STATE_CHECKED);
-        else lv_obj_clear_state(s_cfg_shift_gear_switch, LV_STATE_CHECKED);
-    }
-    for (int gear = 1; gear <= DASH_CONFIG_SHIFT_GEAR_COUNT; ++gear) {
-        int rpm = dash_config_get_shift_gear_rpm(gear);
-        if (s_cfg_shift_gear_sliders[gear - 1]) lv_slider_set_value(s_cfg_shift_gear_sliders[gear - 1], rpm, LV_ANIM_OFF);
-        if (s_cfg_shift_gear_labels[gear - 1]) {
-            char text[20];
-            snprintf(text, sizeof(text), "%d RPM", rpm);
-            lv_label_set_text(s_cfg_shift_gear_labels[gear - 1], text);
-        }
+    if (s_cfg_shift_flash_switch) {
+        if (dash_config_get_shift_redline_flash()) lv_obj_add_state(s_cfg_shift_flash_switch, LV_STATE_CHECKED);
+        else lv_obj_clear_state(s_cfg_shift_flash_switch, LV_STATE_CHECKED);
     }
 }
 
@@ -1887,6 +1862,12 @@ static void settings_config_subpage_back_cb(lv_event_t *e)
     (void)e;
     settings_show_page(s_page_main);
 }
+
+static void settings_shortcuts_back_cb(lv_event_t *e)
+{
+    (void)e;
+    settings_show_page(s_page_display);
+}
 static void settings_update_refresh_ui(void);
 
 static void settings_update_poll_timer_cb(lv_timer_t *timer)
@@ -2161,7 +2142,6 @@ static void activate_theme(int idx, bool persist)
     if (idx >= 100) {
         lv_obj_t *runtime_root = runtime_theme_get_root();
         if (runtime_root) lv_obj_clear_flag(runtime_root, LV_OBJ_FLAG_HIDDEN);
-        if (s_shift_light_strip) lv_obj_move_foreground(s_shift_light_strip);
         if (s_warning_banner) lv_obj_move_foreground(s_warning_banner);
         lv_obj_move_foreground(s_settings_overlay);
     } else {
@@ -2426,23 +2406,25 @@ static void build_theme_preview(lv_obj_t *parent, int theme_idx)
         break;
     }
     case THEME_ID_TOURING: {
-        lv_obj_set_style_bg_color(pv, lv_color_hex(0x080c12), LV_PART_MAIN);
-        lv_obj_t *speed = make_label(pv, "72", DASH_FONT_TILEVAL, C_WHITE);
-        lv_obj_align(speed, LV_ALIGN_CENTER, 0, -4);
-        lv_obj_t *unit = make_label(pv, "MPH", DASH_FONT_LABEL, TOURING_BLUE);
-        lv_obj_align(unit, LV_ALIGN_CENTER, 0, 24);
-        for (int i = 0; i < 9; ++i) {
-            lv_obj_t *segment = lv_obj_create(pv);
-            lv_obj_add_flag(segment, LV_OBJ_FLAG_IGNORE_LAYOUT);
-            lv_obj_set_size(segment, 11, 4);
-            lv_obj_set_pos(segment, 28 + i * 14, 14 + abs(i - 4) * 3);
-            lv_obj_set_style_bg_color(segment, i < 6 ? TOURING_BLUE : lv_color_hex(0x26313d), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(segment, LV_OPA_COVER, LV_PART_MAIN);
-            lv_obj_set_style_border_width(segment, 0, LV_PART_MAIN);
-            lv_obj_set_style_radius(segment, 0, LV_PART_MAIN);
-            lv_obj_clear_flag(segment, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_clear_flag(segment, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_bg_color(pv, lv_color_hex(0x090a0b), LV_PART_MAIN);
+        for (int pair = 0; pair < 5; ++pair) {
+            for (int side = 0; side < 2; ++side) {
+                lv_obj_t *light = lv_obj_create(pv);
+                lv_obj_add_flag(light, LV_OBJ_FLAG_IGNORE_LAYOUT);
+                lv_obj_set_size(light, 12, 12);
+                lv_obj_set_pos(light, side == 0 ? 13 + pair * 15 : 145 - pair * 15, 19 - pair * 3);
+                lv_obj_set_style_bg_color(light, pair < 4 ? C_WHITE : RALLY_LIGHT_OFF, LV_PART_MAIN);
+                lv_obj_set_style_bg_opa(light, LV_OPA_COVER, LV_PART_MAIN);
+                lv_obj_set_style_border_width(light, 1, LV_PART_MAIN);
+                lv_obj_set_style_border_color(light, lv_color_hex(0x555a5e), LV_PART_MAIN);
+                lv_obj_set_style_radius(light, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+                lv_obj_clear_flag(light, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+            }
         }
+        lv_obj_t *rpm = make_label(pv, "8250", DASH_FONT_LABEL14, C_WHITE);
+        lv_obj_align(rpm, LV_ALIGN_BOTTOM_LEFT, 20, -10);
+        lv_obj_t *speed = make_label(pv, "128", DASH_FONT_LABEL14, C_WHITE);
+        lv_obj_align(speed, LV_ALIGN_BOTTOM_RIGHT, -20, -10);
         break;
     }
     default: {
@@ -2596,7 +2578,8 @@ static lv_obj_t *build_settings_back_btn(lv_obj_t *parent)
     return build_back_btn(parent, settings_back_cb);
 }
 
-static lv_obj_t *build_config_subpage(lv_obj_t *panel, lv_obj_t **page_out, const char *title)
+static lv_obj_t *build_config_subpage(lv_obj_t *panel, lv_obj_t **page_out, const char *title,
+                                      lv_event_cb_t back_cb)
 {
     lv_obj_t *page = make_plain_container(panel);
     *page_out = page;
@@ -2616,7 +2599,7 @@ static lv_obj_t *build_config_subpage(lv_obj_t *panel, lv_obj_t **page_out, cons
     lv_obj_set_scroll_dir(content, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(content, LV_SCROLLBAR_MODE_AUTO);
 
-    build_back_btn(page, settings_config_subpage_back_cb);
+    build_back_btn(page, back_cb);
     return content;
 }
 
@@ -2682,6 +2665,28 @@ static lv_obj_t *build_config_menu_row(lv_obj_t *parent, const char *title, lv_e
     make_label(row, title, DASH_FONT_LABEL14, C_WHITE);
     make_label(row, LV_SYMBOL_RIGHT, DASH_FONT_LABEL14, C_LABEL);
     return row;
+}
+
+static void build_shortcut_tip(lv_obj_t *parent, const char *gesture, const char *detail)
+{
+    lv_obj_t *card = lv_obj_create(parent);
+    lv_obj_set_size(card, LV_PCT(100), 76);
+    lv_obj_set_style_bg_color(card, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
+    lv_obj_set_style_radius(card, 10, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(card, 14, LV_PART_MAIN);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(card, 18, LV_PART_MAIN);
+
+    lv_obj_t *gesture_label = make_label(card, gesture, DASH_FONT_LABEL14, C_WHITE);
+    lv_obj_set_width(gesture_label, 190);
+    lv_obj_t *detail_label = make_label(card, detail, DASH_FONT_LABEL14, C_LABEL);
+    lv_obj_set_width(detail_label, 600);
+    lv_label_set_long_mode(detail_label, LV_LABEL_LONG_WRAP);
 }
 
 static lv_obj_t *build_diagnostics_tile(lv_obj_t *parent, const char *title)
@@ -3388,84 +3393,99 @@ static lv_color_t shift_light_color(dash_config_shift_color_t color)
     return lv_color_hex(colors[color]);
 }
 
-static void build_shift_light_strip(lv_obj_t *cluster)
+static int shift_light_stage_for_rpm(int rpm, const int thresholds[DASH_CONFIG_SHIFT_STAGE_COUNT])
 {
-    s_shift_light_strip = make_plain_container(cluster);
-    lv_obj_add_flag(s_shift_light_strip, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_size(s_shift_light_strip, 760, 38);
-    lv_obj_align(s_shift_light_strip, LV_ALIGN_TOP_MID, 0, 4);
-    lv_obj_set_flex_flow(s_shift_light_strip, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(s_shift_light_strip, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_column(s_shift_light_strip, 8, LV_PART_MAIN);
-    lv_obj_clear_flag(s_shift_light_strip, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-
-    for (int index = 0; index < SHIFT_LIGHT_SEG_COUNT; ++index) {
-        lv_obj_t *segment = lv_obj_create(s_shift_light_strip);
-        s_shift_light_segments[index] = segment;
-        lv_obj_set_size(segment, 54, 24);
-        lv_obj_set_style_bg_color(segment, C_SEG_OFF, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(segment, LV_OPA_30, LV_PART_MAIN);
-        lv_obj_set_style_border_width(segment, 1, LV_PART_MAIN);
-        lv_obj_set_style_border_color(segment, C_LINE, LV_PART_MAIN);
-        lv_obj_set_style_radius(segment, 4, LV_PART_MAIN);
-        lv_obj_clear_flag(segment, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    }
+    if (rpm >= thresholds[2]) return 2;
+    if (rpm >= thresholds[1]) return 1;
+    if (rpm >= thresholds[0]) return 0;
+    return -1;
 }
 
-void honda_dash_ui_update_shift_lights(uint16_t rpm, int8_t gear)
+void honda_dash_ui_update_shift_lights(uint16_t rpm)
 {
-    if (!s_shift_light_strip) return;
-    if (!dash_config_get_shift_light_enabled()) {
-        lv_obj_add_flag(s_shift_light_strip, LV_OBJ_FLAG_HIDDEN);
-        s_shift_light_last_count = -1;
-        return;
+    if (s_active_theme >= 100) return;
+
+    int thresholds[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
+        dash_config_get_shift_stage_rpm(0),
+        dash_config_get_shift_stage_rpm(1),
+        dash_config_get_shift_stage_rpm(2),
+    };
+    int segment_count = s_active_theme == THEME_ID_MODERN ? SEG_COUNT :
+                        (s_active_theme == THEME_ID_RACE_LCD ? RPK_SEG_COUNT :
+                        (s_active_theme == THEME_ID_ENDURANCE ? END_SEG_COUNT :
+                        (s_active_theme == THEME_ID_TOURING ? TOUR_SEG_COUNT : 0)));
+    int fill_rpm = s_active_theme == THEME_ID_TOURING ? dash_config_get_redline_rpm() : MAXRPM;
+    int bucket = segment_count > 0 ? ((int)rpm * segment_count) / (fill_rpm > 0 ? fill_rpm : 1) :
+                 shift_light_stage_for_rpm((int)rpm, thresholds);
+    if (segment_count > 0) {
+        if (bucket < 0) bucket = 0;
+        if (bucket > segment_count) bucket = segment_count;
     }
 
-    int base_final = dash_config_get_shift_stage_rpm(2);
-    int target = dash_config_get_shift_target_rpm(gear);
-    int offset = target - base_final;
-    int stage1 = dash_config_get_shift_stage_rpm(0) + offset;
-    int stage2 = dash_config_get_shift_stage_rpm(1) + offset;
-    if (stage1 < 500) stage1 = 500;
-    if (stage2 <= stage1) stage2 = stage1 + 100;
-    if (target <= stage2) target = stage2 + 100;
-
-    int active_count = 0;
-    if (rpm >= target) {
-        active_count = SHIFT_LIGHT_SEG_COUNT;
-    } else if (rpm >= stage2) {
-        active_count = 5 + ((int)rpm - stage2) * 3 / (target - stage2);
-    } else if (rpm >= stage1) {
-        active_count = 1 + ((int)rpm - stage1) * 3 / (stage2 - stage1);
-    }
-
+    int enabled = dash_config_get_shift_light_enabled() ? 1 : 0;
+    bool flashing = enabled && dash_config_get_shift_redline_flash() &&
+                    rpm >= dash_config_get_redline_rpm();
+    int flash_on = flashing ? (int)((esp_timer_get_time() / 125000) & 1) : 1;
     int brightness = dash_config_get_shift_light_brightness();
     int colors[DASH_CONFIG_SHIFT_STAGE_COUNT];
-    bool style_changed = brightness != s_shift_light_last_brightness;
+    bool style_changed = enabled != s_shift_light_last_enabled ||
+                         brightness != s_shift_light_last_brightness;
     for (int stage = 0; stage < DASH_CONFIG_SHIFT_STAGE_COUNT; ++stage) {
         colors[stage] = dash_config_get_shift_stage_color(stage);
-        style_changed = style_changed || colors[stage] != s_shift_light_last_colors[stage];
+        style_changed = style_changed || thresholds[stage] != s_shift_light_last_rpms[stage] ||
+                        colors[stage] != s_shift_light_last_colors[stage];
     }
-    if (active_count == s_shift_light_last_count && !style_changed) return;
+    if (s_active_theme == s_shift_light_last_theme && bucket == s_shift_light_last_bucket &&
+            flash_on == s_shift_light_last_flash_on && !style_changed) return;
 
-    s_shift_light_last_count = active_count;
+    s_shift_light_last_theme = s_active_theme;
+    s_shift_light_last_bucket = bucket;
+    s_shift_light_last_enabled = enabled;
+    s_shift_light_last_flash_on = flash_on;
     s_shift_light_last_brightness = brightness;
+    memcpy(s_shift_light_last_rpms, thresholds, sizeof(thresholds));
     memcpy(s_shift_light_last_colors, colors, sizeof(colors));
-    if (active_count == 0) {
-        lv_obj_add_flag(s_shift_light_strip, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-    lv_obj_clear_flag(s_shift_light_strip, LV_OBJ_FLAG_HIDDEN);
-
     lv_opa_t active_opa = (lv_opa_t)((brightness * 255) / 100);
-    for (int index = 0; index < SHIFT_LIGHT_SEG_COUNT; ++index) {
-        int stage = index / 4;
-        bool active = index < active_count;
-        lv_color_t color = shift_light_color((dash_config_shift_color_t)colors[stage]);
-        lv_obj_set_style_bg_color(s_shift_light_segments[index], active ? color : C_SEG_OFF, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(s_shift_light_segments[index], active ? active_opa : LV_OPA_30, LV_PART_MAIN);
-        lv_obj_set_style_border_color(s_shift_light_segments[index], active ? color : C_LINE, LV_PART_MAIN);
+    int current_stage = enabled ? shift_light_stage_for_rpm((int)rpm, thresholds) : -1;
+    lv_color_t current_color = flashing ?
+        shift_light_color((dash_config_shift_color_t)colors[2]) :
+        (current_stage >= 0 ? shift_light_color((dash_config_shift_color_t)colors[current_stage]) : C_WHITE);
+
+    if (s_active_theme == THEME_ID_MODERN) {
+        for (int index = 0; index < SEG_COUNT; ++index) {
+            bool active = flashing ? flash_on : index < bucket;
+            lv_obj_set_style_bg_color(s_segs[index], active ? current_color : C_SEG_OFF, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(s_segs[index], active ? active_opa : LV_OPA_COVER, LV_PART_MAIN);
+        }
+        lv_obj_set_style_bg_color(s_rpm_mini_fill, flash_on ? current_color : C_SEG_OFF, LV_PART_INDICATOR);
+        lv_obj_set_style_bg_opa(s_rpm_mini_fill, flash_on ? active_opa : LV_OPA_30, LV_PART_INDICATOR);
+    } else if (s_active_theme == THEME_ID_RACE_LCD) {
+        for (int index = 0; index < RPK_SEG_COUNT; ++index) {
+            bool active = flashing ? flash_on : index < bucket;
+            lv_obj_set_style_bg_color(s_rpk_segs[index], current_color, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(s_rpk_segs[index], active ? active_opa : LV_OPA_20, LV_PART_MAIN);
+        }
+    } else if (s_active_theme == THEME_ID_ENDURANCE) {
+        for (int index = 0; index < END_SEG_COUNT; ++index) {
+            bool active = flashing ? flash_on : index < bucket;
+            lv_obj_set_style_bg_color(s_end_segments[index], active ? current_color : lv_color_hex(0x1a2428),
+                                      LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(s_end_segments[index], active ? active_opa : LV_OPA_COVER, LV_PART_MAIN);
+        }
+    } else if (s_active_theme == THEME_ID_TOURING) {
+        int active_pairs = (bucket + 1) / 2;
+        for (int index = 0; index < TOUR_SEG_COUNT; ++index) {
+            bool active = flashing ? flash_on : (index / 2) < active_pairs;
+            lv_obj_set_style_bg_color(s_tour_segments[index], active ? current_color : RALLY_LIGHT_OFF,
+                                      LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(s_tour_segments[index], active ? active_opa : LV_OPA_COVER, LV_PART_MAIN);
+            lv_obj_set_style_shadow_color(s_tour_segments[index], current_color, LV_PART_MAIN);
+            lv_obj_set_style_shadow_opa(s_tour_segments[index], active ? active_opa / 2 : LV_OPA_TRANSP,
+                                        LV_PART_MAIN);
+        }
+    } else if (s_active_theme == THEME_ID_HALDASH) {
+        lv_obj_set_style_arc_color(s_hal_rpm_arc, current_color, LV_PART_INDICATOR);
+        lv_obj_set_style_arc_opa(s_hal_rpm_arc, flash_on ? active_opa : LV_OPA_20, LV_PART_INDICATOR);
     }
 }
 
@@ -3645,7 +3665,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     s_theme_card_race_lcd = build_theme_grid_card(s_theme_grid, "Race LCD", "Built in", THEME_ID_RACE_LCD, 1, 0, true);
     s_theme_card_haldash = build_theme_grid_card(s_theme_grid, "HalDash", "Built in", THEME_ID_HALDASH, 0, 1, true);
     s_theme_card_endurance = build_theme_grid_card(s_theme_grid, "Endurance", "Built in", THEME_ID_ENDURANCE, 1, 1, true);
-    s_theme_card_touring = build_theme_grid_card(s_theme_grid, "Touring", "Built in", THEME_ID_TOURING, 0, 2, true);
+    s_theme_card_touring = build_theme_grid_card(s_theme_grid, "Rally Stage", "Built in", THEME_ID_TOURING, 0, 2, true);
     theme_card_set_selected(s_theme_card_modern, true);
 
     for (size_t i = 0; i < sd_theme_count; ++i) {
@@ -3904,10 +3924,16 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_t *logs_back = build_back_btn(s_page_logs, settings_config_back_cb);
     lv_obj_set_height(logs_back, 48);
 
-    lv_obj_t *units_content = build_config_subpage(panel, &s_page_units, "UNITS");
-    lv_obj_t *display_content = build_config_subpage(panel, &s_page_display, "DISPLAY");
-    lv_obj_t *odometer_content = build_config_subpage(panel, &s_page_odometer, "ODOMETER & TRIPS");
-    lv_obj_t *engine_limits_content = build_config_subpage(panel, &s_page_engine_limits, "ENGINE");
+    lv_obj_t *units_content = build_config_subpage(panel, &s_page_units, "UNITS",
+                                                   settings_config_subpage_back_cb);
+    lv_obj_t *display_content = build_config_subpage(panel, &s_page_display, "DISPLAY",
+                                                     settings_config_subpage_back_cb);
+    lv_obj_t *shortcuts_content = build_config_subpage(panel, &s_page_shortcuts, "SHORTCUTS & TIPS",
+                                                       settings_shortcuts_back_cb);
+    lv_obj_t *odometer_content = build_config_subpage(panel, &s_page_odometer, "ODOMETER & TRIPS",
+                                                      settings_config_subpage_back_cb);
+    lv_obj_t *engine_limits_content = build_config_subpage(panel, &s_page_engine_limits, "ENGINE",
+                                                           settings_config_subpage_back_cb);
 
     /* ---- page: ECU protocol ---- */
     s_page_ecu = make_plain_container(panel);
@@ -3971,7 +3997,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     build_theme_layout_reset_button(theme_reset_grid, "Race LCD", SYSTEM_FIELD_RACE);
     build_theme_layout_reset_button(theme_reset_grid, "HalDash", SYSTEM_FIELD_HAL);
     build_theme_layout_reset_button(theme_reset_grid, "Endurance", SYSTEM_FIELD_ENDURANCE);
-    build_theme_layout_reset_button(theme_reset_grid, "Touring", SYSTEM_FIELD_TOURING);
+    build_theme_layout_reset_button(theme_reset_grid, "Rally Stage", SYSTEM_FIELD_TOURING);
     make_label(s_page_theme_resets, "Choose a built-in theme to restore its default gauge assignments.",
                DASH_FONT_LABEL, C_LABEL_DIM);
     build_back_btn(s_page_theme_resets, settings_theme_resets_back_cb);
@@ -4105,7 +4131,24 @@ static void build_settings_overlay(lv_obj_t *cluster)
         lv_obj_set_style_bg_color(s_cfg_sim_button_switch, C_RED, LV_PART_INDICATOR | LV_STATE_CHECKED);
         if (dash_config_get_show_sim_button()) lv_obj_add_state(s_cfg_sim_button_switch, LV_STATE_CHECKED);
         lv_obj_add_event_cb(s_cfg_sim_button_switch, cfg_sim_button_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+        build_config_menu_row(display_content, "Shortcuts & Tips", settings_open_shortcuts_cb);
     }
+
+    build_shortcut_tip(shortcuts_content, "HOLD SETTINGS",
+                       "Open quick Day, Dim, and Night brightness modes.");
+    build_shortcut_tip(shortcuts_content, "HOLD A DATA VALUE",
+                       "Choose which channel that value shows on built-in themes.");
+    build_shortcut_tip(shortcuts_content, "TAP / HOLD SIM",
+                       "Tap to toggle simulation. Hold to choose an RPM and driving mode.");
+    build_shortcut_tip(shortcuts_content, "TAP REC",
+                       "Start or stop a driving log on the SD card.");
+    build_shortcut_tip(shortcuts_content, "TAP ODO",
+                       "On MackoDash, cycle between odometer, Trip A, and Trip B.");
+    build_shortcut_tip(shortcuts_content, "TOUCH A LOG GRAPH",
+                       "Show the exact recorded values at that point in the drive.");
+    build_shortcut_tip(shortcuts_content, "TAP A THEME",
+                       "Apply it immediately. Press Set to return to the dashboard.");
 
     build_config_section_header(cfg_scroll, "ODOMETER & TRIPS");
     build_config_menu_row(cfg_scroll, "Odometer & Trip Settings", settings_open_odometer_cb);
@@ -4242,7 +4285,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
         lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_BETWEEN,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        make_label(card, "Shift Light Strip", DASH_FONT_LABEL14, C_WHITE);
+        make_label(card, "RPM Bar Shift Colors", DASH_FONT_LABEL14, C_WHITE);
         s_cfg_shift_enable_switch = lv_switch_create(card);
         lv_obj_set_style_bg_color(s_cfg_shift_enable_switch, C_RED,
                                   LV_PART_INDICATOR | LV_STATE_CHECKED);
@@ -4251,7 +4294,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     }
 
     static const char *const stage_names[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
-        "Stage 1 Start", "Stage 2 Start", "Final Shift",
+        "Stage 1 Start", "Stage 2 Start", "Stage 3 Start",
     };
     for (int stage = 0; stage < DASH_CONFIG_SHIFT_STAGE_COUNT; ++stage) {
         s_cfg_shift_stage_sliders[stage] = build_shift_rpm_card(
@@ -4277,7 +4320,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
         lv_obj_set_flex_flow(top, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(top, LV_FLEX_ALIGN_SPACE_BETWEEN,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        make_label(top, "Strip Brightness", DASH_FONT_LABEL14, C_LABEL);
+        make_label(top, "Shift Color Brightness", DASH_FONT_LABEL14, C_LABEL);
         s_cfg_shift_brightness_label = make_label(top, "100%", DASH_FONT_LABEL14, C_WHITE);
         s_cfg_shift_brightness_slider = lv_slider_create(card);
         configure_menu_slider(s_cfg_shift_brightness_slider);
@@ -4304,26 +4347,12 @@ static void build_settings_overlay(lv_obj_t *cluster)
         lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_BETWEEN,
                               LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        make_label(card, "Gear-dependent Final Shift", DASH_FONT_LABEL14, C_WHITE);
-        s_cfg_shift_gear_switch = lv_switch_create(card);
-        lv_obj_set_style_bg_color(s_cfg_shift_gear_switch, C_RED,
+        make_label(card, "Flash All at Redline", DASH_FONT_LABEL14, C_WHITE);
+        s_cfg_shift_flash_switch = lv_switch_create(card);
+        lv_obj_set_style_bg_color(s_cfg_shift_flash_switch, C_RED,
                                   LV_PART_INDICATOR | LV_STATE_CHECKED);
-        lv_obj_add_event_cb(s_cfg_shift_gear_switch, cfg_shift_gear_enable_cb,
+        lv_obj_add_event_cb(s_cfg_shift_flash_switch, cfg_shift_flash_cb,
                             LV_EVENT_VALUE_CHANGED, NULL);
-    }
-
-    lv_obj_t *gear_grid = make_plain_container(engine_limits_content);
-    lv_obj_set_size(gear_grid, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(gear_grid, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(gear_grid, LV_FLEX_ALIGN_SPACE_BETWEEN,
-                          LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_set_style_pad_row(gear_grid, 10, LV_PART_MAIN);
-    for (int gear = 1; gear <= DASH_CONFIG_SHIFT_GEAR_COUNT; ++gear) {
-        char title[12];
-        snprintf(title, sizeof(title), "Gear %d", gear);
-        s_cfg_shift_gear_sliders[gear - 1] = build_shift_rpm_card(
-            gear_grid, title, 405, &s_cfg_shift_gear_labels[gear - 1], NULL,
-            cfg_shift_gear_slider_cb, cfg_shift_gear_released_cb, gear);
     }
 
     make_label(engine_limits_content, "VTEC & REDLINE", DASH_FONT_LABEL, C_LABEL_DIM);
@@ -5435,7 +5464,7 @@ static lv_obj_t *build_theme_classic(lv_obj_t *cluster)
         build_settings_button(root);
         lv_obj_t *corner_controls = lv_obj_get_child(root, lv_obj_get_child_cnt(root) - 1);
         lv_obj_add_flag(corner_controls, LV_OBJ_FLAG_IGNORE_LAYOUT);
-        lv_obj_set_size(corner_controls, 92, 40);
+        lv_obj_set_size(corner_controls, DASH_CONTROL_ROW_WIDTH, 40);
         lv_obj_set_flex_align(corner_controls, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_align(corner_controls, LV_ALIGN_BOTTOM_RIGHT, -16, -16);
 
@@ -5613,7 +5642,7 @@ static lv_obj_t *build_si_cluster_theme(lv_obj_t *cluster, lv_color_t needle_col
     build_settings_button(root);
     lv_obj_t *corner_controls = lv_obj_get_child(root, lv_obj_get_child_cnt(root) - 1);
     lv_obj_add_flag(corner_controls, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_size(corner_controls, 92, 40);
+    lv_obj_set_size(corner_controls, DASH_CONTROL_ROW_WIDTH, 40);
     lv_obj_set_flex_align(corner_controls, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_align(corner_controls, LV_ALIGN_BOTTOM_RIGHT, -16, -16);
     return root;
@@ -5768,7 +5797,7 @@ static lv_obj_t *build_theme_race_lcd(lv_obj_t *cluster)
     build_settings_button(root);
     lv_obj_t *corner_controls = lv_obj_get_child(root, lv_obj_get_child_cnt(root) - 1);
     lv_obj_add_flag(corner_controls, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_size(corner_controls, 92, 40);
+    lv_obj_set_size(corner_controls, DASH_CONTROL_ROW_WIDTH, 40);
     lv_obj_set_flex_align(corner_controls, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_align(corner_controls, LV_ALIGN_BOTTOM_RIGHT, -16, -16);
     return root;
@@ -6350,7 +6379,7 @@ static lv_obj_t *build_theme_haldash(lv_obj_t *cluster)
     build_settings_button(root);
     lv_obj_t *controls = lv_obj_get_child(root, lv_obj_get_child_cnt(root) - 1);
     lv_obj_add_flag(controls, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_size(controls, 92, 40);
+    lv_obj_set_size(controls, DASH_CONTROL_ROW_WIDTH, 40);
     lv_obj_align(controls, LV_ALIGN_BOTTOM_MID, 0, -28);
     return root;
 }
@@ -6533,7 +6562,7 @@ static lv_obj_t *build_theme_endurance(lv_obj_t *cluster)
     build_settings_button(root);
     lv_obj_t *controls = lv_obj_get_child(root, lv_obj_get_child_cnt(root) - 1);
     lv_obj_add_flag(controls, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_size(controls, 92, 40);
+    lv_obj_set_size(controls, DASH_CONTROL_ROW_WIDTH, 40);
     lv_obj_align(controls, LV_ALIGN_BOTTOM_RIGHT, -24, -18);
     return root;
 }
@@ -6615,40 +6644,44 @@ static void update_theme_endurance(const honda_dash_data_t *data, int rpm, bool 
 static lv_obj_t *touring_make_field(lv_obj_t *parent, int slot, lv_coord_t x, lv_coord_t y,
                                     lv_text_align_t align)
 {
-    lv_obj_t *field = make_plain_container(parent);
+    lv_obj_t *field = lv_obj_create(parent);
     lv_obj_add_flag(field, LV_OBJ_FLAG_IGNORE_LAYOUT);
     lv_obj_set_pos(field, x, y);
-    lv_obj_set_size(field, 190, 104);
+    lv_obj_set_size(field, 226, 118);
+    lv_obj_set_style_bg_color(field, lv_color_hex(0x101214), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(field, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(field, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(field, lv_color_hex(0x303438), LV_PART_MAIN);
+    lv_obj_set_style_radius(field, 3, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(field, 14, LV_PART_MAIN);
+    lv_obj_clear_flag(field, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(field, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(field, system_field_long_press_cb, LV_EVENT_LONG_PRESSED,
                         (void *)(intptr_t)(SYSTEM_FIELD_TOURING * 16 + slot));
 
     lv_obj_t *accent = lv_obj_create(field);
     lv_obj_add_flag(accent, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_size(accent, 46, 2);
-    lv_obj_align(accent, align == LV_TEXT_ALIGN_LEFT ? LV_ALIGN_TOP_LEFT : LV_ALIGN_TOP_RIGHT, 0, 4);
-    lv_obj_set_style_bg_color(accent, TOURING_BLUE, LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_color(accent, lv_color_hex(0x233d58), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_dir(accent, align == LV_TEXT_ALIGN_LEFT ? LV_GRAD_DIR_HOR : LV_GRAD_DIR_HOR,
-                                  LV_PART_MAIN);
+    lv_obj_set_size(accent, LV_PCT(100), 2);
+    lv_obj_align(accent, LV_ALIGN_TOP_MID, 0, 0);
+    lv_obj_set_style_bg_color(accent, lv_color_hex(0x6e7479), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(accent, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(accent, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(accent, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(accent, 0, LV_PART_MAIN);
     lv_obj_clear_flag(accent, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(accent, LV_OBJ_FLAG_CLICKABLE);
 
-    s_tour_field_label[slot] = make_label(field, "", DASH_FONT_LABEL14, lv_color_hex(0x8f9ba8));
+    s_tour_field_label[slot] = make_label(field, "", DASH_FONT_LABEL14, RALLY_TEXT_DIM);
     lv_obj_set_width(s_tour_field_label[slot], LV_PCT(100));
     lv_obj_set_style_text_align(s_tour_field_label[slot], align, LV_PART_MAIN);
-    lv_obj_set_pos(s_tour_field_label[slot], 0, 15);
+    lv_obj_set_pos(s_tour_field_label[slot], 0, 5);
     s_tour_field_val[slot] = make_label(field, "--", DASH_FONT_HAL_VALUE, C_WHITE);
     lv_obj_set_width(s_tour_field_val[slot], LV_PCT(100));
     lv_obj_set_style_text_align(s_tour_field_val[slot], align, LV_PART_MAIN);
-    lv_obj_set_pos(s_tour_field_val[slot], 0, 39);
-    s_tour_field_unit[slot] = make_label(field, "", DASH_FONT_LABEL, TOURING_BLUE);
+    lv_obj_set_pos(s_tour_field_val[slot], 0, 30);
+    s_tour_field_unit[slot] = make_label(field, "", DASH_FONT_LABEL, lv_color_hex(0xb8bdc2));
     lv_obj_set_width(s_tour_field_unit[slot], LV_PCT(100));
     lv_obj_set_style_text_align(s_tour_field_unit[slot], align, LV_PART_MAIN);
-    lv_obj_set_pos(s_tour_field_unit[slot], 0, 83);
+    lv_obj_set_pos(s_tour_field_unit[slot], 0, 84);
     system_field_refresh_identity(SYSTEM_FIELD_TOURING, slot);
     return field;
 }
@@ -6657,152 +6690,110 @@ static lv_obj_t *build_theme_touring(lv_obj_t *cluster)
 {
     lv_obj_t *root = make_plain_container(cluster);
     lv_obj_set_size(root, LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_color(root, lv_color_hex(0x05070a), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_color(root, lv_color_hex(0x101a24), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_dir(root, LV_GRAD_DIR_VER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(root, lv_color_hex(0x08090a), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(root, LV_OPA_COVER, LV_PART_MAIN);
 
     lv_obj_t *cockpit = lv_obj_create(root);
     lv_obj_add_flag(cockpit, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(cockpit, 36, 46);
-    lv_obj_set_size(cockpit, 952, 502);
-    lv_obj_set_style_bg_color(cockpit, lv_color_hex(0x0a1017), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_color(cockpit, lv_color_hex(0x172534), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_dir(cockpit, LV_GRAD_DIR_VER, LV_PART_MAIN);
+    lv_obj_set_pos(cockpit, 16, 10);
+    lv_obj_set_size(cockpit, 992, 570);
+    lv_obj_set_style_bg_color(cockpit, lv_color_hex(0x0b0d0f), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(cockpit, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(cockpit, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(cockpit, lv_color_hex(0x314354), LV_PART_MAIN);
-    lv_obj_set_style_radius(cockpit, 34, LV_PART_MAIN);
-    lv_obj_set_style_shadow_width(cockpit, 28, LV_PART_MAIN);
-    lv_obj_set_style_shadow_color(cockpit, lv_color_black(), LV_PART_MAIN);
-    lv_obj_set_style_shadow_opa(cockpit, LV_OPA_70, LV_PART_MAIN);
+    lv_obj_set_style_border_color(cockpit, lv_color_hex(0x292d30), LV_PART_MAIN);
+    lv_obj_set_style_radius(cockpit, 8, LV_PART_MAIN);
     lv_obj_clear_flag(cockpit, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(cockpit, LV_OBJ_FLAG_CLICKABLE);
 
-    lv_obj_t *halo = lv_obj_create(root);
-    lv_obj_add_flag(halo, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(halo, 312, 57);
-    lv_obj_set_size(halo, 400, 400);
-    lv_obj_set_style_bg_color(halo, lv_color_hex(0x142638), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_color(halo, lv_color_hex(0x06090d), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_dir(halo, LV_GRAD_DIR_VER, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(halo, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(halo, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(halo, lv_color_hex(0x526474), LV_PART_MAIN);
-    lv_obj_set_style_radius(halo, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_set_style_shadow_width(halo, 32, LV_PART_MAIN);
-    lv_obj_set_style_shadow_spread(halo, 4, LV_PART_MAIN);
-    lv_obj_set_style_shadow_color(halo, lv_color_hex(0x06111d), LV_PART_MAIN);
-    lv_obj_set_style_shadow_opa(halo, LV_OPA_80, LV_PART_MAIN);
-    lv_obj_clear_flag(halo, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(halo, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *title = make_label(root, "RALLY STAGE", DASH_FONT_LABEL14, RALLY_TEXT_DIM);
+    lv_obj_add_flag(title, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 26);
 
-    lv_obj_t *dial = lv_obj_create(root);
-    lv_obj_add_flag(dial, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(dial, 337, 82);
-    lv_obj_set_size(dial, 350, 350);
-    lv_obj_set_style_bg_color(dial, lv_color_hex(0x05080c), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_color(dial, lv_color_hex(0x172432), LV_PART_MAIN);
-    lv_obj_set_style_bg_grad_dir(dial, LV_GRAD_DIR_VER, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(dial, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(dial, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(dial, lv_color_hex(0x22384c), LV_PART_MAIN);
-    lv_obj_set_style_radius(dial, LV_RADIUS_CIRCLE, LV_PART_MAIN);
-    lv_obj_clear_flag(dial, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(dial, LV_OBJ_FLAG_CLICKABLE);
+    for (int pair = 0; pair < TOUR_SEG_COUNT / 2; ++pair) {
+        lv_coord_t y = 118 - pair * 7;
+        lv_coord_t left_x = 62 + pair * 44;
+        lv_coord_t right_x = 930 - pair * 44;
+        for (int side = 0; side < 2; ++side) {
+            int index = pair * 2 + side;
+            lv_obj_t *light = lv_obj_create(root);
+            s_tour_segments[index] = light;
+            lv_obj_add_flag(light, LV_OBJ_FLAG_IGNORE_LAYOUT);
+            lv_obj_set_pos(light, side == 0 ? left_x : right_x, y);
+            lv_obj_set_size(light, 32, 32);
+            lv_obj_set_style_bg_color(light, RALLY_LIGHT_OFF, LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(light, LV_OPA_COVER, LV_PART_MAIN);
+            lv_obj_set_style_border_width(light, 2, LV_PART_MAIN);
+            lv_obj_set_style_border_color(light, lv_color_hex(0x42474b), LV_PART_MAIN);
+            lv_obj_set_style_radius(light, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+            lv_obj_set_style_shadow_width(light, 16, LV_PART_MAIN);
+            lv_obj_set_style_shadow_spread(light, 1, LV_PART_MAIN);
+            lv_obj_set_style_shadow_opa(light, LV_OPA_TRANSP, LV_PART_MAIN);
+            lv_obj_clear_flag(light, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        }
+    }
 
-    s_tour_rpm_arc = lv_arc_create(root);
-    lv_obj_add_flag(s_tour_rpm_arc, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(s_tour_rpm_arc, 350, 95);
-    lv_obj_set_size(s_tour_rpm_arc, 324, 324);
-    lv_arc_set_bg_angles(s_tour_rpm_arc, 128, 52);
-    lv_arc_set_range(s_tour_rpm_arc, 0, MAXRPM);
-    lv_arc_set_value(s_tour_rpm_arc, 0);
-    lv_obj_remove_style(s_tour_rpm_arc, NULL, LV_PART_KNOB);
-    lv_obj_set_style_arc_width(s_tour_rpm_arc, 9, LV_PART_MAIN);
-    lv_obj_set_style_arc_color(s_tour_rpm_arc, lv_color_hex(0x263746), LV_PART_MAIN);
-    lv_obj_set_style_arc_opa(s_tour_rpm_arc, LV_OPA_70, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(s_tour_rpm_arc, 9, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(s_tour_rpm_arc, TOURING_BLUE, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_rounded(s_tour_rpm_arc, true, LV_PART_INDICATOR);
-    lv_obj_clear_flag(s_tour_rpm_arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *rpm_caption = make_label(root, "ENGINE RPM", DASH_FONT_LABEL14, RALLY_TEXT_DIM);
+    lv_obj_add_flag(rpm_caption, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_width(rpm_caption, 440);
+    lv_obj_set_style_text_align(rpm_caption, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_pos(rpm_caption, 42, 180);
+    s_tour_rpm_val = make_label(root, "0", DASH_FONT_SPEED, C_WHITE);
+    lv_obj_add_flag(s_tour_rpm_val, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_width(s_tour_rpm_val, 440);
+    lv_obj_set_style_text_align(s_tour_rpm_val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_pos(s_tour_rpm_val, 42, 224);
 
-    lv_obj_t *speed_caption = make_label(root, "CURRENT SPEED", DASH_FONT_LABEL14, lv_color_hex(0x7f91a2));
+    lv_obj_t *divider = lv_obj_create(root);
+    lv_obj_add_flag(divider, LV_OBJ_FLAG_IGNORE_LAYOUT);
+    lv_obj_set_pos(divider, 511, 182);
+    lv_obj_set_size(divider, 2, 132);
+    lv_obj_set_style_bg_color(divider, lv_color_hex(0x34383b), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(divider, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(divider, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(divider, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *speed_caption = make_label(root, "ROAD SPEED", DASH_FONT_LABEL14, RALLY_TEXT_DIM);
     lv_obj_add_flag(speed_caption, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_width(speed_caption, 300);
+    lv_obj_set_width(speed_caption, 440);
     lv_obj_set_style_text_align(speed_caption, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(speed_caption, 362, 165);
+    lv_obj_set_pos(speed_caption, 542, 180);
     s_tour_speed_val = make_label(root, "0", DASH_FONT_SPEED, C_WHITE);
     lv_obj_add_flag(s_tour_speed_val, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_width(s_tour_speed_val, 300);
+    lv_obj_set_width(s_tour_speed_val, 440);
     lv_obj_set_style_text_align(s_tour_speed_val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(s_tour_speed_val, 362, 201);
-    s_tour_speed_unit = make_label(root, "MPH", DASH_FONT_LABEL14, TOURING_BLUE);
+    lv_obj_set_pos(s_tour_speed_val, 542, 224);
+    s_tour_speed_unit = make_label(root, "MPH", DASH_FONT_LABEL14, lv_color_hex(0xb8bdc2));
     lv_obj_add_flag(s_tour_speed_unit, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_width(s_tour_speed_unit, 300);
+    lv_obj_set_width(s_tour_speed_unit, 440);
     lv_obj_set_style_text_align(s_tour_speed_unit, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(s_tour_speed_unit, 362, 263);
+    lv_obj_set_pos(s_tour_speed_unit, 542, 282);
 
-    lv_obj_t *gear_caption = make_label(root, "GEAR", DASH_FONT_LABEL, lv_color_hex(0x718292));
-    lv_obj_add_flag(gear_caption, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(gear_caption, 492, 314);
-    s_tour_gear_val = make_label(root, "N", DASH_FONT_GEAR, C_WHITE);
-    lv_obj_add_flag(s_tour_gear_val, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_width(s_tour_gear_val, 100);
-    lv_obj_set_style_text_align(s_tour_gear_val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(s_tour_gear_val, 462, 329);
-
-    lv_obj_t *rpm_caption = make_label(root, "RPM", DASH_FONT_LABEL, lv_color_hex(0x718292));
-    lv_obj_add_flag(rpm_caption, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(rpm_caption, 488, 127);
-    s_tour_rpm_val = make_label(root, "0", DASH_FONT_TILEVAL, C_WHITE);
-    lv_obj_add_flag(s_tour_rpm_val, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_width(s_tour_rpm_val, 150);
-    lv_obj_set_style_text_align(s_tour_rpm_val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(s_tour_rpm_val, 437, 136);
-
-    touring_make_field(root, 0, 77, 148, LV_TEXT_ALIGN_LEFT);
-    touring_make_field(root, 1, 77, 330, LV_TEXT_ALIGN_LEFT);
-    touring_make_field(root, 2, 757, 148, LV_TEXT_ALIGN_RIGHT);
-    touring_make_field(root, 3, 757, 330, LV_TEXT_ALIGN_RIGHT);
+    touring_make_field(root, 0, 30, 352, LV_TEXT_ALIGN_LEFT);
+    touring_make_field(root, 1, 276, 352, LV_TEXT_ALIGN_LEFT);
+    touring_make_field(root, 2, 522, 352, LV_TEXT_ALIGN_RIGHT);
+    touring_make_field(root, 3, 768, 352, LV_TEXT_ALIGN_RIGHT);
 
     lv_obj_t *odo_caption = make_label(root, "ODO", DASH_FONT_LABEL, lv_color_hex(0x81909c));
     lv_obj_add_flag(odo_caption, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(odo_caption, 403, 493);
+    lv_obj_set_pos(odo_caption, 30, 516);
     s_tour_odo_val = make_label(root, "0 MI", DASH_FONT_LABEL14, C_WHITE);
     lv_obj_add_flag(s_tour_odo_val, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(s_tour_odo_val, 438, 489);
-
-    lv_obj_t *fuel_caption = make_label(root, "FUEL", DASH_FONT_LABEL, lv_color_hex(0x81909c));
-    lv_obj_add_flag(fuel_caption, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(fuel_caption, 403, 526);
-    s_tour_fuel_bar = lv_bar_create(root);
-    lv_obj_add_flag(s_tour_fuel_bar, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_pos(s_tour_fuel_bar, 449, 530);
-    lv_obj_set_size(s_tour_fuel_bar, 166, 6);
-    lv_bar_set_range(s_tour_fuel_bar, 0, 100);
-    lv_bar_set_value(s_tour_fuel_bar, 0, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(s_tour_fuel_bar, lv_color_hex(0x26313d), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(s_tour_fuel_bar, TOURING_BLUE, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(s_tour_fuel_bar, 3, LV_PART_MAIN);
-    lv_obj_set_style_radius(s_tour_fuel_bar, 3, LV_PART_INDICATOR);
+    lv_obj_set_pos(s_tour_odo_val, 74, 512);
 
     build_settings_button(root);
     lv_obj_t *controls = lv_obj_get_child(root, lv_obj_get_child_cnt(root) - 1);
     lv_obj_add_flag(controls, LV_OBJ_FLAG_IGNORE_LAYOUT);
-    lv_obj_set_size(controls, 92, 40);
+    lv_obj_set_size(controls, DASH_CONTROL_ROW_WIDTH, 40);
     lv_obj_align(controls, LV_ALIGN_BOTTOM_RIGHT, -24, -16);
     return root;
 }
 
 static void update_theme_touring(const honda_dash_data_t *data, int rpm, bool limiter_hit, float fuel)
 {
+    (void)limiter_hit;
     static int last_rpm = -1;
-    static bool last_limiter = false;
     static int last_speed = -1;
-    static int last_gear = -99;
     static int last_metric = -1;
-    static int last_fuel = -1;
     static long last_odometer = -1;
     static int last_odometer_metric = -1;
     int metric = (dash_config_get_temperature_celsius() ? 1 : 0) |
@@ -6810,25 +6801,13 @@ static void update_theme_touring(const honda_dash_data_t *data, int rpm, bool li
                  (dash_config_get_speed_kph() ? 4 : 0) |
                  (dash_config_get_distance_km() ? 8 : 0);
     int speed = (int)(data->speed_mph + 0.5f);
-    int fuel_int = (int)(fuel + 0.5f);
     if (rpm != last_rpm) {
         last_rpm = rpm;
-        lv_arc_set_value(s_tour_rpm_arc, rpm);
         lv_label_set_text_fmt(s_tour_rpm_val, "%d", rpm);
-    }
-    if (limiter_hit != last_limiter) {
-        last_limiter = limiter_hit;
-        lv_obj_set_style_arc_color(s_tour_rpm_arc, limiter_hit ? C_RED : TOURING_BLUE,
-                                   LV_PART_INDICATOR);
     }
     if (speed != last_speed) {
         last_speed = speed;
         lv_label_set_text_fmt(s_tour_speed_val, "%d", speed);
-    }
-    if (data->gear != last_gear) {
-        last_gear = data->gear;
-        if (data->gear <= 0) lv_label_set_text(s_tour_gear_val, "N");
-        else lv_label_set_text_fmt(s_tour_gear_val, "%d", data->gear);
     }
     if (metric != last_metric) {
         last_metric = metric;
@@ -6837,11 +6816,6 @@ static void update_theme_touring(const honda_dash_data_t *data, int rpm, bool li
             system_field_refresh_identity(SYSTEM_FIELD_TOURING, slot);
         }
     }
-    if (fuel_int != last_fuel) {
-        last_fuel = fuel_int;
-        lv_bar_set_value(s_tour_fuel_bar, fuel_int, LV_ANIM_OFF);
-    }
-
     double distance = data->odo_miles;
     if (dash_config_get_distance_km()) distance *= 1.60934;
     long odometer = (long)(distance + 0.5);
@@ -6957,7 +6931,6 @@ lv_obj_t *honda_dash_ui_create(lv_obj_t *parent)
     s_theme_touring = build_theme_touring(cluster);
     lv_obj_add_flag(s_theme_touring, LV_OBJ_FLAG_HIDDEN);
 
-    build_shift_light_strip(cluster);
     build_critical_warning_banner(cluster);
     build_settings_button(telltale_strip);
     build_settings_overlay(cluster);
@@ -7184,6 +7157,8 @@ void honda_dash_ui_update(const honda_dash_data_t *data)
 {
     if (!data) return;
 
+    if (s_active_theme < 100) s_shift_light_last_theme = -1;
+
     s_warning_data = *data;
     s_warning_have_data = true;
     record_buttons_refresh();
@@ -7225,7 +7200,7 @@ void honda_dash_ui_update(const honda_dash_data_t *data)
 
     /* only the currently-visible theme's widgets get touched */
 #if HONDA_DASH_PROFILE_THEME_UPDATES
-    static const char *s_theme_names[6] = {"MackoDash V1", "Race LCD", "HalDash", "Endurance", "Touring", "SD Runtime"};
+    static const char *s_theme_names[6] = {"MackoDash V1", "Race LCD", "HalDash", "Endurance", "Rally Stage", "SD Runtime"};
     static uint32_t s_profile_tick[6] = {0};
     int64_t t0 = esp_timer_get_time();
 #endif
@@ -7276,7 +7251,7 @@ static void update_theme_modern(const honda_dash_data_t *data, int rpm, bool lim
         lv_obj_set_style_text_color(s_rpm_val_label, rpm >= 7000 ? C_RED : C_WHITE, LV_PART_MAIN);
 
         bool shift_on = dash_config_get_shift_light_enabled() &&
-                rpm >= dash_config_get_shift_target_rpm(data->gear);
+                rpm >= dash_config_get_shift_stage_rpm(2);
 
         lv_obj_set_style_bg_color(s_tag_vtec, vtec_on ? C_GREEN_DEEP : C_PANEL, LV_PART_MAIN);
         lv_obj_set_style_border_color(s_tag_vtec, vtec_on ? C_GREEN : C_LINE, LV_PART_MAIN);

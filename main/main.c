@@ -116,8 +116,8 @@ void gauge_timer(lv_timer_t * t) {
         d = startup_base;
         d.rpm = (uint16_t)(RPM_MIN + p * (float)(RPM_MAX - RPM_MIN));
 
-        honda_dash_ui_update_shift_lights(d.rpm, d.gear);
         honda_dash_ui_update(&d);
+        honda_dash_ui_update_shift_lights(d.rpm);
 
         if (elapsed_ms >= STARTUP_SWEEP_DURATION_MS)
             startup_sweep_done = true;
@@ -186,8 +186,6 @@ void gauge_timer(lv_timer_t * t) {
     float raw_shift_rpm = dash_sim_is_enabled() ? d.rpm : can_data.rpm;
     if (raw_shift_rpm < 0.0f) raw_shift_rpm = 0.0f;
     if (raw_shift_rpm > 65535.0f) raw_shift_rpm = 65535.0f;
-    honda_dash_ui_update_shift_lights((uint16_t)raw_shift_rpm, d.gear);
-
     bool recording_changed = data_logger_auto_update(&d, can_live && !dash_sim_is_enabled());
     data_logger_submit(&d);
     session_peaks_update(&d, drivetrain_live);
@@ -199,6 +197,7 @@ void gauge_timer(lv_timer_t * t) {
         g_last_ui_data = d;
         g_last_ui_valid = true;
     }
+    honda_dash_ui_update_shift_lights((uint16_t)raw_shift_rpm);
 }
 
 //------------------------------------------------------------------------//
