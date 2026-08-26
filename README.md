@@ -62,6 +62,7 @@ Settings, theme selection, odometer data, and trip data are retained after power
 - Reassignable gauge channels on built-in themes
 - Independent speed, temperature, pressure, and distance units
 - Configurable VTEC point, redline, and warning thresholds
+- Three-stage shift-light strip with configurable RPM, colors, brightness, and per-gear shift targets
 - Compact prioritized critical-warning banner
 - Automatic SD logging when the engine is running, with manual REC control
 - Long-press Settings for Day, Dim, or Night brightness

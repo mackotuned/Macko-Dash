@@ -17,6 +17,9 @@
 #define KEY_SHOW_SIM     "cfg_show_sim"
 #define KEY_VALUE_SMOOTH "cfg_smooth"
 #define KEY_AUTO_RECORD  "cfg_auto_rec"
+#define KEY_SHIFT_ENABLE "cfg_shift_en"
+#define KEY_SHIFT_BRIGHT "cfg_shift_br"
+#define KEY_SHIFT_GEAR   "cfg_shift_gr"
 
 #define DEFAULT_VTEC_RPM    5600
 #define DEFAULT_REDLINE_RPM 8400
@@ -25,6 +28,27 @@
 #define REDLINE_RPM_MIN     6000
 #define REDLINE_RPM_MAX     11000
 #define DEFAULT_BRIGHTNESS 95
+#define SHIFT_RPM_MIN       3000
+#define SHIFT_RPM_MAX       11000
+#define SHIFT_STAGE_GAP     100
+
+static const char *const SHIFT_STAGE_RPM_KEYS[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
+    "cfg_shift_s1", "cfg_shift_s2", "cfg_shift_s3",
+};
+static const char *const SHIFT_STAGE_COLOR_KEYS[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
+    "cfg_sh_c1", "cfg_sh_c2", "cfg_sh_c3",
+};
+static const char *const SHIFT_GEAR_RPM_KEYS[DASH_CONFIG_SHIFT_GEAR_COUNT] = {
+    "cfg_shift_g1", "cfg_shift_g2", "cfg_shift_g3",
+    "cfg_shift_g4", "cfg_shift_g5", "cfg_shift_g6",
+};
+static const int SHIFT_STAGE_RPM_DEFAULTS[DASH_CONFIG_SHIFT_STAGE_COUNT] = {6500, 7400, 8200};
+static const dash_config_shift_color_t SHIFT_STAGE_COLOR_DEFAULTS[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
+    DASH_CONFIG_SHIFT_COLOR_GREEN, DASH_CONFIG_SHIFT_COLOR_YELLOW, DASH_CONFIG_SHIFT_COLOR_RED,
+};
+static const int SHIFT_GEAR_RPM_DEFAULTS[DASH_CONFIG_SHIFT_GEAR_COUNT] = {
+    8200, 8200, 8200, 8200, 8200, 8200,
+};
 
 static const char *const THRESHOLD_KEYS[DASH_CONFIG_THRESHOLD_COUNT] = {
     "thr_ect_y", "thr_ect", "thr_iat_y", "thr_iat", "thr_afrr_y", "thr_afrr",
@@ -84,6 +108,14 @@ static int s_brightness = DEFAULT_BRIGHTNESS;
 static bool s_show_sim_button = false;
 static bool s_value_smoothing = false;
 static bool s_auto_record = false;
+static bool s_shift_light_enabled = true;
+static int s_shift_stage_rpm[DASH_CONFIG_SHIFT_STAGE_COUNT] = {6500, 7400, 8200};
+static dash_config_shift_color_t s_shift_stage_color[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
+    DASH_CONFIG_SHIFT_COLOR_GREEN, DASH_CONFIG_SHIFT_COLOR_YELLOW, DASH_CONFIG_SHIFT_COLOR_RED,
+};
+static int s_shift_light_brightness = 100;
+static bool s_shift_gear_enabled = false;
+static int s_shift_gear_rpm[DASH_CONFIG_SHIFT_GEAR_COUNT] = {8200, 8200, 8200, 8200, 8200, 8200};
 static int s_hal_field_channels[DASH_CONFIG_HAL_FIELD_COUNT] = {4, 2, 0, 1, 7, 10, 5, 6};
 static int s_modern_field_channels[DASH_CONFIG_MODERN_FIELD_COUNT] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 static int s_race_field_channels[DASH_CONFIG_RACE_FIELD_COUNT] = {0, 1, 2, 4, 10, 5, 6};
@@ -140,6 +172,27 @@ void dash_config_init(void)
     }
     if (nvs_get_i32(h, KEY_AUTO_RECORD, &val) == ESP_OK) {
         s_auto_record = (val != 0);
+    }
+    if (nvs_get_i32(h, KEY_SHIFT_ENABLE, &val) == ESP_OK) s_shift_light_enabled = (val != 0);
+    if (nvs_get_i32(h, KEY_SHIFT_BRIGHT, &val) == ESP_OK && val >= 20 && val <= 100) {
+        s_shift_light_brightness = (int)val;
+    }
+    if (nvs_get_i32(h, KEY_SHIFT_GEAR, &val) == ESP_OK) s_shift_gear_enabled = (val != 0);
+    for (int i = 0; i < DASH_CONFIG_SHIFT_STAGE_COUNT; ++i) {
+        if (nvs_get_i32(h, SHIFT_STAGE_RPM_KEYS[i], &val) == ESP_OK &&
+                val >= SHIFT_RPM_MIN && val <= SHIFT_RPM_MAX) {
+            s_shift_stage_rpm[i] = (int)val;
+        }
+        if (nvs_get_i32(h, SHIFT_STAGE_COLOR_KEYS[i], &val) == ESP_OK &&
+                val >= 0 && val < DASH_CONFIG_SHIFT_COLOR_COUNT) {
+            s_shift_stage_color[i] = (dash_config_shift_color_t)val;
+        }
+    }
+    for (int i = 0; i < DASH_CONFIG_SHIFT_GEAR_COUNT; ++i) {
+        if (nvs_get_i32(h, SHIFT_GEAR_RPM_KEYS[i], &val) == ESP_OK &&
+                val >= SHIFT_RPM_MIN && val <= SHIFT_RPM_MAX) {
+            s_shift_gear_rpm[i] = (int)val;
+        }
     }
     for (int i = 0; i < DASH_CONFIG_THRESHOLD_COUNT; ++i) {
         if (nvs_get_i32(h, THRESHOLD_KEYS[i], &val) == ESP_OK &&
@@ -299,6 +352,105 @@ void dash_config_set_redline_rpm(int rpm)
     nvs_set_i32(h, KEY_REDLINE_RPM, (int32_t)s_redline_rpm);
     nvs_commit(h);
     nvs_close(h);
+}
+
+static void persist_i32(const char *key, int value)
+{
+    nvs_handle_t h;
+    if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_i32(h, key, value);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+bool dash_config_get_shift_light_enabled(void)
+{
+    return s_shift_light_enabled;
+}
+
+void dash_config_set_shift_light_enabled(bool enabled)
+{
+    s_shift_light_enabled = enabled;
+    persist_i32(KEY_SHIFT_ENABLE, enabled ? 1 : 0);
+}
+
+int dash_config_get_shift_stage_rpm(int stage)
+{
+    if (stage < 0 || stage >= DASH_CONFIG_SHIFT_STAGE_COUNT) return s_shift_stage_rpm[2];
+    return s_shift_stage_rpm[stage];
+}
+
+void dash_config_set_shift_stage_rpm(int stage, int rpm)
+{
+    if (stage < 0 || stage >= DASH_CONFIG_SHIFT_STAGE_COUNT) return;
+    int minimum = stage == 0 ? SHIFT_RPM_MIN : s_shift_stage_rpm[stage - 1] + SHIFT_STAGE_GAP;
+    int maximum = stage == DASH_CONFIG_SHIFT_STAGE_COUNT - 1 ? SHIFT_RPM_MAX :
+                  s_shift_stage_rpm[stage + 1] - SHIFT_STAGE_GAP;
+    if (rpm < minimum) rpm = minimum;
+    if (rpm > maximum) rpm = maximum;
+    s_shift_stage_rpm[stage] = rpm;
+    persist_i32(SHIFT_STAGE_RPM_KEYS[stage], rpm);
+}
+
+dash_config_shift_color_t dash_config_get_shift_stage_color(int stage)
+{
+    if (stage < 0 || stage >= DASH_CONFIG_SHIFT_STAGE_COUNT) return DASH_CONFIG_SHIFT_COLOR_RED;
+    return s_shift_stage_color[stage];
+}
+
+void dash_config_set_shift_stage_color(int stage, dash_config_shift_color_t color)
+{
+    if (stage < 0 || stage >= DASH_CONFIG_SHIFT_STAGE_COUNT ||
+            color < 0 || color >= DASH_CONFIG_SHIFT_COLOR_COUNT) return;
+    s_shift_stage_color[stage] = color;
+    persist_i32(SHIFT_STAGE_COLOR_KEYS[stage], (int)color);
+}
+
+int dash_config_get_shift_light_brightness(void)
+{
+    return s_shift_light_brightness;
+}
+
+void dash_config_set_shift_light_brightness(int brightness)
+{
+    if (brightness < 20) brightness = 20;
+    if (brightness > 100) brightness = 100;
+    s_shift_light_brightness = brightness;
+    persist_i32(KEY_SHIFT_BRIGHT, brightness);
+}
+
+bool dash_config_get_shift_gear_enabled(void)
+{
+    return s_shift_gear_enabled;
+}
+
+void dash_config_set_shift_gear_enabled(bool enabled)
+{
+    s_shift_gear_enabled = enabled;
+    persist_i32(KEY_SHIFT_GEAR, enabled ? 1 : 0);
+}
+
+int dash_config_get_shift_gear_rpm(int gear)
+{
+    if (gear < 1 || gear > DASH_CONFIG_SHIFT_GEAR_COUNT) return s_shift_stage_rpm[2];
+    return s_shift_gear_rpm[gear - 1];
+}
+
+int dash_config_get_shift_target_rpm(int gear)
+{
+    if (s_shift_gear_enabled && gear >= 1 && gear <= DASH_CONFIG_SHIFT_GEAR_COUNT) {
+        return s_shift_gear_rpm[gear - 1];
+    }
+    return s_shift_stage_rpm[2];
+}
+
+void dash_config_set_shift_gear_rpm(int gear, int rpm)
+{
+    if (gear < 1 || gear > DASH_CONFIG_SHIFT_GEAR_COUNT) return;
+    if (rpm < SHIFT_RPM_MIN) rpm = SHIFT_RPM_MIN;
+    if (rpm > SHIFT_RPM_MAX) rpm = SHIFT_RPM_MAX;
+    s_shift_gear_rpm[gear - 1] = rpm;
+    persist_i32(SHIFT_GEAR_RPM_KEYS[gear - 1], rpm);
 }
 
 int dash_config_get_brightness(void)
@@ -591,6 +743,12 @@ void dash_config_factory_reset(void)
     s_show_sim_button = false;
     s_value_smoothing = false;
     s_auto_record = false;
+    s_shift_light_enabled = true;
+    memcpy(s_shift_stage_rpm, SHIFT_STAGE_RPM_DEFAULTS, sizeof(s_shift_stage_rpm));
+    memcpy(s_shift_stage_color, SHIFT_STAGE_COLOR_DEFAULTS, sizeof(s_shift_stage_color));
+    s_shift_light_brightness = 100;
+    s_shift_gear_enabled = false;
+    memcpy(s_shift_gear_rpm, SHIFT_GEAR_RPM_DEFAULTS, sizeof(s_shift_gear_rpm));
     memcpy(s_hal_field_channels, HAL_FIELD_DEFAULTS, sizeof(s_hal_field_channels));
     memcpy(s_modern_field_channels, MODERN_FIELD_DEFAULTS, sizeof(s_modern_field_channels));
     memcpy(s_race_field_channels, RACE_FIELD_DEFAULTS, sizeof(s_race_field_channels));
@@ -615,6 +773,16 @@ void dash_config_factory_reset(void)
     nvs_set_i32(h, KEY_SHOW_SIM, 0);
     nvs_set_i32(h, KEY_VALUE_SMOOTH, 0);
     nvs_set_i32(h, KEY_AUTO_RECORD, 0);
+    nvs_set_i32(h, KEY_SHIFT_ENABLE, 1);
+    nvs_set_i32(h, KEY_SHIFT_BRIGHT, s_shift_light_brightness);
+    nvs_set_i32(h, KEY_SHIFT_GEAR, 0);
+    for (int i = 0; i < DASH_CONFIG_SHIFT_STAGE_COUNT; ++i) {
+        nvs_set_i32(h, SHIFT_STAGE_RPM_KEYS[i], s_shift_stage_rpm[i]);
+        nvs_set_i32(h, SHIFT_STAGE_COLOR_KEYS[i], (int32_t)s_shift_stage_color[i]);
+    }
+    for (int i = 0; i < DASH_CONFIG_SHIFT_GEAR_COUNT; ++i) {
+        nvs_set_i32(h, SHIFT_GEAR_RPM_KEYS[i], s_shift_gear_rpm[i]);
+    }
     for (int i = 0; i < DASH_CONFIG_HAL_FIELD_COUNT; ++i) {
         nvs_set_i32(h, HAL_FIELD_KEYS[i], (int32_t)s_hal_field_channels[i]);
     }

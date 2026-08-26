@@ -109,6 +109,10 @@ lv_obj_t *honda_dash_ui_create(lv_obj_t *parent);
  * cluster and keeps LVGL's redraw load sane. */
 void honda_dash_ui_update(const honda_dash_data_t *data);
 
+/* Updates the global shift-light strip from raw drivetrain data. This path
+ * is intentionally independent from the heavier theme refresh. */
+void honda_dash_ui_update_shift_lights(uint16_t rpm, int8_t gear);
+
 #ifdef __cplusplus
 }
 #endif

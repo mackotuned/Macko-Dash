@@ -48,6 +48,35 @@ int  dash_config_get_redline_rpm(void);
 void dash_config_set_vtec_rpm(int rpm);
 void dash_config_set_redline_rpm(int rpm);
 
+#define DASH_CONFIG_SHIFT_STAGE_COUNT 3
+#define DASH_CONFIG_SHIFT_GEAR_COUNT 6
+
+typedef enum {
+   DASH_CONFIG_SHIFT_COLOR_GREEN = 0,
+   DASH_CONFIG_SHIFT_COLOR_YELLOW,
+   DASH_CONFIG_SHIFT_COLOR_AMBER,
+   DASH_CONFIG_SHIFT_COLOR_RED,
+   DASH_CONFIG_SHIFT_COLOR_BLUE,
+   DASH_CONFIG_SHIFT_COLOR_CYAN,
+   DASH_CONFIG_SHIFT_COLOR_WHITE,
+   DASH_CONFIG_SHIFT_COLOR_MAGENTA,
+   DASH_CONFIG_SHIFT_COLOR_COUNT,
+} dash_config_shift_color_t;
+
+bool dash_config_get_shift_light_enabled(void);
+void dash_config_set_shift_light_enabled(bool enabled);
+int dash_config_get_shift_stage_rpm(int stage);
+void dash_config_set_shift_stage_rpm(int stage, int rpm);
+dash_config_shift_color_t dash_config_get_shift_stage_color(int stage);
+void dash_config_set_shift_stage_color(int stage, dash_config_shift_color_t color);
+int dash_config_get_shift_light_brightness(void);
+void dash_config_set_shift_light_brightness(int brightness);
+bool dash_config_get_shift_gear_enabled(void);
+void dash_config_set_shift_gear_enabled(bool enabled);
+int dash_config_get_shift_gear_rpm(int gear);
+void dash_config_set_shift_gear_rpm(int gear, int rpm);
+int dash_config_get_shift_target_rpm(int gear);
+
 int dash_config_get_brightness(void);
 void dash_config_set_brightness(int brightness);
 bool dash_config_get_show_sim_button(void);

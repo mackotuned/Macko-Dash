@@ -68,5 +68,7 @@ DASHBOARD QUICK CONTROLS
 - Hold Settings to choose Day, Dim, or Night brightness.
 - Enable Auto Record under Settings > System > Driving Logs. Recording starts after the
   engine is running and stops after a 30-second engine-off grace period.
+- Configure shift-light stages, colors, brightness, and optional gear targets
+  under Settings > Engine.
 - Critical engine warnings appear in a compact banner without covering gauges.
 - Simulation is hidden by default and can be enabled under Display for setup.
