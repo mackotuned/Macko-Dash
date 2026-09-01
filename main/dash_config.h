@@ -77,10 +77,34 @@ int dash_config_get_brightness(void);
 void dash_config_set_brightness(int brightness);
 bool dash_config_get_show_sim_button(void);
 void dash_config_set_show_sim_button(bool show);
+
+typedef enum {
+   DASH_CONFIG_SMOOTHING_OFF = 0,
+   DASH_CONFIG_SMOOTHING_LIGHT,
+   DASH_CONFIG_SMOOTHING_MEDIUM,
+   DASH_CONFIG_SMOOTHING_STRONG,
+   DASH_CONFIG_SMOOTHING_COUNT,
+} dash_config_smoothing_strength_t;
+
 bool dash_config_get_value_smoothing(void);
 void dash_config_set_value_smoothing(bool enabled);
+dash_config_smoothing_strength_t dash_config_get_smoothing_strength(void);
+void dash_config_set_smoothing_strength(dash_config_smoothing_strength_t strength);
 bool dash_config_get_auto_record(void);
 void dash_config_set_auto_record(bool enabled);
+
+typedef enum {
+   DASH_CONFIG_LOG_NAME_GENERAL = 0,
+   DASH_CONFIG_LOG_NAME_DYNO,
+   DASH_CONFIG_LOG_NAME_TUNE,
+   DASH_CONFIG_LOG_NAME_RACE,
+   DASH_CONFIG_LOG_NAME_TEST,
+   DASH_CONFIG_LOG_NAME_COUNT,
+} dash_config_log_name_t;
+
+dash_config_log_name_t dash_config_get_log_name(void);
+void dash_config_set_log_name(dash_config_log_name_t name);
+const char *dash_config_get_log_prefix(void);
 
 #define DASH_CONFIG_HAL_FIELD_COUNT 8
 #define DASH_CONFIG_HAL_CHANNEL_COUNT 11

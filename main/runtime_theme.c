@@ -648,14 +648,20 @@ static void update_label(runtime_binding_t *binding, const honda_dash_data_t *da
             else snprintf(text, sizeof(text), "%d", data->gear);
             break;
         case BIND_AFR:
-        case BIND_MAP:
         case BIND_BATT:
         case BIND_KNOCK: snprintf(text, sizeof(text), "%.1f", value); break;
+        case BIND_MAP:
+            if (!dash_config_get_pressure_kpa() && value < 0.0f) value *= 2.03602f;
+            snprintf(text, sizeof(text), "%.1f", value);
+            break;
         case BIND_ODO: snprintf(text, sizeof(text), "%.1f", value); break;
         case BIND_SPEED_UNIT: snprintf(text, sizeof(text), "%s", dash_config_get_speed_kph() ? "KPH" : "MPH"); break;
         case BIND_ECT_UNIT:
         case BIND_IAT_UNIT: snprintf(text, sizeof(text), "%s", dash_config_get_temperature_celsius() ? "C" : "F"); break;
         case BIND_MAP_UNIT:
+            snprintf(text, sizeof(text), "%s", dash_config_get_pressure_kpa() ? "kPa" :
+                     (data->map_psi < 0.0f ? "inHg" : "PSI"));
+            break;
         case BIND_OIL_UNIT: snprintf(text, sizeof(text), "%s", dash_config_get_pressure_kpa() ? "kPa" : "PSI"); break;
         case BIND_FUEL_UNIT:
         case BIND_TPS_UNIT: snprintf(text, sizeof(text), "%%"); break;

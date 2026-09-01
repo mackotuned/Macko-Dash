@@ -7,11 +7,11 @@
       "id": "0x3E8",
       "signals": [
         {"name":"rpm","offset":0,"len":2,"scale":1,"endian":"big"},
-        {"name":"map","offset":2,"len":2,"scale":1,"offset_val":-100,"endian":"big"},
-        {"name":"coolant_temp","offset":4,"len":1,"scale":1,"offset_val":-50,"endian":"big"},
-        {"name":"iat","offset":5,"len":1,"scale":1,"offset_val":-50,"endian":"big"},
+        {"name":"map","offset":2,"len":2,"scale":0.145038,"offset_val":-14.5038,"endian":"big"},
+        {"name":"coolant_temp","offset":4,"len":1,"scale":1.8,"offset_val":-58,"endian":"big"},
+        {"name":"iat","offset":5,"len":1,"scale":1.8,"offset_val":-58,"endian":"big"},
         {"name":"battery_voltage","offset":6,"len":1,"scale":0.1,"endian":"big"},
-        {"name":"oil_temp","offset":7,"len":1,"scale":1,"offset_val":-50,"endian":"big"}
+        {"name":"oil_temp","offset":7,"len":1,"scale":1.8,"offset_val":-58,"endian":"big"}
       ]
     },
 
@@ -20,7 +20,7 @@
       "signals": [
         {"name":"tps","offset":0,"len":2,"scale":0.1,"endian":"big"},
         {"name":"ign_angle","offset":2,"len":2,"scale":0.1,"offset_val":-100,"endian":"big"},
-        {"name":"speed","offset":4,"len":1,"scale":0.621371,"endian":"big"},
+        {"name":"speed","offset":4,"len":1,"scale":1.0,"endian":"big"},
         {"name":"oil_pressure","offset":5,"len":1,"scale":1.45038,"endian":"big"},
         {"name":"fuel_pressure","offset":6,"len":1,"scale":1.45038,"endian":"big"},
         {"name":"ecu_temp","offset":7,"len":1,"scale":1,"offset_val":-50,"endian":"big"}

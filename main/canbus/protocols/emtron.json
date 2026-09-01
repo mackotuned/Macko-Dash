@@ -49,7 +49,7 @@
         {"name":"lambda1","offset":0,"len":2,"scale":0.001,"endian":"little"},
         {"name":"lambda2","offset":2,"len":2,"scale":0.001,"endian":"little"},
         {"name":"lambda_target","offset":4,"len":2,"scale":0.001,"endian":"little"},
-        {"name":"speed","offset":6,"len":2,"scale":0.0621371,"endian":"little"}
+        {"name":"speed","offset":6,"len":2,"scale":0.1,"endian":"little"}
       ]
     },
 

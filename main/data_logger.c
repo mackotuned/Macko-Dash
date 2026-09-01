@@ -111,9 +111,10 @@ esp_err_t data_logger_start(char *filename, size_t filename_size)
 
     char path[96];
     struct stat file_info;
+    const char *prefix = dash_config_get_log_prefix();
     unsigned index;
     for (index = 1; index <= 9999; ++index) {
-        snprintf(s_filename, sizeof(s_filename), "LOG%04u.CSV", index);
+        snprintf(s_filename, sizeof(s_filename), "%s%04u.CSV", prefix, index);
         snprintf(path, sizeof(path), "%s/%s", DATA_LOG_ROOT, s_filename);
         if (stat(path, &file_info) != 0) break;
     }
@@ -171,6 +172,22 @@ void data_logger_submit(const honda_dash_data_t *data)
 bool data_logger_is_recording(void)
 {
     return s_recording;
+}
+
+bool data_logger_get_status(char *filename, size_t filename_size, uint32_t *elapsed_seconds)
+{
+    if (!s_file_mutex || !s_recording) return false;
+    if (xSemaphoreTake(s_file_mutex, pdMS_TO_TICKS(10)) != pdTRUE) return false;
+    bool recording = s_recording;
+    if (recording) {
+        copy_filename(filename, filename_size);
+        if (elapsed_seconds) {
+            int64_t elapsed_us = esp_timer_get_time() - s_started_us;
+            *elapsed_seconds = elapsed_us > 0 ? (uint32_t)(elapsed_us / 1000000) : 0;
+        }
+    }
+    xSemaphoreGive(s_file_mutex);
+    return recording;
 }
 
 void data_logger_note_manual_control(void)

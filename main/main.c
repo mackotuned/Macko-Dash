@@ -2,6 +2,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_lv_adapter.h"
 #include "bsp/esp-bsp.h"
 #include "lvgl.h"
 #include "honda_dash_ui.h"
@@ -37,6 +38,7 @@ static TaskHandle_t s_can_startup_task = NULL;
 static TaskHandle_t s_can_rx_task = NULL;
 static TaskHandle_t s_odometer_tracking_task = NULL;
 static lv_timer_t *s_gauge_timer = NULL;
+static lv_display_t *s_display = NULL;
 static bool s_ota_mode_active = false;
 static bool s_render_paused_active = false;
 
@@ -335,6 +337,20 @@ void dashboard_runtime_set_render_paused(bool paused)
     }
 }
 
+void dashboard_runtime_get_stats(dashboard_runtime_stats_t *stats)
+{
+    if (!stats) return;
+    *stats = (dashboard_runtime_stats_t){0};
+#if CONFIG_ESP_LVGL_ADAPTER_ENABLE_FPS_STATS
+    if (s_display) (void)esp_lv_adapter_get_fps(s_display, &stats->fps);
+#endif
+    stats->lvgl_stack_margin = uxTaskGetStackHighWaterMark(NULL);
+    if (s_can_rx_task) stats->can_stack_margin = uxTaskGetStackHighWaterMark(s_can_rx_task);
+    if (s_odometer_tracking_task) {
+        stats->odometer_stack_margin = uxTaskGetStackHighWaterMark(s_odometer_tracking_task);
+    }
+}
+
 void app_main(void) {
     ESP_LOGW("main", "Reset reason: %d", (int)esp_reset_reason());
     dash_config_init();
@@ -361,6 +377,10 @@ void app_main(void) {
     } else {
         ESP_LOGI("main", "display init complete");
     }
+    s_display = disp;
+#if CONFIG_ESP_LVGL_ADAPTER_ENABLE_FPS_STATS
+    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_lv_adapter_fps_stats_enable(disp, true));
+#endif
 
     esp_err_t theme_storage_err = theme_storage_init();
     ESP_LOGI("main", "Theme storage initialization -> %s", esp_err_to_name(theme_storage_err));

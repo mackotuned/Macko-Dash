@@ -6,7 +6,9 @@
 
 **A configurable digital gauge cluster for the 9-inch Elecrow CrowPanel ESP32-P4/C6**
 
-[Get Flash Tools](https://github.com/mackotuned/MackoDash-Flash-Tools) | [Firmware Update Guide](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update) | [Custom Theme Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) | [Get Support](#support)
+**Current firmware: 2.0.1 BETA**
+
+[Get Latest Release](https://github.com/mackotuned/MackoDash-Flash-Tools/releases/latest) | [Browse Older Versions](https://github.com/mackotuned/MackoDash-Flash-Tools/releases) | [Firmware Update Guide](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update) | [Custom Theme Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) | [Get Support](#support)
 
 </div>
 
@@ -46,8 +48,8 @@ Before driving with MackoDash:
 
 1. Confirm the display and touch controls start normally.
 2. Open **Settings > ECU** and select the correct protocol, or use automatic detection.
-3. Set speed, temperature, pressure, and distance units.
-4. Set the vehicle's VTEC point, redline, and warning thresholds.
+3. Open **Settings > Display > Units** and set speed, temperature, pressure, and distance units.
+4. Open **Settings > Engine Limits** and set the vehicle's VTEC point, redline, and warning thresholds.
 5. Use a simulation mode to become familiar with the selected theme and warning behavior.
 6. With the vehicle stationary, start the engine and verify every displayed value against a trusted source.
 7. Confirm brightness, screen visibility, and visual warnings before road use.
@@ -56,7 +58,7 @@ Settings, theme selection, odometer data, and trip data are retained after power
 
 ## Dashboard Features
 
-- Five built-in themes: MackoDash V1, Race LCD, HalDash, Endurance, and Rally Stage
+- Five built-in themes: MackoDash V1, Race LCD, HalDash, HunterDash, and Rally Stage
 - Up to 30 custom themes from a FAT-formatted microSD card
 - Live RPM, speed, gear, coolant, intake air, AFR, timing, boost/MAP, battery, throttle, oil pressure, injector duty, knock, and fuel data
 - Reassignable gauge channels on built-in themes
@@ -65,8 +67,10 @@ Settings, theme selection, odometer data, and trip data are retained after power
 - Three-stage whole-bar shift colors on built-in RPM indicators, with configurable RPM, brightness, and redline flashing
 - Compact prioritized critical-warning banner
 - Automatic SD logging when the engine is running, with manual REC control
+- Selectable General, Dyno, Tune, Race, and Test log filenames
 - Long-press Settings for Day, Dim, or Night brightness
-- On-device Shortcuts & Tips guide under Settings > Display
+- Driving Logs, Session Peaks, and Achievements grouped under Settings > Logs
+- On-device diagnostics, Contact & Support QR links, Shortcuts & Tips, and Read Me guides under Settings > System
 - Persistent odometer plus Trip A and Trip B
 - Adjustable display brightness and value smoothing
 - Idle, Cruise, Full Throttle, and Redline simulation modes
@@ -88,12 +92,12 @@ Available channels depend on what the selected ECU broadcasts. Always verify cha
 
 ## Firmware Updates
 
-Use the official Windows updater from [MackoDash Flash Tools](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update).
+Use the official Windows updater from the [latest MackoDash release](https://github.com/mackotuned/MackoDash-Flash-Tools/releases/latest). Older firmware and utility builds remain available on the [Releases page](https://github.com/mackotuned/MackoDash-Flash-Tools/releases).
 
 1. Connect the dashboard to the Windows PC with its update USB cable.
 2. Keep the dashboard powered and the USB cable connected throughout the update.
 3. Open the **Firmware Update** tab in MackoDash Utility.
-4. Select **Download Latest** to fetch and validate the current official firmware, or use **Choose ZIP** for a bundle already on the PC.
+4. Select **Download Latest** to fetch and validate the newest official release, or use **Choose ZIP** with a firmware bundle downloaded from any older release.
 5. Confirm the dashboard COM port.
 6. Select **Flash ESP32-P4 Firmware** and wait for verification to finish.
 

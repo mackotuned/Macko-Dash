@@ -43,8 +43,8 @@ UPDATE FIRMWARE
 1. Connect MackoDash to the Windows PC with its update USB cable.
 2. Keep the dashboard powered for the entire update.
 3. Open MackoDash Utility and choose Update Firmware.
-4. Select Download Latest to fetch and validate the current official firmware,
-  or use Choose ZIP for a bundle already on the PC.
+4. Select Download Latest to fetch and validate the newest official release,
+  or use Choose ZIP with MackoDash-Firmware.zip from any older GitHub release.
 5. Confirm the dashboard COM port.
 6. Select Install Firmware and wait for verification to finish.
 
@@ -66,10 +66,11 @@ DASHBOARD QUICK CONTROLS
 ------------------------
 - Tap Settings to open the complete menu.
 - Hold Settings to choose Day, Dim, or Night brightness.
-- Open Settings > Display > Shortcuts & Tips for the complete on-device control guide.
-- Enable Auto Record under Settings > System > Driving Logs. Recording starts after the
-  engine is running and stops after a 30-second engine-off grace period.
+- Open Settings > System > Shortcuts & Tips for the complete on-device control guide.
+- Configure automatic recording and log filename types under Settings > Logs > Driving Logs.
 - Configure whole-bar shift stages, colors, brightness, and redline flashing
-  under Settings > Engine.
+  under Settings > Engine Limits.
+- Open Settings > System > Contact & Support for problem reporting, email,
+  social, and feedback QR codes.
 - Critical engine warnings appear in a compact banner without covering gauges.
 - Simulation is hidden by default and can be enabled under Display for setup.

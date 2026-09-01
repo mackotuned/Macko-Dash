@@ -118,7 +118,7 @@
     {
       "id":"0x370",
       "signals":[
-      {"name":"speed","offset":0,"len":2,"scale":0.0621371,"endian":"big"},
+      {"name":"speed","offset":0,"len":2,"scale":0.1,"endian":"big"},
       {"name":"in_cam1","offset":4,"len":2,"scale":0.1,"endian":"big"},
       {"name":"in_cam2","offset":6,"len":2,"scale":0.1,"endian":"big"}
       ]

@@ -29,7 +29,7 @@
         {"name":"fuel_pw_primary","offset":0,"len":2,"scale":0.01,"endian":"little"},
         {"name":"fuel_duty_primary","offset":2,"len":2,"scale":0.1,"endian":"little"},
         {"name":"fuel_cut","offset":4,"len":2,"scale":1,"endian":"little"},
-        {"name":"speed","offset":6,"len":2,"scale":0.0621371,"endian":"little"}
+        {"name":"speed","offset":6,"len":2,"scale":0.1,"endian":"little"}
       ]
     },
 

@@ -27,7 +27,7 @@
     {
       "id": "0x602",
       "signals": [
-        {"name":"speed","offset":0,"len":2,"scale":0.621371,"endian":"little"},
+        {"name":"speed","offset":0,"len":2,"scale":1.0,"endian":"little"},
         {"name":"baro","offset":2,"len":1,"scale":0.145038,"offset_val":-14.6959,"endian":"little"},
         {"name":"oil_temp","offset":3,"len":1,"scale":1.8,"offset_val":32,"endian":"little"},
         {"name":"oil_pressure","offset":4,"len":1,"scale":0.9064875,"endian":"little"},

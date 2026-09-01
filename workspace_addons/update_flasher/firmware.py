@@ -24,8 +24,8 @@ BUNDLE_SCHEMA = 1
 BUNDLE_MANIFEST = "manifest.json"
 MAX_BUNDLE_SIZE = 16 * 1024 * 1024
 LATEST_FIRMWARE_URL = (
-    "https://raw.githubusercontent.com/mackotuned/"
-    "MackoDash-Flash-Tools/MackoDash/MackoDash-Firmware.zip"
+    "https://github.com/mackotuned/MackoDash-Flash-Tools/"
+    "releases/latest/download/MackoDash-Firmware.zip"
 )
 
 

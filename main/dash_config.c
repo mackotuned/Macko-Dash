@@ -16,7 +16,9 @@
 #define KEY_BRIGHTNESS   "cfg_bright"
 #define KEY_SHOW_SIM     "cfg_show_sim"
 #define KEY_VALUE_SMOOTH "cfg_smooth"
+#define KEY_SMOOTH_LEVEL "cfg_smooth_lvl"
 #define KEY_AUTO_RECORD  "cfg_auto_rec"
+#define KEY_LOG_NAME     "cfg_log_name"
 #define KEY_SHIFT_ENABLE "cfg_shift_en"
 #define KEY_SHIFT_BRIGHT "cfg_shift_br"
 #define KEY_SHIFT_FLASH  "cfg_sh_flash"
@@ -99,8 +101,9 @@ static int  s_vtec_rpm = DEFAULT_VTEC_RPM;
 static int  s_redline_rpm = DEFAULT_REDLINE_RPM;
 static int s_brightness = DEFAULT_BRIGHTNESS;
 static bool s_show_sim_button = false;
-static bool s_value_smoothing = false;
+static dash_config_smoothing_strength_t s_smoothing_strength = DASH_CONFIG_SMOOTHING_OFF;
 static bool s_auto_record = false;
+static dash_config_log_name_t s_log_name = DASH_CONFIG_LOG_NAME_GENERAL;
 static bool s_shift_light_enabled = true;
 static int s_shift_stage_rpm[DASH_CONFIG_SHIFT_STAGE_COUNT] = {6500, 7400, 8200};
 static dash_config_shift_color_t s_shift_stage_color[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
@@ -159,11 +162,18 @@ void dash_config_init(void)
     if (nvs_get_i32(h, KEY_SHOW_SIM, &val) == ESP_OK) {
         s_show_sim_button = (val != 0);
     }
-    if (nvs_get_i32(h, KEY_VALUE_SMOOTH, &val) == ESP_OK) {
-        s_value_smoothing = (val != 0);
+    if (nvs_get_i32(h, KEY_SMOOTH_LEVEL, &val) == ESP_OK &&
+            val >= DASH_CONFIG_SMOOTHING_OFF && val < DASH_CONFIG_SMOOTHING_COUNT) {
+        s_smoothing_strength = (dash_config_smoothing_strength_t)val;
+    } else if (nvs_get_i32(h, KEY_VALUE_SMOOTH, &val) == ESP_OK && val != 0) {
+        s_smoothing_strength = DASH_CONFIG_SMOOTHING_STRONG;
     }
     if (nvs_get_i32(h, KEY_AUTO_RECORD, &val) == ESP_OK) {
         s_auto_record = (val != 0);
+    }
+    if (nvs_get_i32(h, KEY_LOG_NAME, &val) == ESP_OK &&
+            val >= 0 && val < DASH_CONFIG_LOG_NAME_COUNT) {
+        s_log_name = (dash_config_log_name_t)val;
     }
     if (nvs_get_i32(h, KEY_SHIFT_ENABLE, &val) == ESP_OK) s_shift_light_enabled = (val != 0);
     if (nvs_get_i32(h, KEY_SHIFT_BRIGHT, &val) == ESP_OK && val >= 20 && val <= 100) {
@@ -452,16 +462,31 @@ void dash_config_set_show_sim_button(bool show)
 
 bool dash_config_get_value_smoothing(void)
 {
-    return s_value_smoothing;
+    return s_smoothing_strength != DASH_CONFIG_SMOOTHING_OFF;
 }
 
 void dash_config_set_value_smoothing(bool enabled)
 {
-    s_value_smoothing = enabled;
+    dash_config_set_smoothing_strength(enabled ? DASH_CONFIG_SMOOTHING_MEDIUM :
+                                       DASH_CONFIG_SMOOTHING_OFF);
+}
+
+dash_config_smoothing_strength_t dash_config_get_smoothing_strength(void)
+{
+    return s_smoothing_strength;
+}
+
+void dash_config_set_smoothing_strength(dash_config_smoothing_strength_t strength)
+{
+    if (strength < DASH_CONFIG_SMOOTHING_OFF || strength >= DASH_CONFIG_SMOOTHING_COUNT) {
+        strength = DASH_CONFIG_SMOOTHING_OFF;
+    }
+    s_smoothing_strength = strength;
 
     nvs_handle_t h;
     if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
-    nvs_set_i32(h, KEY_VALUE_SMOOTH, enabled ? 1 : 0);
+    nvs_set_i32(h, KEY_VALUE_SMOOTH, strength != DASH_CONFIG_SMOOTHING_OFF ? 1 : 0);
+    nvs_set_i32(h, KEY_SMOOTH_LEVEL, (int32_t)strength);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -480,6 +505,26 @@ void dash_config_set_auto_record(bool enabled)
     nvs_set_i32(h, KEY_AUTO_RECORD, enabled ? 1 : 0);
     nvs_commit(h);
     nvs_close(h);
+}
+
+dash_config_log_name_t dash_config_get_log_name(void)
+{
+    return s_log_name;
+}
+
+void dash_config_set_log_name(dash_config_log_name_t name)
+{
+    if (name < 0 || name >= DASH_CONFIG_LOG_NAME_COUNT) name = DASH_CONFIG_LOG_NAME_GENERAL;
+    s_log_name = name;
+    persist_i32(KEY_LOG_NAME, name);
+}
+
+const char *dash_config_get_log_prefix(void)
+{
+    static const char *const prefixes[DASH_CONFIG_LOG_NAME_COUNT] = {
+        "LOG", "DYNO", "TUNE", "RACE", "TEST",
+    };
+    return prefixes[s_log_name];
 }
 
 int dash_config_get_hal_field_channel(int slot)
@@ -704,8 +749,9 @@ void dash_config_factory_reset(void)
     s_redline_rpm = DEFAULT_REDLINE_RPM;
     s_brightness = DEFAULT_BRIGHTNESS;
     s_show_sim_button = false;
-    s_value_smoothing = false;
+    s_smoothing_strength = DASH_CONFIG_SMOOTHING_OFF;
     s_auto_record = false;
+    s_log_name = DASH_CONFIG_LOG_NAME_GENERAL;
     s_shift_light_enabled = true;
     memcpy(s_shift_stage_rpm, SHIFT_STAGE_RPM_DEFAULTS, sizeof(s_shift_stage_rpm));
     memcpy(s_shift_stage_color, SHIFT_STAGE_COLOR_DEFAULTS, sizeof(s_shift_stage_color));
@@ -734,7 +780,9 @@ void dash_config_factory_reset(void)
     nvs_set_i32(h, KEY_BRIGHTNESS, (int32_t)s_brightness);
     nvs_set_i32(h, KEY_SHOW_SIM, 0);
     nvs_set_i32(h, KEY_VALUE_SMOOTH, 0);
+    nvs_set_i32(h, KEY_SMOOTH_LEVEL, DASH_CONFIG_SMOOTHING_OFF);
     nvs_set_i32(h, KEY_AUTO_RECORD, 0);
+    nvs_set_i32(h, KEY_LOG_NAME, DASH_CONFIG_LOG_NAME_GENERAL);
     nvs_set_i32(h, KEY_SHIFT_ENABLE, 1);
     nvs_set_i32(h, KEY_SHIFT_BRIGHT, s_shift_light_brightness);
     nvs_set_i32(h, KEY_SHIFT_FLASH, 1);

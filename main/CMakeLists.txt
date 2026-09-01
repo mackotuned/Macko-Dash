@@ -78,6 +78,7 @@ idf_component_register(
     SRCS 
         "main.c"
         "boot_logo.c"
+        "huntertuned_logo.c"
         "dash_sim.c"
         "dash_config.c"
         "data_logger.c"
@@ -127,6 +128,7 @@ idf_component_register(
     SRCS 
         "main.c"
         "boot_logo.c"
+        "huntertuned_logo.c"
         "dash_sim.c"
         "dash_config.c"
         "data_logger.c"

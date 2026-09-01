@@ -24,9 +24,9 @@
       "id": "0x5F2",
       "signals": [
         { "name":"baro",          "offset":0, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
-        { "name":"map",           "offset":2, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
-        { "name":"air_temp",      "offset":4, "len":2, "scale":0.1, "offset_val":0, "endian":"big" },
-        { "name":"coolant_temp",  "offset":6, "len":2, "scale":0.1, "offset_val":0, "endian":"big" }
+        { "name":"map",           "offset":2, "len":2, "scale":0.0145038, "offset_val":-14.6959, "endian":"big" },
+        { "name":"air_temp",      "offset":4, "len":2, "scale":0.18, "offset_val":32, "endian":"big" },
+        { "name":"coolant_temp",  "offset":6, "len":2, "scale":0.18, "offset_val":32, "endian":"big" }
       ]
     },
 

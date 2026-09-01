@@ -1,5 +1,6 @@
 #include "device_log_viewer.h"
 
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
@@ -76,12 +77,12 @@ static const preset_definition_t PRESETS[DEVICE_LOG_PRESET_COUNT] = {
 
 static bool valid_filename(const char *filename)
 {
-    if (!filename || strlen(filename) != 11 || strncmp(filename, "LOG", 3) != 0 ||
-        strcmp(filename + 7, ".CSV") != 0) {
-        return false;
-    }
-    for (size_t index = 3; index < 7; ++index) {
-        if (filename[index] < '0' || filename[index] > '9') return false;
+    size_t length = filename ? strlen(filename) : 0;
+    if (length < 5 || length >= sizeof(((device_log_file_t *)0)->filename) ||
+            strcmp(filename + length - 4, ".CSV") != 0) return false;
+    for (size_t index = 0; index < length - 4; ++index) {
+        unsigned char character = (unsigned char)filename[index];
+        if (!isalnum(character) && character != '_' && character != '-') return false;
     }
     return true;
 }

@@ -958,8 +958,8 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
     } lvgl_profile_try_t;
 
     static const lvgl_profile_try_t tries[] = {
-        {24, false, false, "stable"},
         {24, true, false, "ppa_compact"},
+        {24, false, false, "stable"},
         {20, false, false, "safe"},
     };
 

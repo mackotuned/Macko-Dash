@@ -51,10 +51,12 @@ static void uart_send_line(const char *line)
 
 static bool valid_log_filename(const char *filename)
 {
-    if (!filename || strlen(filename) != 11 || strncmp(filename, "LOG", 3) != 0 ||
-        strcmp(filename + 7, ".CSV") != 0) return false;
-    for (size_t index = 3; index < 7; ++index) {
-        if (!isdigit((unsigned char)filename[index])) return false;
+    size_t length = filename ? strlen(filename) : 0;
+    if (length < 5 || length >= sizeof(((device_log_file_t *)0)->filename) ||
+            strcmp(filename + length - 4, ".CSV") != 0) return false;
+    for (size_t index = 0; index < length - 4; ++index) {
+        unsigned char character = (unsigned char)filename[index];
+        if (!isalnum(character) && character != '_' && character != '-') return false;
     }
     return true;
 }
