@@ -1,6 +1,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "bsp/esp-bsp.h"
 #include "lvgl.h"
 #include "honda_dash_ui.h"
@@ -15,6 +16,7 @@
 #include "dash_sim.h"
 #include "dash_config.h"
 #include "data_logger.h"
+#include "achievement_system.h"
 #include "session_peaks.h"
 #include "theme_storage.h"
 
@@ -189,6 +191,9 @@ void gauge_timer(lv_timer_t * t) {
     bool recording_changed = data_logger_auto_update(&d, can_live && !dash_sim_is_enabled());
     data_logger_submit(&d);
     session_peaks_update(&d, drivetrain_live);
+    const char *achievement = achievement_system_update(
+        &d, drivetrain_live && !dash_sim_is_enabled(), canbus_has_recent_oil_pressure());
+    if (achievement) honda_dash_ui_show_achievement(achievement);
 
     bool changed = recording_changed || dash_config_get_value_smoothing() ||
                    (!g_last_ui_valid) || ui_data_changed_significantly(&g_last_ui_data, &d);
@@ -317,19 +322,23 @@ void dashboard_runtime_set_render_paused(bool paused)
 
     s_render_paused_active = paused;
 
-    /* deliberately does NOT touch CAN background tasks -- those involve
-       tearing down and re-initializing the TWAI driver, which is only
-       safe to do rarely (the Update page's own OTA-mode pause), not on
-       every settings-menu open/close */
+    /* Keep the existing LVGL timer allocated while Settings is open. */
     if (paused) {
-        stop_gauge_timer();
+        if (s_gauge_timer) lv_timer_pause(s_gauge_timer);
     } else {
-        start_gauge_timer();
+        if (s_gauge_timer) {
+            lv_timer_reset(s_gauge_timer);
+            lv_timer_resume(s_gauge_timer);
+        } else {
+            start_gauge_timer();
+        }
     }
 }
 
 void app_main(void) {
+    ESP_LOGW("main", "Reset reason: %d", (int)esp_reset_reason());
     dash_config_init();
+    achievement_system_init();
     session_peaks_init();
 
     bsp_display_cfg_t cfg = {

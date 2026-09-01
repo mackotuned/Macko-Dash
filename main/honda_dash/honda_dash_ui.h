@@ -109,6 +109,9 @@ lv_obj_t *honda_dash_ui_create(lv_obj_t *parent);
  * cluster and keeps LVGL's redraw load sane. */
 void honda_dash_ui_update(const honda_dash_data_t *data);
 
+/* Announces a newly unlocked background achievement and refreshes its count. */
+void honda_dash_ui_show_achievement(const char *name);
+
 /* Applies staged shift colors to built-in RPM indicators from raw drivetrain
  * data. Imported themes retain their authored RPM colors. */
 void honda_dash_ui_update_shift_lights(uint16_t rpm);
