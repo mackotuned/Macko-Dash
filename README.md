@@ -6,7 +6,7 @@
 
 **A configurable digital gauge cluster for the 9-inch Elecrow CrowPanel ESP32-P4/C6**
 
-**Current firmware: 2.0.1 BETA**
+**Current firmware: 2.1**
 
 [Get Latest Release](https://github.com/mackotuned/MackoDash-Flash-Tools/releases/latest) | [Browse Older Versions](https://github.com/mackotuned/MackoDash-Flash-Tools/releases) | [Firmware Update Guide](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update) | [Custom Theme Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) | [Get Support](#support)
 
@@ -22,12 +22,15 @@ You do not need ESP-IDF, Python, or programming tools to update or customize you
 2. Select **Code**, then **Download ZIP**, and extract the complete folder on a Windows PC.
 3. Keep all extracted files together and open `MackoDashUtility.exe`.
 
-The utility includes two customer tools:
+The utility includes five customer tools:
 
 | Tool | What it does |
 | --- | --- |
 | **Firmware Update** | Safely installs official ESP32-P4 dashboard firmware over USB |
+| **Theme Studio** | Creates dashboard themes on a visual 1024x600 canvas |
 | **Theme Builder** | Converts a supported SquareLine Studio export into an SD-card theme |
+| **Boot Logo** | Converts a PNG or JPEG and installs it over USB |
+| **Driving Logs** | Downloads and explores recorded ECU data |
 
 ## Hardware and Compatibility
 
@@ -48,11 +51,12 @@ Before driving with MackoDash:
 
 1. Confirm the display and touch controls start normally.
 2. Open **Settings > ECU** and select the correct protocol, or use automatic detection.
-3. Open **Settings > Display > Units** and set speed, temperature, pressure, and distance units.
+3. Open **Settings > Display** to select English, Spanish, Portuguese, or Japanese, then configure Units.
 4. Open **Settings > Engine Limits** and set the vehicle's VTEC point, redline, and warning thresholds.
-5. Use a simulation mode to become familiar with the selected theme and warning behavior.
-6. With the vehicle stationary, start the engine and verify every displayed value against a trusted source.
-7. Confirm brightness, screen visibility, and visual warnings before road use.
+5. If using the fuel gauge, open **Settings > System > Fuel Gauge Setup** and configure the Hondata analog input and measured empty/full voltages.
+6. Use a simulation mode to become familiar with the selected theme and warning behavior.
+7. With the vehicle stationary, start the engine and verify every displayed value against a trusted source.
+8. Confirm brightness, screen visibility, and visual warnings before road use.
 
 Settings, theme selection, odometer data, and trip data are retained after power is removed.
 
@@ -60,7 +64,9 @@ Settings, theme selection, odometer data, and trip data are retained after power
 
 - Five built-in themes: MackoDash V1, Race LCD, HalDash, HunterDash, and Rally Stage
 - Up to 30 custom themes from a FAT-formatted microSD card
+- Up to 12 custom boot logos selectable under **Settings > Display**
 - Live RPM, speed, gear, coolant, intake air, AFR, timing, boost/MAP, battery, throttle, oil pressure, injector duty, knock, and fuel data
+- Selectable Hondata Analog 0-6 fuel input with direction-safe empty/full voltage calibration
 - Reassignable gauge channels on built-in themes
 - Independent speed, temperature, pressure, and distance units
 - Configurable VTEC point, redline, and warning thresholds
@@ -73,6 +79,7 @@ Settings, theme selection, odometer data, and trip data are retained after power
 - On-device diagnostics, Contact & Support QR links, Shortcuts & Tips, and Read Me guides under Settings > System
 - Persistent odometer plus Trip A and Trip B
 - Adjustable display brightness and value smoothing
+- Persisted English, Spanish, Portuguese, and Japanese dashboard languages
 - Idle, Cruise, Full Throttle, and Redline simulation modes
 - Protected factory reset
 
@@ -107,7 +114,7 @@ The full firmware ZIP contains the ESP32-P4 bootloader, partition table, OTA met
 
 ## Custom Themes
 
-Use the **Theme Builder** included in [MackoDash Flash Tools](https://github.com/mackotuned/MackoDash-Flash-Tools#custom-themes). The complete [SquareLine Theming Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) lists every supported live value, object name, gauge type, range, and design rule.
+Use **Theme Studio** in MackoDash Utility to create themes directly, or use **Theme Builder** to convert a supported SquareLine Studio export. The complete [SquareLine Theming Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) lists every supported live value, object name, gauge type, range, and design rule.
 
 Quick workflow:
 
@@ -148,6 +155,7 @@ MackoDash is custom automotive electronics software. Installation and use are at
 
 - Configure and test the dashboard while the vehicle is stationary.
 - Verify CAN scaling, units, warning thresholds, wiring, and displayed values against trusted equipment.
+- Never allow a fuel-sender signal above 5 V to reach a Hondata analog input.
 - Never depend on an unverified value for engine protection or safe vehicle operation.
 - MackoDash must not replace required factory safety systems, warning indicators, or legally required instrumentation.
 - Do not operate the settings interface or troubleshoot the dashboard while driving.

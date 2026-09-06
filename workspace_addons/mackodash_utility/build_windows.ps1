@@ -17,7 +17,7 @@ if (-not (Test-Path (Join-Path $buildDir 'mackodash.bin'))) {
     throw "Build the complete MackoDash firmware first; $buildDir is incomplete"
 }
 
-& $python -c "import tkinter, esptool, serial; print('Tk', tkinter.Tcl().call('info', 'patchlevel')); print('esptool', esptool.__version__)"
+& $python -c "import tkinter, esptool, serial, PIL; print('Tk', tkinter.Tcl().call('info', 'patchlevel')); print('esptool', esptool.__version__); print('Pillow', PIL.__version__)"
 & $python -m PyInstaller --noconfirm --clean --onefile --windowed `
     --name MackoDashUtility `
     --paths $addonsRoot `
@@ -25,14 +25,22 @@ if (-not (Test-Path (Join-Path $buildDir 'mackodash.bin'))) {
     --paths $updateFlasher `
     --paths $logViewer `
     --add-data "$(Join-Path $addonsRoot 'mackodash_logo.png');." `
+    --add-data "$(Join-Path $projectRoot 'main\fonts\Montserrat-SemiBold.ttf');." `
     --collect-all esptool `
     --collect-all serial `
+    --collect-all PIL `
     --distpath (Join-Path $root 'dist') `
     --workpath (Join-Path $root 'build') `
     --specpath $root `
     (Join-Path $root 'mackodash_utility.py')
+if ($LASTEXITCODE -ne 0) {
+    throw "PyInstaller failed with exit code $LASTEXITCODE"
+}
 
 & $python (Join-Path $updateFlasher 'build_firmware_bundle.py') $buildDir $firmwareBundle
+if ($LASTEXITCODE -ne 0) {
+    throw "Firmware bundle build failed with exit code $LASTEXITCODE"
+}
 Remove-Item (Join-Path $root 'dist\*.bin') -Force -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root 'CUSTOMER_INSTRUCTIONS.txt') (Join-Path $root 'dist\CUSTOMER_INSTRUCTIONS.txt') -Force
 Copy-Item $themeInstructions (Join-Path $root 'dist\MackoDash_SquareLine_Customer_Instructions.txt') -Force

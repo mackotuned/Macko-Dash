@@ -43,7 +43,10 @@ static volatile float* signal_name_to_ptr(const char *name){
     if (!strcmp(name, "tps") || !strcmp(name, "tps_pedal")) return &can_data.tps;
     if (!strcmp(name, "ign_angle")) return &can_data.ign_angle;
 
-    if (!strcmp(name, "fuel_level") || !strcmp(name, "analog0") || !strcmp(name, "virtual_fuel_tank")) return &can_data.fuel_level;
+    if (!strcmp(name, "fuel_level") || !strcmp(name, "virtual_fuel_tank")) return &can_data.fuel_level;
+    if (!strncmp(name, "analog", 6) && name[6] >= '0' && name[6] <= '7' && name[7] == '\0') {
+        return &can_data.analog_inputs[name[6] - '0'];
+    }
 
     return NULL;
 }

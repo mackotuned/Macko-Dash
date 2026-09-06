@@ -9,6 +9,7 @@
 #include "cJSON.h"
 #include "dash_config.h"
 #include "esp_log.h"
+#include "extra/libs/tiny_ttf/lv_tiny_ttf.h"
 
 #define RUNTIME_LAYOUT_MAX_SIZE (64 * 1024)
 #define RUNTIME_ASSET_MAX_SIZE (2 * 1024 * 1024)
@@ -17,6 +18,9 @@
 #define RUNTIME_NAME_MAX 80
 #define TARGET_WIDTH 1024
 #define TARGET_HEIGHT 600
+#define RUNTIME_FONT_CACHE_MAX 24
+#define PATH_GAUGE_POINT_MAX 24
+#define PATH_GAUGE_SEGMENT_MAX 96
 
 static const char *TAG = "runtime_theme";
 
@@ -51,21 +55,49 @@ typedef enum {
     BIND_OIL_UNIT,
     BIND_SETTINGS_BUTTON,
     BIND_RECORD_BUTTON,
+    BIND_SIM_BUTTON,
 } binding_id_t;
 
 typedef enum {
     WIDGET_LABEL,
     WIDGET_BAR,
     WIDGET_ARC,
+    WIDGET_PATH_GAUGE,
     WIDGET_INDICATOR,
     WIDGET_BUTTON,
     WIDGET_IMAGE,
+    WIDGET_NEEDLE,
+    WIDGET_ANALOG_TACH,
 } widget_kind_t;
+
+typedef struct {
+    lv_point_t points[PATH_GAUGE_POINT_MAX];
+    int point_values[PATH_GAUGE_POINT_MAX];
+    float lengths[PATH_GAUGE_POINT_MAX - 1];
+    float total_length;
+    uint8_t point_count;
+    bool calibrated;
+    uint8_t segment_count;
+    lv_coord_t segment_width;
+    lv_coord_t segment_height;
+    int minimum;
+    int maximum;
+    int alert_start;
+    int value;
+    lv_color_t color;
+    lv_color_t alert_color;
+    lv_color_t track_color;
+    lv_opa_t indicator_opa;
+    lv_opa_t track_opa;
+} path_gauge_t;
 
 typedef struct {
     lv_obj_t *object;
     binding_id_t id;
     widget_kind_t kind;
+    lv_meter_indicator_t *meter_indicator;
+    lv_obj_t *value_label;
+    path_gauge_t *path_gauge;
 } runtime_binding_t;
 
 typedef struct {
@@ -92,18 +124,27 @@ static const binding_name_t BINDING_NAMES[] = {
     {BIND_ODO, "dash_odo_value", {"odometer_value", NULL}},
     {BIND_RPM, "dash_rpm_bar", {"rpm_bar", NULL}},
     {BIND_RPM, "dash_rpm_arc", {"rpm_arc", NULL}},
+    {BIND_RPM, "dash_rpm_path_gauge", {"rpm_path_gauge", NULL}},
+    {BIND_RPM, "dash_rpm_needle", {"rpm_needle", NULL}},
+    {BIND_RPM, "dash_rpm_analog_tach", {"rpm_analog_tach", "analog_tach", NULL}},
     {BIND_SPEED, "dash_speed_bar", {"speed_bar", NULL}},
     {BIND_SPEED, "dash_speed_arc", {"speed_arc", NULL}},
+    {BIND_SPEED, "dash_speed_path_gauge", {"speed_path_gauge", NULL}},
     {BIND_FUEL, "dash_fuel_bar", {"fuel_bar", NULL}},
     {BIND_FUEL, "dash_fuel_arc", {"fuel_arc", NULL}},
+    {BIND_FUEL, "dash_fuel_path_gauge", {"fuel_path_gauge", NULL}},
     {BIND_TPS, "dash_tps_bar", {"tps_bar", NULL}},
     {BIND_TPS, "dash_tps_arc", {"tps_arc", NULL}},
+    {BIND_TPS, "dash_tps_path_gauge", {"tps_path_gauge", NULL}},
     {BIND_ECT, "dash_ect_bar", {"ect_bar", "coolant_bar", NULL}},
     {BIND_ECT, "dash_ect_arc", {"ect_arc", "coolant_arc", NULL}},
+    {BIND_ECT, "dash_ect_path_gauge", {"ect_path_gauge", "coolant_path_gauge", NULL}},
     {BIND_IAT, "dash_iat_bar", {"iat_bar", "air_temp_bar", NULL}},
     {BIND_IAT, "dash_iat_arc", {"iat_arc", "air_temp_arc", NULL}},
+    {BIND_IAT, "dash_iat_path_gauge", {"iat_path_gauge", "air_temp_path_gauge", NULL}},
     {BIND_OIL, "dash_oil_bar", {"oil_bar", NULL}},
     {BIND_OIL, "dash_oil_arc", {"oil_arc", NULL}},
+    {BIND_OIL, "dash_oil_path_gauge", {"oil_path_gauge", NULL}},
     {BIND_CEL_INDICATOR, "dash_cel_indicator", {"cel_indicator", NULL}},
     {BIND_VTEC_INDICATOR, "dash_vtec_indicator", {"vtec_indicator", NULL}},
     {BIND_SHIFT_INDICATOR, "dash_shift_indicator", {"shift_indicator", NULL}},
@@ -118,6 +159,7 @@ static const binding_name_t BINDING_NAMES[] = {
     {BIND_OIL_UNIT, "dash_oil_unit", {"oil_unit", NULL}},
     {BIND_SETTINGS_BUTTON, "dash_settings_button", {"settings_button", NULL}},
     {BIND_RECORD_BUTTON, "dash_record_button", {"record_button", "logging_button", NULL}},
+    {BIND_SIM_BUTTON, "dash_sim_button", {"sim_button", "simulation_button", NULL}},
 };
 
 static lv_obj_t *s_root;
@@ -132,6 +174,12 @@ static int s_canvas_offset_x;
 static int s_canvas_offset_y;
 static int s_design_width = TARGET_WIDTH;
 static int s_design_height = TARGET_HEIGHT;
+static lv_font_t *s_dynamic_fonts[RUNTIME_FONT_CACHE_MAX];
+static uint16_t s_dynamic_font_sizes[RUNTIME_FONT_CACHE_MAX];
+static size_t s_dynamic_font_count;
+
+extern const uint8_t montserrat_ttf_start[] asm("_binary_Montserrat_SemiBold_ttf_start");
+extern const uint8_t montserrat_ttf_end[] asm("_binary_Montserrat_SemiBold_ttf_end");
 
 static void normalize_name(const char *source, char output[RUNTIME_NAME_MAX])
 {
@@ -236,12 +284,42 @@ static int json_int(cJSON *object, const char *key, int fallback, int low, int h
     return value;
 }
 
+static bool json_bool(cJSON *object, const char *key, bool fallback)
+{
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
+    if (cJSON_IsBool(item)) return cJSON_IsTrue(item);
+    if (cJSON_IsNumber(item)) return item->valueint != 0;
+    return fallback;
+}
+
 static const lv_font_t *font_for_size(int size)
 {
-    if (size >= 36) return &lv_font_montserrat_44;
-    if (size >= 21) return &lv_font_montserrat_28;
-    if (size >= 14) return &lv_font_montserrat_14;
-    return &lv_font_montserrat_12;
+    if (size < 8) size = 8;
+    if (size > 200) size = 200;
+    for (size_t i = 0; i < s_dynamic_font_count; ++i) {
+        if (s_dynamic_font_sizes[i] == size) return s_dynamic_fonts[i];
+    }
+    if (s_dynamic_font_count < RUNTIME_FONT_CACHE_MAX) {
+        size_t font_data_size = (size_t)(montserrat_ttf_end - montserrat_ttf_start);
+        size_t cache_size = (size_t)size * (size_t)size;
+        if (cache_size < 4096) cache_size = 4096;
+        lv_font_t *font = lv_tiny_ttf_create_data_ex(montserrat_ttf_start, font_data_size, size, cache_size);
+        if (font) {
+            s_dynamic_fonts[s_dynamic_font_count] = font;
+            s_dynamic_font_sizes[s_dynamic_font_count++] = (uint16_t)size;
+            return font;
+        }
+    }
+    const lv_font_t *nearest = &lv_font_montserrat_14;
+    int nearest_distance = abs(size - 14);
+    for (size_t i = 0; i < s_dynamic_font_count; ++i) {
+        int distance = abs(size - (int)s_dynamic_font_sizes[i]);
+        if (distance < nearest_distance) {
+            nearest = s_dynamic_fonts[i];
+            nearest_distance = distance;
+        }
+    }
+    return nearest;
 }
 
 static int scale_position(int value, int offset)
@@ -259,16 +337,216 @@ static widget_kind_t kind_for_type(const char *type)
 {
     if (!strcmp(type, "bar")) return WIDGET_BAR;
     if (!strcmp(type, "arc")) return WIDGET_ARC;
+    if (!strcmp(type, "path_gauge")) return WIDGET_PATH_GAUGE;
     if (!strcmp(type, "button")) return WIDGET_BUTTON;
     if (!strcmp(type, "image")) return WIDGET_IMAGE;
+    if (!strcmp(type, "needle")) return WIDGET_NEEDLE;
+    if (!strcmp(type, "analog_tach") || !strcmp(type, "analog_speedo")) return WIDGET_ANALOG_TACH;
     if (!strcmp(type, "indicator") || !strcmp(type, "object")) return WIDGET_INDICATOR;
     return WIDGET_LABEL;
 }
 
-static void add_binding(lv_obj_t *object, binding_id_t id, widget_kind_t kind)
+static runtime_binding_t *add_binding(lv_obj_t *object, binding_id_t id, widget_kind_t kind)
 {
-    if (id == BIND_NONE || s_binding_count >= RUNTIME_OBJECT_MAX) return;
-    s_bindings[s_binding_count++] = (runtime_binding_t){.object = object, .id = id, .kind = kind};
+    if (id == BIND_NONE || s_binding_count >= RUNTIME_OBJECT_MAX) return NULL;
+    runtime_binding_t *binding = &s_bindings[s_binding_count++];
+    *binding = (runtime_binding_t){.object = object, .id = id, .kind = kind};
+    return binding;
+}
+
+static void path_gauge_draw_cb(lv_event_t *event)
+{
+    path_gauge_t *gauge = lv_event_get_user_data(event);
+    if (!gauge || gauge->point_count < 2 || gauge->total_length <= 0.0f) return;
+    lv_obj_t *object = lv_event_get_target(event);
+    lv_area_t coordinates;
+    lv_obj_get_coords(object, &coordinates);
+    lv_draw_ctx_t *draw_ctx = lv_event_get_draw_ctx(event);
+    lv_draw_rect_dsc_t draw_dsc;
+    lv_draw_rect_dsc_init(&draw_dsc);
+    draw_dsc.border_width = 0;
+    int range = gauge->maximum - gauge->minimum;
+    int lit_count = range > 0 ? (gauge->value - gauge->minimum) * gauge->segment_count / range : 0;
+    if (lit_count < 0) lit_count = 0;
+    if (lit_count > gauge->segment_count) lit_count = gauge->segment_count;
+
+    for (int index = 0; index < gauge->segment_count; ++index) {
+        float segment_value = gauge->minimum + (float)range * ((float)index + 0.5f) / gauge->segment_count;
+        int path_index = 0;
+        float ratio = 0.0f;
+        if (gauge->calibrated) {
+            for (; path_index < gauge->point_count - 2; ++path_index) {
+                if (segment_value <= gauge->point_values[path_index + 1]) break;
+            }
+            int value_span = gauge->point_values[path_index + 1] - gauge->point_values[path_index];
+            ratio = value_span > 0 ? (segment_value - gauge->point_values[path_index]) / value_span : 0.0f;
+        } else {
+            float distance = gauge->total_length * ((float)index + 0.5f) / gauge->segment_count;
+            float traversed = 0.0f;
+            for (; path_index < gauge->point_count - 2; ++path_index) {
+                if (distance <= traversed + gauge->lengths[path_index]) break;
+                traversed += gauge->lengths[path_index];
+            }
+            float length = gauge->lengths[path_index];
+            ratio = length > 0.0f ? (distance - traversed) / length : 0.0f;
+        }
+        if (ratio < 0.0f) ratio = 0.0f;
+        if (ratio > 1.0f) ratio = 1.0f;
+        lv_point_t start = gauge->points[path_index];
+        lv_point_t end = gauge->points[path_index + 1];
+        float center_x = start.x + (end.x - start.x) * ratio;
+        float center_y = start.y + (end.y - start.y) * ratio;
+        float angle = atan2f((float)(end.y - start.y), (float)(end.x - start.x));
+        float cosine = cosf(angle);
+        float sine = sinf(angle);
+        float half_width = gauge->segment_width * 0.5f;
+        float half_height = gauge->segment_height * 0.5f;
+        float corner = fminf(half_height * 0.55f, half_width * 0.35f);
+        const float local[8][2] = {
+            {-half_width + corner, -half_height}, {half_width - corner, -half_height},
+            {half_width, -half_height + corner}, {half_width, half_height - corner},
+            {half_width - corner, half_height}, {-half_width + corner, half_height},
+            {-half_width, half_height - corner}, {-half_width, -half_height + corner},
+        };
+        lv_point_t polygon[8];
+        for (int point = 0; point < 8; ++point) {
+            polygon[point].x = coordinates.x1 + (lv_coord_t)lroundf(center_x + local[point][0] * cosine - local[point][1] * sine);
+            polygon[point].y = coordinates.y1 + (lv_coord_t)lroundf(center_y + local[point][0] * sine + local[point][1] * cosine);
+        }
+        if (index < lit_count) {
+            draw_dsc.bg_color = segment_value >= gauge->alert_start ? gauge->alert_color : gauge->color;
+            draw_dsc.bg_opa = gauge->indicator_opa;
+        } else {
+            draw_dsc.bg_color = gauge->track_color;
+            draw_dsc.bg_opa = gauge->track_opa;
+        }
+        lv_draw_polygon(draw_ctx, &draw_dsc, polygon, 8);
+    }
+}
+
+static void configure_path_gauge(lv_obj_t *object, cJSON *definition, runtime_binding_t *binding)
+{
+    if (!binding) return;
+    cJSON *points = cJSON_GetObjectItemCaseSensitive(definition, "points");
+    int point_count = cJSON_IsArray(points) ? cJSON_GetArraySize(points) : 0;
+    if (point_count < 2 || point_count > PATH_GAUGE_POINT_MAX) return;
+    path_gauge_t *gauge = calloc(1, sizeof(*gauge));
+    if (!gauge) return;
+    gauge->point_count = (uint8_t)point_count;
+    gauge->minimum = json_int(definition, "min", 0, -10000, 10000);
+    gauge->maximum = json_int(definition, "max", 8000, -10000, 10000);
+    if (gauge->maximum <= gauge->minimum) gauge->maximum = gauge->minimum + 1;
+    for (int index = 0; index < point_count; ++index) {
+        cJSON *point = cJSON_GetArrayItem(points, index);
+        cJSON *x = cJSON_IsArray(point) ? cJSON_GetArrayItem(point, 0) : NULL;
+        cJSON *y = cJSON_IsArray(point) ? cJSON_GetArrayItem(point, 1) : NULL;
+        if (!cJSON_IsNumber(x) || !cJSON_IsNumber(y)) {
+            free(gauge);
+            return;
+        }
+        gauge->points[index].x = scale_dimension(x->valueint);
+        gauge->points[index].y = scale_dimension(y->valueint);
+        if (index > 0) {
+            float delta_x = gauge->points[index].x - gauge->points[index - 1].x;
+            float delta_y = gauge->points[index].y - gauge->points[index - 1].y;
+            gauge->lengths[index - 1] = sqrtf(delta_x * delta_x + delta_y * delta_y);
+            gauge->total_length += gauge->lengths[index - 1];
+        }
+    }
+    cJSON *point_values = cJSON_GetObjectItemCaseSensitive(definition, "point_values");
+    if (cJSON_IsArray(point_values) && cJSON_GetArraySize(point_values) == point_count) {
+        gauge->calibrated = true;
+        for (int index = 0; index < point_count; ++index) {
+            cJSON *value = cJSON_GetArrayItem(point_values, index);
+            if (!cJSON_IsNumber(value) ||
+                    (index > 0 && value->valueint <= gauge->point_values[index - 1])) {
+                gauge->calibrated = false;
+                break;
+            }
+            gauge->point_values[index] = value->valueint;
+        }
+        if (gauge->point_values[0] != gauge->minimum ||
+                gauge->point_values[point_count - 1] != gauge->maximum) gauge->calibrated = false;
+    }
+    gauge->segment_count = json_int(definition, "segment_count", 36, 2, PATH_GAUGE_SEGMENT_MAX);
+    gauge->segment_width = scale_dimension(json_int(definition, "segment_width", 18, 1, 100));
+    gauge->segment_height = scale_dimension(json_int(definition, "segment_height", 10, 1, 100));
+    gauge->alert_start = json_int(definition, "alert_start", 6500, gauge->minimum, gauge->maximum);
+    gauge->value = gauge->minimum;
+    gauge->color = lv_color_hex(json_color(definition, "color", 0xffffff));
+    gauge->alert_color = lv_color_hex(json_color(definition, "alert_color", 0xe4002b));
+    gauge->track_color = lv_color_hex(json_color(definition, "track_color", 0x25282d));
+    gauge->indicator_opa = json_int(definition, "indicator_opa", 255, 0, 255);
+    gauge->track_opa = json_int(definition, "track_opa", 80, 0, 255);
+    binding->path_gauge = gauge;
+    lv_obj_add_event_cb(object, path_gauge_draw_cb, LV_EVENT_DRAW_MAIN, gauge);
+}
+
+static void configure_meter(lv_obj_t *meter, cJSON *definition, widget_kind_t kind,
+                            runtime_binding_t *binding)
+{
+    lv_obj_set_style_bg_color(meter, lv_color_hex(json_color(definition, "background", 0x000000)), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(meter, json_int(definition, "background_opa", 0, 0, 255), LV_PART_MAIN);
+    lv_obj_set_style_border_color(meter, lv_color_hex(json_color(definition, "border_color", 0x30343d)), LV_PART_MAIN);
+    lv_obj_set_style_border_opa(meter, json_int(definition, "border_opa", 255, 0, 255), LV_PART_MAIN);
+    lv_obj_set_style_border_width(meter, scale_dimension(json_int(definition, "border_width", 0, 0, 40)), LV_PART_MAIN);
+    lv_obj_set_style_radius(meter, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(meter, 0, LV_PART_MAIN);
+    lv_meter_scale_t *scale = lv_meter_add_scale(meter);
+    int minimum = json_int(definition, "min", 0, -10000, 10000);
+    int maximum = json_int(definition, "max", 9000, -10000, 10000);
+    if (maximum <= minimum) maximum = minimum + 1;
+    int rotation = json_int(definition, "rotation", 135, 0, 359);
+    int sweep = json_int(definition, "sweep", 270, 1, 360);
+    lv_meter_set_scale_range(meter, scale, minimum, maximum, sweep, rotation);
+
+    if (kind == WIDGET_ANALOG_TACH) {
+        int tick_count = json_int(definition, "tick_count", 19, 2, 101);
+        int tick_width = scale_dimension(json_int(definition, "tick_width", 2, 1, 20));
+        int tick_length = scale_dimension(json_int(definition, "tick_length", 12, 1, 80));
+        int major_every = json_int(definition, "major_tick_every", 2, 1, tick_count);
+        int major_width = scale_dimension(json_int(definition, "major_tick_width", 4, 1, 30));
+        int major_length = scale_dimension(json_int(definition, "major_tick_length", 20, 1, 100));
+        int label_gap = scale_dimension(json_int(definition, "label_gap", 10, 0, 80));
+        lv_color_t tick_color = lv_color_hex(json_color(definition, "tick_color", 0xa1a6b0));
+        lv_color_t major_color = lv_color_hex(json_color(definition, "major_tick_color", 0xffffff));
+        int tick_opa = json_int(definition, "tick_opa", 255, 0, 255);
+        int major_tick_opa = json_int(definition, "major_tick_opa", 255, 0, 255);
+        lv_meter_set_scale_ticks(meter, scale, tick_count, tick_width,
+                     tick_opa ? tick_length : 0, tick_color);
+        lv_meter_set_scale_major_ticks(meter, scale, major_every, major_width,
+                           major_tick_opa ? major_length : 0, major_color, label_gap);
+        int tick_font_size = scale_dimension(json_int(definition, "tick_label_font_size", 14, 8, 200));
+        lv_obj_set_style_text_font(meter, font_for_size(tick_font_size), LV_PART_TICKS);
+        lv_obj_set_style_text_color(meter, major_color, LV_PART_TICKS);
+        int arc_width = scale_dimension(json_int(definition, "arc_width", 8, 1, 80));
+        if (json_int(definition, "track_opa", 255, 0, 255) > 0)
+            lv_meter_add_arc(meter, scale, arc_width,
+                             lv_color_hex(json_color(definition, "track_color", 0x25282d)), 0);
+    } else {
+        lv_meter_set_scale_ticks(meter, scale, 2, 1, 1, lv_color_hex(0x000000));
+        lv_obj_set_style_opa(meter, LV_OPA_TRANSP, LV_PART_TICKS);
+    }
+
+    int needle_width = scale_dimension(json_int(definition, "needle_width", 4, 1, 40));
+    int needle_offset = scale_dimension(json_int(definition, "needle_offset", -8, -200, 200));
+    lv_meter_indicator_t *indicator = NULL;
+    if (json_int(definition, "needle_opa", 255, 0, 255) > 0)
+        indicator = lv_meter_add_needle_line(
+            meter, scale, needle_width, lv_color_hex(json_color(definition, "needle_color", 0xe4002b)), needle_offset);
+    if (binding) binding->meter_indicator = indicator;
+
+    if (binding && kind == WIDGET_ANALOG_TACH && json_bool(definition, "show_value", true)) {
+        binding->value_label = lv_label_create(meter);
+        lv_obj_set_style_text_color(binding->value_label,
+                                    lv_color_hex(json_color(definition, "value_color", 0xffffff)), LV_PART_MAIN);
+        lv_obj_set_style_text_opa(binding->value_label,
+                      json_int(definition, "value_opa", 255, 0, 255), LV_PART_MAIN);
+        int font_size = scale_dimension(json_int(definition, "value_font_size", 28, 8, 200));
+        lv_obj_set_style_text_font(binding->value_label, font_for_size(font_size), LV_PART_MAIN);
+        lv_obj_align(binding->value_label, LV_ALIGN_CENTER, 0,
+                     scale_dimension(json_int(definition, "value_y", 45, -200, 200)));
+    }
 }
 
 static lv_img_dsc_t *load_image_descriptor(cJSON *definition, const char *asset_key,
@@ -377,7 +655,8 @@ static void align_to_canvas(lv_obj_t *object, lv_align_t align, int x, int y)
 }
 
 static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
-                              lv_event_cb_t settings_cb, lv_event_cb_t record_cb)
+                              lv_event_cb_t settings_cb, lv_event_cb_t record_cb,
+                              lv_event_cb_t sim_cb, lv_event_cb_t sim_long_press_cb)
 {
     cJSON *type_item = cJSON_GetObjectItemCaseSensitive(definition, "type");
     cJSON *name_item = cJSON_GetObjectItemCaseSensitive(definition, "name");
@@ -395,9 +674,10 @@ static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
         cJSON *text = cJSON_GetObjectItemCaseSensitive(definition, "text");
         lv_label_set_text(object, cJSON_IsString(text) ? text->valuestring : "--");
         lv_label_set_long_mode(object, LV_LABEL_LONG_CLIP);
-        int font_size = json_int(definition, "font_size", 14, 8, 96);
+        int font_size = json_int(definition, "font_size", 14, 8, 200);
         lv_obj_set_style_text_font(object, font_for_size(scale_dimension(font_size)), LV_PART_MAIN);
         lv_obj_set_style_text_color(object, lv_color_hex(json_color(definition, "color", 0xffffff)), LV_PART_MAIN);
+        lv_obj_set_style_text_opa(object, json_int(definition, "color_opa", 255, 0, 255), LV_PART_MAIN);
         cJSON *align = cJSON_GetObjectItemCaseSensitive(definition, "align");
         if (cJSON_IsString(align) && !strcmp(align->valuestring, "center"))
             lv_obj_set_style_text_align(object, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -432,23 +712,42 @@ static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
         lv_obj_remove_style(object, NULL, LV_PART_KNOB);
         lv_obj_set_style_arc_color(object, lv_color_hex(json_color(definition, "track_color", 0x25282d)), LV_PART_MAIN);
         lv_obj_set_style_arc_color(object, lv_color_hex(json_color(definition, "color", 0xe4002b)), LV_PART_INDICATOR);
+        lv_obj_set_style_arc_opa(object, json_int(definition, "track_opa", 255, 0, 255), LV_PART_MAIN);
+        lv_obj_set_style_arc_opa(object, json_int(definition, "color_opa", 255, 0, 255), LV_PART_INDICATOR);
+    } else if (kind == WIDGET_PATH_GAUGE) {
+        object = lv_obj_create(parent);
+        lv_obj_remove_style_all(object);
+    } else if (kind == WIDGET_NEEDLE || kind == WIDGET_ANALOG_TACH) {
+        object = lv_meter_create(parent);
     } else if (kind == WIDGET_BUTTON) {
         object = lv_btn_create(parent);
         lv_obj_set_style_bg_color(object, lv_color_hex(json_color(definition, "background", 0x151619)), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(object, json_int(definition, "background_opa", 255, 0, 255), LV_PART_MAIN);
         cJSON *text = cJSON_GetObjectItemCaseSensitive(definition, "text");
         lv_obj_t *label = lv_label_create(object);
-        const char *default_text = binding == BIND_RECORD_BUTTON ? "REC" : "Settings";
+        const char *default_text = binding == BIND_RECORD_BUTTON ? "REC" :
+                       binding == BIND_SIM_BUTTON ? "SIM" : "Settings";
         lv_label_set_text(label, cJSON_IsString(text) ? text->valuestring : default_text);
+        lv_obj_set_style_text_color(label, lv_color_hex(json_color(definition, "color", 0xffffff)), LV_PART_MAIN);
+        lv_obj_set_style_text_opa(label, json_int(definition, "color_opa", 255, 0, 255), LV_PART_MAIN);
         lv_obj_center(label);
         if (binding == BIND_SETTINGS_BUTTON && settings_cb) {
             lv_obj_add_event_cb(object, settings_cb, LV_EVENT_SHORT_CLICKED, NULL);
             lv_obj_add_event_cb(object, settings_cb, LV_EVENT_LONG_PRESSED, NULL);
         }
         if (binding == BIND_RECORD_BUTTON && record_cb) lv_obj_add_event_cb(object, record_cb, LV_EVENT_CLICKED, NULL);
+        if (binding == BIND_SIM_BUTTON) {
+            if (sim_cb) lv_obj_add_event_cb(object, sim_cb, LV_EVENT_SHORT_CLICKED, NULL);
+            if (sim_long_press_cb)
+                lv_obj_add_event_cb(object, sim_long_press_cb, LV_EVENT_LONG_PRESSED, NULL);
+        }
     } else {
         object = lv_obj_create(parent);
-        lv_obj_set_style_bg_color(object, lv_color_hex(json_color(definition, "color", 0xe4002b)), LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(object, LV_OPA_COVER, LV_PART_MAIN);
+        bool generic_object = !strcmp(type, "object");
+        const char *color_key = generic_object ? "background" : "color";
+        const char *opacity_key = generic_object ? "background_opa" : "color_opa";
+        lv_obj_set_style_bg_color(object, lv_color_hex(json_color(definition, color_key, 0xe4002b)), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(object, json_int(definition, opacity_key, 255, 0, 255), LV_PART_MAIN);
         lv_obj_set_style_border_width(object, 0, LV_PART_MAIN);
     }
 
@@ -501,7 +800,10 @@ static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
     }
     if (kind != WIDGET_BUTTON) lv_obj_clear_flag(object, LV_OBJ_FLAG_CLICKABLE);
     if (kind != WIDGET_LABEL) lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE);
-    add_binding(object, binding, kind);
+    runtime_binding_t *runtime_binding = add_binding(object, binding, kind);
+    if (kind == WIDGET_PATH_GAUGE) configure_path_gauge(object, definition, runtime_binding);
+    if (kind == WIDGET_NEEDLE || kind == WIDGET_ANALOG_TACH)
+        configure_meter(object, definition, kind, runtime_binding);
     if (name[0] && binding == BIND_NONE && strncmp(name, "dash", 4) == 0)
         ESP_LOGW(TAG, "Unresolved object name: %s", name);
     return object;
@@ -510,6 +812,15 @@ static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
 void runtime_theme_unload(void)
 {
     if (s_root) lv_obj_del(s_root);
+    for (size_t i = 0; i < s_binding_count; ++i) {
+        free(s_bindings[i].path_gauge);
+        s_bindings[i].path_gauge = NULL;
+    }
+    for (size_t i = 0; i < s_dynamic_font_count; ++i) {
+        lv_tiny_ttf_destroy(s_dynamic_fonts[i]);
+        s_dynamic_fonts[i] = NULL;
+        s_dynamic_font_sizes[i] = 0;
+    }
     for (size_t i = 0; i < s_image_count; ++i) {
         free(s_image_data[i]);
         free(s_image_descriptors[i]);
@@ -520,10 +831,12 @@ void runtime_theme_unload(void)
     s_package = NULL;
     s_binding_count = 0;
     s_image_count = 0;
+    s_dynamic_font_count = 0;
 }
 
 esp_err_t runtime_theme_load(lv_obj_t *parent, const theme_storage_package_t *package,
-                             lv_event_cb_t settings_cb, lv_event_cb_t record_cb)
+                             lv_event_cb_t settings_cb, lv_event_cb_t record_cb,
+                             lv_event_cb_t sim_cb, lv_event_cb_t sim_long_press_cb)
 {
     if (!parent || !package || !package->manifest_valid || !package->layout_path[0]) return ESP_ERR_INVALID_ARG;
     uint8_t *layout_data = NULL;
@@ -559,12 +872,13 @@ esp_err_t runtime_theme_load(lv_obj_t *parent, const theme_storage_package_t *pa
     lv_obj_set_style_border_width(s_root, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(s_root, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(s_root, lv_color_hex(json_color(layout, "background", 0x08090a)), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(s_root, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_root, json_int(layout, "background_opa", 255, 0, 255), LV_PART_MAIN);
     lv_obj_clear_flag(s_root, LV_OBJ_FLAG_SCROLLABLE);
 
     cJSON *definition = NULL;
     cJSON_ArrayForEach(definition, objects) {
-        if (cJSON_IsObject(definition)) build_object(s_root, definition, settings_cb, record_cb);
+        if (cJSON_IsObject(definition))
+            build_object(s_root, definition, settings_cb, record_cb, sim_cb, sim_long_press_cb);
     }
     bool has_settings_button = false;
     bool has_record_button = false;
@@ -681,6 +995,22 @@ void runtime_theme_update(const honda_dash_data_t *data)
             lv_bar_set_value(binding->object, (int32_t)lroundf(binding_value(binding->id, data)), LV_ANIM_OFF);
         } else if (binding->kind == WIDGET_ARC) {
             lv_arc_set_value(binding->object, (int32_t)lroundf(binding_value(binding->id, data)));
+        } else if (binding->kind == WIDGET_PATH_GAUGE && binding->path_gauge) {
+            int value = (int)lroundf(binding_value(binding->id, data));
+            path_gauge_t *gauge = binding->path_gauge;
+            int range = gauge->maximum - gauge->minimum;
+            int previous = range > 0 ? (gauge->value - gauge->minimum) * gauge->segment_count / range : 0;
+            int current = range > 0 ? (value - gauge->minimum) * gauge->segment_count / range : 0;
+            gauge->value = value;
+            if (current != previous) lv_obj_invalidate(binding->object);
+        } else if (binding->kind == WIDGET_NEEDLE || binding->kind == WIDGET_ANALOG_TACH) {
+            int32_t value = (int32_t)lroundf(binding_value(binding->id, data));
+            if (binding->meter_indicator) lv_meter_set_indicator_value(binding->object, binding->meter_indicator, value);
+            if (binding->value_label) {
+                char text[24];
+                snprintf(text, sizeof(text), "%ld", (long)value);
+                lv_label_set_text(binding->value_label, text);
+            }
         } else if (binding->kind == WIDGET_INDICATOR) {
             bool visible = false;
             switch (binding->id) {

@@ -22,6 +22,10 @@
 #define KEY_SHIFT_ENABLE "cfg_shift_en"
 #define KEY_SHIFT_BRIGHT "cfg_shift_br"
 #define KEY_SHIFT_FLASH  "cfg_sh_flash"
+#define KEY_LANGUAGE     "cfg_language"
+#define KEY_FUEL_ANALOG  "cfg_fuel_ain"
+#define KEY_FUEL_EMPTY   "cfg_fuel_emp"
+#define KEY_FUEL_FULL    "cfg_fuel_full"
 
 #define DEFAULT_VTEC_RPM    5600
 #define DEFAULT_REDLINE_RPM 8400
@@ -33,6 +37,9 @@
 #define SHIFT_RPM_MIN       3000
 #define SHIFT_RPM_MAX       11000
 #define SHIFT_STAGE_GAP     100
+#define DEFAULT_FUEL_ANALOG 0
+#define DEFAULT_FUEL_EMPTY_MV 3290
+#define DEFAULT_FUEL_FULL_MV 290
 
 static const char *const SHIFT_STAGE_RPM_KEYS[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
     "cfg_shift_s1", "cfg_shift_s2", "cfg_shift_s3",
@@ -92,6 +99,7 @@ static const int ENDURANCE_FIELD_DEFAULTS[DASH_CONFIG_ENDURANCE_FIELD_COUNT] = {
 static const int TOURING_FIELD_DEFAULTS[DASH_CONFIG_TOURING_FIELD_COUNT] = {0, 10, 5, 7};
 
 static bool s_metric = false;
+static dash_config_language_t s_language = DASH_CONFIG_LANGUAGE_ENGLISH;
 static bool s_speed_kph = false;
 static bool s_temperature_celsius = false;
 static bool s_pressure_kpa = false;
@@ -101,6 +109,9 @@ static int  s_vtec_rpm = DEFAULT_VTEC_RPM;
 static int  s_redline_rpm = DEFAULT_REDLINE_RPM;
 static int s_brightness = DEFAULT_BRIGHTNESS;
 static bool s_show_sim_button = false;
+static int s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
+static int s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
+static int s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
 static dash_config_smoothing_strength_t s_smoothing_strength = DASH_CONFIG_SMOOTHING_OFF;
 static bool s_auto_record = false;
 static dash_config_log_name_t s_log_name = DASH_CONFIG_LOG_NAME_GENERAL;
@@ -140,6 +151,10 @@ void dash_config_init(void)
     }
 
     int32_t val = 0;
+    if (nvs_get_i32(h, KEY_LANGUAGE, &val) == ESP_OK &&
+            val >= DASH_CONFIG_LANGUAGE_ENGLISH && val < DASH_CONFIG_LANGUAGE_COUNT) {
+        s_language = (dash_config_language_t)val;
+    }
     if (nvs_get_i32(h, KEY_METRIC, &val) == ESP_OK) {
         s_metric = (val != 0);
         s_speed_kph = s_metric;
@@ -161,6 +176,16 @@ void dash_config_init(void)
     }
     if (nvs_get_i32(h, KEY_SHOW_SIM, &val) == ESP_OK) {
         s_show_sim_button = (val != 0);
+    }
+    if (nvs_get_i32(h, KEY_FUEL_ANALOG, &val) == ESP_OK &&
+            val >= 0 && val < DASH_CONFIG_FUEL_ANALOG_COUNT) {
+        s_fuel_analog_input = (int)val;
+    }
+    if (nvs_get_i32(h, KEY_FUEL_EMPTY, &val) == ESP_OK && val >= 0 && val <= 5000) {
+        s_fuel_empty_mv = (int)val;
+    }
+    if (nvs_get_i32(h, KEY_FUEL_FULL, &val) == ESP_OK && val >= 0 && val <= 5000) {
+        s_fuel_full_mv = (int)val;
     }
     if (nvs_get_i32(h, KEY_SMOOTH_LEVEL, &val) == ESP_OK &&
             val >= DASH_CONFIG_SMOOTHING_OFF && val < DASH_CONFIG_SMOOTHING_COUNT) {
@@ -235,6 +260,11 @@ void dash_config_init(void)
     }
 
     nvs_close(h);
+}
+
+dash_config_language_t dash_config_get_language(void)
+{
+    return s_language;
 }
 
 bool dash_config_get_metric(void)
@@ -359,6 +389,15 @@ static void persist_i32(const char *key, int value)
     nvs_close(h);
 }
 
+void dash_config_set_language(dash_config_language_t language)
+{
+    if (language < DASH_CONFIG_LANGUAGE_ENGLISH || language >= DASH_CONFIG_LANGUAGE_COUNT) {
+        language = DASH_CONFIG_LANGUAGE_ENGLISH;
+    }
+    s_language = language;
+    persist_i32(KEY_LANGUAGE, (int)language);
+}
+
 bool dash_config_get_shift_light_enabled(void)
 {
     return s_shift_light_enabled;
@@ -458,6 +497,57 @@ void dash_config_set_show_sim_button(bool show)
     nvs_set_i32(h, KEY_SHOW_SIM, show ? 1 : 0);
     nvs_commit(h);
     nvs_close(h);
+}
+
+int dash_config_get_fuel_analog_input(void)
+{
+    return s_fuel_analog_input;
+}
+
+void dash_config_set_fuel_analog_input(int input)
+{
+    if (input < 0) input = 0;
+    if (input >= DASH_CONFIG_FUEL_ANALOG_COUNT) input = DASH_CONFIG_FUEL_ANALOG_COUNT - 1;
+    s_fuel_analog_input = input;
+    persist_i32(KEY_FUEL_ANALOG, input);
+}
+
+int dash_config_get_fuel_empty_mv(void)
+{
+    return s_fuel_empty_mv;
+}
+
+void dash_config_set_fuel_empty_mv(int millivolts)
+{
+    if (millivolts < 0) millivolts = 0;
+    if (millivolts > 5000) millivolts = 5000;
+    s_fuel_empty_mv = millivolts;
+    persist_i32(KEY_FUEL_EMPTY, millivolts);
+}
+
+int dash_config_get_fuel_full_mv(void)
+{
+    return s_fuel_full_mv;
+}
+
+void dash_config_set_fuel_full_mv(int millivolts)
+{
+    if (millivolts < 0) millivolts = 0;
+    if (millivolts > 5000) millivolts = 5000;
+    s_fuel_full_mv = millivolts;
+    persist_i32(KEY_FUEL_FULL, millivolts);
+}
+
+float dash_config_fuel_percent(float voltage)
+{
+    float empty_voltage = (float)s_fuel_empty_mv / 1000.0f;
+    float full_voltage = (float)s_fuel_full_mv / 1000.0f;
+    float span = full_voltage - empty_voltage;
+    if (span > -0.05f && span < 0.05f) return 0.0f;
+    float percent = (voltage - empty_voltage) * 100.0f / span;
+    if (percent < 0.0f) return 0.0f;
+    if (percent > 100.0f) return 100.0f;
+    return percent;
 }
 
 bool dash_config_get_value_smoothing(void)
@@ -740,6 +830,7 @@ void dash_config_set_threshold_tenths(dash_config_threshold_t threshold, int val
 
 void dash_config_factory_reset(void)
 {
+    s_language = DASH_CONFIG_LANGUAGE_ENGLISH;
     s_metric = false;
     s_speed_kph = false;
     s_temperature_celsius = false;
@@ -749,6 +840,9 @@ void dash_config_factory_reset(void)
     s_redline_rpm = DEFAULT_REDLINE_RPM;
     s_brightness = DEFAULT_BRIGHTNESS;
     s_show_sim_button = false;
+    s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
+    s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
+    s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
     s_smoothing_strength = DASH_CONFIG_SMOOTHING_OFF;
     s_auto_record = false;
     s_log_name = DASH_CONFIG_LOG_NAME_GENERAL;
@@ -770,6 +864,7 @@ void dash_config_factory_reset(void)
     if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) {
         return;
     }
+    nvs_set_i32(h, KEY_LANGUAGE, DASH_CONFIG_LANGUAGE_ENGLISH);
     nvs_set_i32(h, KEY_METRIC, 0);
     nvs_set_i32(h, KEY_SPEED_KPH, 0);
     nvs_set_i32(h, KEY_TEMP_C, 0);
@@ -779,6 +874,9 @@ void dash_config_factory_reset(void)
     nvs_set_i32(h, KEY_REDLINE_RPM, (int32_t)s_redline_rpm);
     nvs_set_i32(h, KEY_BRIGHTNESS, (int32_t)s_brightness);
     nvs_set_i32(h, KEY_SHOW_SIM, 0);
+    nvs_set_i32(h, KEY_FUEL_ANALOG, s_fuel_analog_input);
+    nvs_set_i32(h, KEY_FUEL_EMPTY, s_fuel_empty_mv);
+    nvs_set_i32(h, KEY_FUEL_FULL, s_fuel_full_mv);
     nvs_set_i32(h, KEY_VALUE_SMOOTH, 0);
     nvs_set_i32(h, KEY_SMOOTH_LEVEL, DASH_CONFIG_SMOOTHING_OFF);
     nvs_set_i32(h, KEY_AUTO_RECORD, 0);

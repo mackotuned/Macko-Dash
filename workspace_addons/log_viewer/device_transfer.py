@@ -13,6 +13,7 @@ import serial
 
 BAUD_RATE = 115200
 MAX_THEME_SIZE = 8 * 1024 * 1024
+BOOT_LOGO_SIZE = 80 + 1024 * 600 * 2
 LOG_NAME = re.compile(r"LOG\d{4}\.CSV")
 
 
@@ -151,6 +152,38 @@ class DashboardClient:
                 sent += len(block)
                 if progress:
                     progress(sent, size)
+        self.connection.flush()
+        completion = self._read_protocol_line(15.0)
+        self._raise_for_error(completion)
+        if completion != "MDP1 DONE REBOOTING":
+            raise DeviceTransferError(f"Unexpected upload completion: {completion}")
+
+    def upload_boot_logo(
+        self,
+        package: Path,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> None:
+        if package.suffix.lower() != ".mdlogo" or package.stat().st_size != BOOT_LOGO_SIZE:
+            raise DeviceTransferError("Choose a valid MackoDash .mdlogo file.")
+        with package.open("rb") as source:
+            if source.read(4) != b"MDL1":
+                raise DeviceTransferError("The boot logo header is invalid.")
+            source.seek(0)
+            checksum = 0
+            while block := source.read(65536):
+                checksum = zlib.crc32(block, checksum)
+        self._send_line(f"MDP1 PUTLOGO {package.name} {BOOT_LOGO_SIZE} {checksum:08X}")
+        ready = self._read_protocol_line()
+        self._raise_for_error(ready)
+        if ready != "MDP1 READY":
+            raise DeviceTransferError(f"Unexpected upload response: {ready}")
+        sent = 0
+        with package.open("rb") as source:
+            while block := source.read(4096):
+                self.connection.write(block)
+                sent += len(block)
+                if progress:
+                    progress(sent, BOOT_LOGO_SIZE)
         self.connection.flush()
         completion = self._read_protocol_line(15.0)
         self._raise_for_error(completion)

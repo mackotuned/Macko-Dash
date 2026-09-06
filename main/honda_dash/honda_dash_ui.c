@@ -24,15 +24,22 @@
 #include "ota_update.h"
 #include "dash_sim.h"
 #include "dash_config.h"
+#include "dashboard_i18n.h"
 #include "data_logger.h"
 #include "device_log_viewer.h"
 #include "achievement_system.h"
 #include "session_peaks.h"
 #include "theme_storage.h"
+#include "boot_logo_storage.h"
 #include "runtime_theme.h"
 #include "odometer/odometer.h"
 #include "dashboard_runtime.h"
 #include "canbus.h"
+
+#define lv_label_set_text(object, text) \
+    lv_label_set_text((object), dashboard_i18n_translate(text))
+#define lv_dropdown_set_options(object, options) \
+    lv_dropdown_set_options((object), dashboard_i18n_translate(options))
 
 LV_IMG_DECLARE(huntertuned_logo);
 
@@ -42,13 +49,52 @@ extern lv_res_t lv_qrcode_update(lv_obj_t * qrcode, const void * data, uint32_t 
 #endif
 
 /* ================= FONTS (swap these for custom Barlow Condensed fonts) === */
-#define DASH_FONT_SPEED    &lv_font_montserrat_44   /* mockup: 118px */
-#define DASH_FONT_RPM      &lv_font_montserrat_44   /* mockup: 58px  */
-#define DASH_FONT_GEAR     &lv_font_montserrat_44   /* mockup: 56px  */
-#define DASH_FONT_TILEVAL  &lv_font_montserrat_28   /* mockup: 44px  */
-#define DASH_FONT_LABEL    &lv_font_montserrat_12   /* mockup: 12px  */
-#define DASH_FONT_LABEL14  &lv_font_montserrat_14
-#define DASH_FONT_HAL_VALUE &lv_font_montserrat_40
+static lv_font_t *s_i18n_font_14;
+static lv_font_t s_font_12;
+static lv_font_t s_font_14;
+static lv_font_t s_font_28;
+static lv_font_t s_font_40;
+static lv_font_t s_font_44;
+
+#define DASH_FONT_SPEED    (s_i18n_font_14 ? &s_font_44 : &lv_font_montserrat_44)
+#define DASH_FONT_RPM      (s_i18n_font_14 ? &s_font_44 : &lv_font_montserrat_44)
+#define DASH_FONT_GEAR     (s_i18n_font_14 ? &s_font_44 : &lv_font_montserrat_44)
+#define DASH_FONT_TILEVAL  (s_i18n_font_14 ? &s_font_28 : &lv_font_montserrat_28)
+#define DASH_FONT_LABEL    (s_i18n_font_14 ? &s_font_12 : &lv_font_montserrat_12)
+#define DASH_FONT_LABEL14  (s_i18n_font_14 ? &s_font_14 : &lv_font_montserrat_14)
+#define DASH_FONT_HAL_VALUE (s_i18n_font_14 ? &s_font_40 : &lv_font_montserrat_40)
+
+extern const uint8_t dashboard_i18n_ttf_start[] asm("_binary_Dashboard_I18n_ttf_start");
+extern const uint8_t dashboard_i18n_ttf_end[] asm("_binary_Dashboard_I18n_ttf_end");
+
+static lv_font_t *create_i18n_font(int size, const lv_font_t *fallback)
+{
+    size_t data_size = (size_t)(dashboard_i18n_ttf_end - dashboard_i18n_ttf_start);
+    size_t cache_size = (size_t)size * (size_t)size;
+    if (cache_size < 4096) cache_size = 4096;
+    lv_font_t *font = lv_tiny_ttf_create_data_ex(dashboard_i18n_ttf_start, data_size,
+                                                  size, cache_size);
+    if (font) font->fallback = fallback;
+    return font;
+}
+
+static void initialize_i18n_fonts(void)
+{
+    if (dash_config_get_language() == DASH_CONFIG_LANGUAGE_ENGLISH || s_i18n_font_14) return;
+    s_i18n_font_14 = create_i18n_font(14, NULL);
+    if (!s_i18n_font_14) return;
+
+    s_font_12 = lv_font_montserrat_12;
+    s_font_14 = lv_font_montserrat_14;
+    s_font_28 = lv_font_montserrat_28;
+    s_font_40 = lv_font_montserrat_40;
+    s_font_44 = lv_font_montserrat_44;
+    s_font_12.fallback = s_i18n_font_14;
+    s_font_14.fallback = s_i18n_font_14;
+    s_font_28.fallback = s_i18n_font_14;
+    s_font_40.fallback = s_i18n_font_14;
+    s_font_44.fallback = s_i18n_font_14;
+}
 
 /* ================= PALETTE (matches the web mockup 1:1) =================== */
 #define C_VOID       lv_color_hex(0x08090a)
@@ -257,6 +303,8 @@ static int s_shift_light_last_colors[DASH_CONFIG_SHIFT_STAGE_COUNT] = {-1, -1, -
 
 static void add_press_feedback(lv_obj_t *obj);
 static void record_btn_cb(lv_event_t *event);
+static void sim_btn_cb(lv_event_t *event);
+static void sim_btn_long_press_cb(lv_event_t *event);
 static void update_theme_modern(const honda_dash_data_t *data, int rpm, bool limiter_hit, bool vtec_on, float fuel);
 
 static void odo_tiles_refresh_display(void)
@@ -398,6 +446,7 @@ static lv_obj_t *s_page_display;
 static lv_obj_t *s_page_shortcuts;
 static lv_obj_t *s_page_readme;
 static lv_obj_t *s_page_odometer;
+static lv_obj_t *s_page_fuel;
 static lv_obj_t *s_page_engine_limits;
 static lv_obj_t *s_page_achievements;
 static lv_obj_t *s_page_ecu;
@@ -471,6 +520,13 @@ static lv_obj_t *s_cfg_redline_slider;
 static lv_obj_t *s_cfg_restart_note;
 static lv_obj_t *s_cfg_sim_button_switch;
 static lv_obj_t *s_cfg_smoothing_dropdown;
+static lv_obj_t *s_cfg_fuel_input_dropdown;
+static lv_obj_t *s_cfg_fuel_voltage_sliders[2];
+static lv_obj_t *s_cfg_fuel_voltage_labels[2];
+static lv_obj_t *s_cfg_fuel_live_label;
+static lv_obj_t *s_cfg_boot_logo_dropdown;
+static lv_obj_t *s_cfg_boot_logo_delete_button;
+static lv_obj_t *s_cfg_boot_logo_status;
 static lv_obj_t *s_cfg_auto_record_switch;
 static lv_obj_t *s_cfg_log_name_dropdown;
 static lv_obj_t *s_cfg_shift_enable_switch;
@@ -1165,6 +1221,7 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_add_flag(s_page_shortcuts, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_readme, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_odometer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_page_fuel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_engine_limits, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_achievements, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_contact, LV_OBJ_FLAG_HIDDEN);
@@ -1369,6 +1426,7 @@ static void settings_open_display_cb(lv_event_t *e) { (void)e; settings_show_pag
 static void settings_open_shortcuts_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_shortcuts); }
 static void settings_open_readme_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_readme); }
 static void settings_open_odometer_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_odometer); }
+static void settings_open_fuel_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_fuel); }
 static void settings_open_contact_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_contact); }
 static void settings_achievements_refresh(void)
 {
@@ -1554,6 +1612,100 @@ static void cfg_smoothing_dropdown_cb(lv_event_t *e)
 {
     dash_config_set_smoothing_strength((dash_config_smoothing_strength_t)
                                        lv_dropdown_get_selected(lv_event_get_target(e)));
+}
+
+static void cfg_fuel_live_refresh(void)
+{
+    if (!s_cfg_fuel_live_label) return;
+    int input = dash_config_get_fuel_analog_input();
+    float voltage = can_data.analog_inputs[input];
+    char value[32];
+    snprintf(value, sizeof(value), "Analog %d  %.2f V  %.0f%%", input, voltage,
+             dash_config_fuel_percent(voltage));
+    lv_label_set_text(s_cfg_fuel_live_label, value);
+}
+
+static void cfg_fuel_input_cb(lv_event_t *e)
+{
+    dash_config_set_fuel_analog_input(lv_dropdown_get_selected(lv_event_get_target(e)));
+    cfg_fuel_live_refresh();
+}
+
+static void cfg_fuel_voltage_changed_cb(lv_event_t *e)
+{
+    int endpoint = (int)(intptr_t)lv_event_get_user_data(e);
+    int millivolts = lv_slider_get_value(lv_event_get_target(e));
+    char value[12];
+    snprintf(value, sizeof(value), "%.2f V", (double)millivolts / 1000.0);
+    lv_label_set_text(s_cfg_fuel_voltage_labels[endpoint], value);
+}
+
+static void cfg_fuel_voltage_released_cb(lv_event_t *e)
+{
+    int endpoint = (int)(intptr_t)lv_event_get_user_data(e);
+    int millivolts = lv_slider_get_value(lv_event_get_target(e));
+    if (endpoint == 0) dash_config_set_fuel_empty_mv(millivolts);
+    else dash_config_set_fuel_full_mv(millivolts);
+    cfg_fuel_live_refresh();
+}
+
+static void cfg_fuel_live_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    cfg_fuel_live_refresh();
+}
+
+static void cfg_boot_logo_dropdown_cb(lv_event_t *e)
+{
+    bool custom = lv_dropdown_get_selected(lv_event_get_target(e)) > 0;
+    if (custom) lv_obj_clear_state(s_cfg_boot_logo_delete_button, LV_STATE_DISABLED);
+    else lv_obj_add_state(s_cfg_boot_logo_delete_button, LV_STATE_DISABLED);
+}
+
+static void cfg_boot_logo_set_cb(lv_event_t *e)
+{
+    (void)e;
+    int selected = (int)lv_dropdown_get_selected(s_cfg_boot_logo_dropdown) - 1;
+    esp_err_t result = boot_logo_storage_select(selected);
+    lv_label_set_text(s_cfg_boot_logo_status,
+                      result == ESP_OK ? "Selected. Shown on next startup." : "Could not save selection.");
+}
+
+static void cfg_boot_logo_delete_cb(lv_event_t *e)
+{
+    (void)e;
+    int selected = (int)lv_dropdown_get_selected(s_cfg_boot_logo_dropdown) - 1;
+    if (selected < 0) return;
+    esp_err_t result = boot_logo_storage_delete((size_t)selected);
+    lv_label_set_text(s_cfg_boot_logo_status,
+                      result == ESP_OK ? "Boot logo deleted." : "Could not delete boot logo.");
+    if (result != ESP_OK) return;
+
+    char options[BOOT_LOGO_STORAGE_MAX_LOGOS * BOOT_LOGO_STORAGE_NAME_MAX + 32] = "Built-in MackoDash";
+    for (size_t index = 0; index < boot_logo_storage_get_count(); ++index) {
+        const boot_logo_storage_entry_t *logo = boot_logo_storage_get_entry(index);
+        strlcat(options, "\n", sizeof(options));
+        strlcat(options, logo->display_name, sizeof(options));
+    }
+    lv_dropdown_set_options(s_cfg_boot_logo_dropdown, options);
+    lv_dropdown_set_selected(s_cfg_boot_logo_dropdown, 0);
+    lv_obj_add_state(s_cfg_boot_logo_delete_button, LV_STATE_DISABLED);
+}
+
+static void cfg_language_restart_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    esp_restart();
+}
+
+static void cfg_language_dropdown_cb(lv_event_t *e)
+{
+    dash_config_language_t language = (dash_config_language_t)
+                                      lv_dropdown_get_selected(lv_event_get_target(e));
+    if (language == dash_config_get_language()) return;
+    dash_config_set_language(language);
+    lv_timer_t *restart_timer = lv_timer_create(cfg_language_restart_cb, 350, NULL);
+    lv_timer_set_repeat_count(restart_timer, 1);
 }
 
 static void cfg_auto_record_switch_cb(lv_event_t *e)
@@ -2082,7 +2234,8 @@ static void settings_nav_cb(lv_event_t *e)
                s_settings_current_page == s_page_logs ||
                s_settings_current_page == s_page_achievements) {
         settings_logs_child_back_cb(e);
-    } else if (s_settings_current_page == s_page_info ||
+    } else if (s_settings_current_page == s_page_fuel ||
+               s_settings_current_page == s_page_info ||
                s_settings_current_page == s_page_shortcuts ||
                s_settings_current_page == s_page_readme ||
              s_settings_current_page == s_page_theme_resets ||
@@ -2413,7 +2566,8 @@ static void activate_theme(int idx, bool persist)
     if (idx >= 100) {
         const theme_storage_package_t *package = theme_storage_get_package((size_t)(idx - 100));
         esp_err_t err = package && package->manifest_valid ?
-                runtime_theme_load(s_cluster, package, settings_btn_cb, record_btn_cb) : ESP_ERR_INVALID_ARG;
+                runtime_theme_load(s_cluster, package, settings_btn_cb, record_btn_cb,
+                                   sim_btn_cb, sim_btn_long_press_cb) : ESP_ERR_INVALID_ARG;
         if (err != ESP_OK) {
             ESP_LOGW("THEME", "Cannot load SD theme %d: %s; using MackoDash V1", idx, esp_err_to_name(err));
             runtime_theme_unload();
@@ -3440,9 +3594,10 @@ static void sim_btn_apply_visual(lv_obj_t *btn)
 
 static void sim_btn_cb(lv_event_t *e)
 {
-    (void)e;
     s_sim_active = !s_sim_active;
     dash_sim_set_enabled(s_sim_active);
+    lv_obj_t *clicked = lv_event_get_target(e);
+    if (clicked) sim_btn_apply_visual(clicked);
     for (int i = 0; i < s_sim_btn_count; i++) {
         sim_btn_apply_visual(s_sim_btn_instances[i]);
     }
@@ -4389,6 +4544,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_t *shortcuts_content = build_config_subpage(panel, &s_page_shortcuts, "SHORTCUTS & TIPS");
     lv_obj_t *readme_content = build_config_subpage(panel, &s_page_readme, "READ ME");
     lv_obj_t *odometer_content = build_config_subpage(panel, &s_page_odometer, "ODOMETER & TRIPS");
+    lv_obj_t *fuel_content = build_config_subpage(panel, &s_page_fuel, "FUEL GAUGE SETUP");
     lv_obj_t *engine_limits_content = build_config_subpage(panel, &s_page_engine_limits, "ENGINE LIMITS");
     lv_obj_t *achievements_content = build_config_subpage(panel, &s_page_achievements, "ACHIEVEMENTS");
 
@@ -4617,6 +4773,187 @@ static void build_settings_overlay(lv_obj_t *cluster)
         lv_obj_set_style_radius(card, 12, LV_PART_MAIN);
         lv_obj_set_style_pad_all(card, 14, LV_PART_MAIN);
         lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
+                      LV_FLEX_ALIGN_CENTER);
+        make_label(card, "Language", DASH_FONT_LABEL14, C_LABEL);
+        lv_obj_t *language_dropdown = lv_dropdown_create(card);
+        lv_dropdown_set_options(language_dropdown, dashboard_i18n_language_options());
+        lv_dropdown_set_selected(language_dropdown, dash_config_get_language());
+        lv_obj_set_width(language_dropdown, 190);
+        lv_obj_add_event_cb(language_dropdown, cfg_language_dropdown_cb,
+                    LV_EVENT_VALUE_CHANGED, NULL);
+
+        card = lv_obj_create(fuel_content);
+        lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(card, C_PANEL, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
+        lv_obj_set_style_radius(card, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(card, 14, LV_PART_MAIN);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(card, 10, LV_PART_MAIN);
+        make_label(card, "Fuel Gauge Setup", DASH_FONT_LABEL14, C_WHITE);
+
+        lv_obj_t *fuel_input_row = make_plain_container(card);
+        lv_obj_set_size(fuel_input_row, LV_PCT(100), 44);
+        lv_obj_set_flex_flow(fuel_input_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(fuel_input_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        make_label(fuel_input_row, "Hondata Analog Input", DASH_FONT_LABEL14, C_LABEL);
+        s_cfg_fuel_input_dropdown = lv_dropdown_create(fuel_input_row);
+        lv_dropdown_set_options(s_cfg_fuel_input_dropdown,
+                                "Analog 0\nAnalog 1\nAnalog 2\nAnalog 3\nAnalog 4\nAnalog 5\nAnalog 6");
+        lv_dropdown_set_selected(s_cfg_fuel_input_dropdown, dash_config_get_fuel_analog_input());
+        lv_obj_set_width(s_cfg_fuel_input_dropdown, 160);
+        lv_obj_add_event_cb(s_cfg_fuel_input_dropdown, cfg_fuel_input_cb,
+                            LV_EVENT_VALUE_CHANGED, NULL);
+
+        const char *fuel_endpoint_names[] = {"Empty voltage", "Full voltage"};
+        int fuel_endpoint_values[] = {
+            dash_config_get_fuel_empty_mv(), dash_config_get_fuel_full_mv()
+        };
+        for (int endpoint = 0; endpoint < 2; ++endpoint) {
+            lv_obj_t *top = make_plain_container(card);
+            lv_obj_set_size(top, LV_PCT(100), LV_SIZE_CONTENT);
+            lv_obj_set_flex_flow(top, LV_FLEX_FLOW_ROW);
+            lv_obj_set_flex_align(top, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                                  LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+            make_label(top, fuel_endpoint_names[endpoint], DASH_FONT_LABEL, C_LABEL);
+            char voltage[12];
+            snprintf(voltage, sizeof(voltage), "%.2f V",
+                     (double)fuel_endpoint_values[endpoint] / 1000.0);
+            s_cfg_fuel_voltage_labels[endpoint] =
+                make_label(top, voltage, DASH_FONT_LABEL14, C_WHITE);
+
+            lv_obj_t *slider = lv_slider_create(card);
+            s_cfg_fuel_voltage_sliders[endpoint] = slider;
+            configure_menu_slider(slider);
+            lv_obj_set_size(slider, LV_PCT(100), 16);
+            lv_slider_set_range(slider, 0, 5000);
+            lv_slider_set_value(slider, fuel_endpoint_values[endpoint], LV_ANIM_OFF);
+            lv_obj_set_style_bg_color(slider, C_RED, LV_PART_INDICATOR);
+            lv_obj_set_style_bg_color(slider, C_WHITE, LV_PART_KNOB);
+            lv_obj_add_event_cb(slider, cfg_fuel_voltage_changed_cb,
+                                LV_EVENT_VALUE_CHANGED, (void *)(intptr_t)endpoint);
+            lv_obj_add_event_cb(slider, cfg_fuel_voltage_released_cb,
+                                LV_EVENT_RELEASED, (void *)(intptr_t)endpoint);
+        }
+
+        lv_obj_t *fuel_live_row = make_plain_container(card);
+        lv_obj_set_size(fuel_live_row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(fuel_live_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(fuel_live_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        make_label(fuel_live_row, "Live Reading", DASH_FONT_LABEL, C_LABEL);
+        s_cfg_fuel_live_label = make_label(fuel_live_row, "Analog 0  0.00 V  0%",
+                                           DASH_FONT_LABEL14, C_AMBER);
+        cfg_fuel_live_refresh();
+        lv_timer_create(cfg_fuel_live_timer_cb, 250, NULL);
+        make_label(card, "Hondata analog inputs must not exceed 5 V.",
+                   DASH_FONT_LABEL, C_RED);
+
+        lv_obj_t *wiring_card = lv_obj_create(fuel_content);
+        lv_obj_set_size(wiring_card, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(wiring_card, C_PANEL, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(wiring_card, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(wiring_card, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(wiring_card, C_LINE, LV_PART_MAIN);
+        lv_obj_set_style_radius(wiring_card, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(wiring_card, 14, LV_PART_MAIN);
+        lv_obj_clear_flag(wiring_card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(wiring_card, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(wiring_card, 8, LV_PART_MAIN);
+        make_label(wiring_card, "WIRING", DASH_FONT_LABEL14, C_WHITE);
+        lv_obj_t *wiring_text = make_label(wiring_card,
+            "1. Disconnect the fuel sender wire from the stock cluster. Make sure no other device is powering the sender.\n"
+            "2. Wire the sender to the selected Hondata analog input using a 56 ohm, 1 watt resistor.\n"
+            "3. With a multimeter, verify the signal at the Hondata input never exceeds 5.00 V before connecting the ECU.\n"
+            "4. K-series normally uses ECU pin E5. B-series uses ECU pin D19. The K-series E5 terminal is TE Connectivity 316836-1.",
+            DASH_FONT_LABEL14, C_LABEL);
+        lv_obj_set_width(wiring_text, LV_PCT(100));
+        lv_label_set_long_mode(wiring_text, LV_LABEL_LONG_WRAP);
+
+        lv_obj_t *calibration_card = lv_obj_create(fuel_content);
+        lv_obj_set_size(calibration_card, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(calibration_card, C_PANEL, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(calibration_card, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(calibration_card, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(calibration_card, C_LINE, LV_PART_MAIN);
+        lv_obj_set_style_radius(calibration_card, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(calibration_card, 14, LV_PART_MAIN);
+        lv_obj_clear_flag(calibration_card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(calibration_card, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(calibration_card, 8, LV_PART_MAIN);
+        make_label(calibration_card, "CALIBRATION", DASH_FONT_LABEL14, C_WHITE);
+        lv_obj_t *calibration_text = make_label(calibration_card,
+            "Measure the selected analog input with the tank empty and full, then enter those two voltages above. The dashboard supports either voltage direction and clamps the result to 0-100%.\n\n"
+            "Reference values (Empty / Full):\n"
+            "Civic EG  3.31 / 0.17 V    Civic EK  3.29 / 0.29 V\n"
+            "S2000  3.50 / 0.90 V       Integra DC5  3.51 / 0.82 V\n"
+            "Accord CL9  4.66 / 1.25 V",
+            DASH_FONT_LABEL14, C_LABEL);
+        lv_obj_set_width(calibration_text, LV_PCT(100));
+        lv_label_set_long_mode(calibration_text, LV_LABEL_LONG_WRAP);
+
+        card = lv_obj_create(display_content);
+        lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(card, C_PANEL, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
+        lv_obj_set_style_radius(card, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(card, 14, LV_PART_MAIN);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(card, 10, LV_PART_MAIN);
+        make_label(card, "Boot Logo", DASH_FONT_LABEL14, C_LABEL);
+
+        char logo_options[BOOT_LOGO_STORAGE_MAX_LOGOS * BOOT_LOGO_STORAGE_NAME_MAX + 32] =
+            "Built-in MackoDash";
+        for (size_t index = 0; index < boot_logo_storage_get_count(); ++index) {
+            const boot_logo_storage_entry_t *entry = boot_logo_storage_get_entry(index);
+            strlcat(logo_options, "\n", sizeof(logo_options));
+            strlcat(logo_options, entry->display_name, sizeof(logo_options));
+        }
+        s_cfg_boot_logo_dropdown = lv_dropdown_create(card);
+        lv_obj_set_width(s_cfg_boot_logo_dropdown, LV_PCT(100));
+        lv_dropdown_set_options(s_cfg_boot_logo_dropdown, logo_options);
+        int selected_logo = boot_logo_storage_get_selected_index();
+        lv_dropdown_set_selected(s_cfg_boot_logo_dropdown, (uint16_t)(selected_logo + 1));
+        lv_obj_add_event_cb(s_cfg_boot_logo_dropdown, cfg_boot_logo_dropdown_cb,
+                            LV_EVENT_VALUE_CHANGED, NULL);
+
+        lv_obj_t *logo_actions = make_plain_container(card);
+        lv_obj_set_size(logo_actions, LV_PCT(100), 42);
+        lv_obj_set_flex_flow(logo_actions, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_pad_column(logo_actions, 10, LV_PART_MAIN);
+        lv_obj_t *set_logo = lv_btn_create(logo_actions);
+        lv_obj_set_size(set_logo, 150, 40);
+        lv_obj_set_style_bg_color(set_logo, C_RED, LV_PART_MAIN);
+        lv_obj_add_event_cb(set_logo, cfg_boot_logo_set_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_center(make_label(set_logo, "Set", DASH_FONT_LABEL14, C_WHITE));
+        s_cfg_boot_logo_delete_button = lv_btn_create(logo_actions);
+        lv_obj_set_size(s_cfg_boot_logo_delete_button, 150, 40);
+        lv_obj_set_style_bg_color(s_cfg_boot_logo_delete_button, C_RED_DEEP, LV_PART_MAIN);
+        lv_obj_add_event_cb(s_cfg_boot_logo_delete_button, cfg_boot_logo_delete_cb,
+                            LV_EVENT_CLICKED, NULL);
+        lv_obj_center(make_label(s_cfg_boot_logo_delete_button, "Delete", DASH_FONT_LABEL14, C_WHITE));
+        if (selected_logo < 0) lv_obj_add_state(s_cfg_boot_logo_delete_button, LV_STATE_DISABLED);
+        s_cfg_boot_logo_status = make_label(card, "Changes appear on the next startup.",
+                                            DASH_FONT_LABEL, C_LABEL_DIM);
+
+        card = lv_obj_create(display_content);
+        lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(card, C_PANEL, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
+        lv_obj_set_style_radius(card, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(card, 14, LV_PART_MAIN);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t *sim_row = make_plain_container(card);
         lv_obj_set_size(sim_row, LV_PCT(100), LV_SIZE_CONTENT);
@@ -4710,8 +5047,9 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_set_width(readme, LV_PCT(100));
     lv_label_set_long_mode(readme, LV_LABEL_LONG_WRAP);
 
-    build_config_section_header(cfg_scroll, "ODOMETER & TRIPS");
+    build_config_section_header(cfg_scroll, "VEHICLE SETUP");
     build_config_menu_row(cfg_scroll, "Odometer & Trip Settings", settings_open_odometer_cb);
+    build_config_menu_row(cfg_scroll, "Fuel Gauge Setup", settings_open_fuel_cb);
 
     /* --- odometer calibration --- */
     {
@@ -7555,6 +7893,8 @@ static void update_theme_touring(const honda_dash_data_t *data, int rpm, bool li
 
 lv_obj_t *honda_dash_ui_create(lv_obj_t *parent)
 {
+    initialize_i18n_fonts();
+
     /* pull the user's saved redline/VTEC settings in before any theme
        (which reads these same variables while building its tick marks
        and color zones) gets constructed */

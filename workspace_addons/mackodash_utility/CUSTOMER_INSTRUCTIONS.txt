@@ -1,5 +1,6 @@
 MACKODASH UTILITY
 =================
+Version 2.1
 
 Keep all files in this folder together:
   MackoDashUtility.exe
@@ -7,8 +8,17 @@ Keep all files in this folder together:
   CUSTOMER_INSTRUCTIONS.txt
   MackoDash_SquareLine_Customer_Instructions.txt
 
-BUILD A THEME
--------------
+THEME STUDIO
+------------
+1. Open MackoDash Utility and choose Theme Studio.
+2. Add labels, gauges, images, buttons, and other supported controls to the
+  1024 x 600 canvas, then assign live ECU bindings in the inspector.
+3. Use typical and longest-value previews to check fit and gauge movement.
+4. Save the editable project, then export a dashboard-ready .mdtheme.zip.
+5. Copy the package to an SD card or select Send Theme to install it over USB.
+
+SQUARELINE THEME BUILDER
+------------------------
 1. Export the complete one-screen project from SquareLine Studio.
 2. ZIP the exported folder.
 3. Open MackoDash Utility and choose Build a Theme.
@@ -21,6 +31,15 @@ BUILD A THEME
 
 See MackoDash_SquareLine_Customer_Instructions.txt for all supported object
 names, Bars, Arcs, values, ranges, and design rules.
+
+BOOT LOGO
+---------
+1. Open MackoDash Utility and choose Boot Logo.
+2. Select a PNG or JPEG, choose Fit or Fill, and preview the 1024 x 600 result.
+3. Export the .mdlogo file or connect the dashboard and select Send over USB.
+4. Select or delete installed logos under Settings > Display > Boot Logo.
+
+The built-in logo always remains available as a fallback.
 
 VIEW DRIVING LOGS
 -----------------
@@ -55,12 +74,12 @@ SD-card themes, and ESP32-C6 firmware.
 Do not unplug USB or power during an update. If the port is busy, close serial
 monitors and other flashing programs, then retry.
 
-USB LOG AND THEME TRANSFER
---------------------------
+USB FILE TRANSFER
+-----------------
 The USB update cable transfers files through the MackoDash Utility; the SD card
 does not appear as a Windows drive. Keep a working SD card inserted in the
 dashboard. Stop active drive recording before downloading logs or sending a
-theme. Downloads and uploads are CRC-verified before completion.
+theme or boot logo. Downloads and uploads are CRC-verified before completion.
 
 DASHBOARD QUICK CONTROLS
 ------------------------
@@ -70,6 +89,11 @@ DASHBOARD QUICK CONTROLS
 - Configure automatic recording and log filename types under Settings > Logs > Driving Logs.
 - Configure whole-bar shift stages, colors, brightness, and redline flashing
   under Settings > Engine Limits.
+- Select English, Spanish, Portuguese, or Japanese under Settings > Display.
+- Configure Hondata Analog 0-6 fuel input and measured empty/full voltages under
+  Settings > System > Fuel Gauge Setup. Follow the on-device wiring instructions,
+  disconnect the sender from any stock-cluster power feed, and never allow more
+  than 5 V to reach a Hondata analog input.
 - Open Settings > System > Contact & Support for problem reporting, email,
   social, and feedback QR codes.
 - Critical engine warnings appear in a compact banner without covering gauges.

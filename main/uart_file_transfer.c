@@ -22,7 +22,9 @@
 #define TRANSFER_BAUD CONFIG_ESP_CONSOLE_UART_BAUDRATE
 #define LOG_DIRECTORY "/sdcard/MACKODASH/LOGS"
 #define THEME_DIRECTORY "/sdcard/MACKODASH/THEMES"
+#define BOOT_LOGO_DIRECTORY "/sdcard/MACKODASH/BOOT_LOGOS"
 #define THEME_UPLOAD_LIMIT (8U * 1024U * 1024U)
+#define BOOT_LOGO_UPLOAD_SIZE (80U + 1024U * 600U * 2U)
 #define IO_BUFFER_SIZE 1024
 
 static const char *TAG = "uart_files";
@@ -81,6 +83,23 @@ static bool valid_theme_filename(const char *filename)
     for (size_t index = 0; index < length; ++index) {
         unsigned char character = (unsigned char)filename[index];
         if (!isalnum(character) && character != '-' && character != '_' && character != '.') return false;
+    }
+    return true;
+}
+
+static bool valid_logo_filename(const char *filename)
+{
+    static const char suffix[] = ".mdlogo";
+    size_t length = filename ? strlen(filename) : 0;
+    size_t suffix_length = sizeof(suffix) - 1;
+    if (length <= suffix_length || length >= THEME_STORAGE_NAME_MAX) return false;
+    for (size_t index = 0; index < length; ++index) {
+        unsigned char character = (unsigned char)filename[index];
+        if (!isalnum(character) && character != '-' && character != '_' && character != '.') return false;
+    }
+    const char *tail = filename + length - suffix_length;
+    for (size_t index = 0; index < suffix_length; ++index) {
+        if (tolower((unsigned char)tail[index]) != suffix[index]) return false;
     }
     return true;
 }
@@ -223,6 +242,74 @@ static void handle_put_theme(const char *arguments)
     esp_restart();
 }
 
+static void handle_put_logo(const char *arguments)
+{
+    char filename[THEME_STORAGE_NAME_MAX];
+    unsigned long declared_size;
+    unsigned long declared_crc;
+    if (sscanf(arguments, "%95s %lu %lx", filename, &declared_size, &declared_crc) != 3 ||
+            !valid_logo_filename(filename) || declared_size != BOOT_LOGO_UPLOAD_SIZE) {
+        uart_send_line("MDP1 ERROR INVALID_UPLOAD");
+        return;
+    }
+    if (!theme_storage_is_available()) {
+        uart_send_line("MDP1 ERROR SD_NOT_FOUND");
+        return;
+    }
+    if (data_logger_is_recording()) {
+        uart_send_line("MDP1 ERROR RECORDING_ACTIVE");
+        return;
+    }
+
+    char final_path[THEME_STORAGE_PATH_MAX];
+    char temporary_path[THEME_STORAGE_PATH_MAX];
+    snprintf(final_path, sizeof(final_path), "%s/%s", BOOT_LOGO_DIRECTORY, filename);
+    snprintf(temporary_path, sizeof(temporary_path), "%s/.upload.tmp", BOOT_LOGO_DIRECTORY);
+    FILE *file = fopen(temporary_path, "wb");
+    if (!file) {
+        uart_send_line("MDP1 ERROR OPEN_FAILED");
+        return;
+    }
+
+    esp_log_level_set("*", ESP_LOG_NONE);
+    uart_send_line("MDP1 READY");
+    uint8_t buffer[IO_BUFFER_SIZE];
+    size_t remaining = (size_t)declared_size;
+    uint32_t crc = UINT32_MAX;
+    bool success = true;
+    while (remaining > 0) {
+        size_t block = remaining < sizeof(buffer) ? remaining : sizeof(buffer);
+        if (read_exact(buffer, block) < 0 || fwrite(buffer, 1, block, file) != block) {
+            success = false;
+            break;
+        }
+        crc = crc32_update(crc, buffer, block);
+        remaining -= block;
+    }
+    if (fflush(file) != 0) success = false;
+    if (fclose(file) != 0) success = false;
+    crc ^= UINT32_MAX;
+    if (!success || remaining != 0 || crc != (uint32_t)declared_crc) {
+        remove(temporary_path);
+        uart_send_line("MDP1 ERROR VERIFY_FAILED");
+        uart_wait_tx_done(TRANSFER_UART, pdMS_TO_TICKS(2000));
+        esp_log_level_set("*", (esp_log_level_t)CONFIG_LOG_DEFAULT_LEVEL);
+        return;
+    }
+    remove(final_path);
+    if (rename(temporary_path, final_path) != 0) {
+        remove(temporary_path);
+        uart_send_line("MDP1 ERROR INSTALL_FAILED");
+        uart_wait_tx_done(TRANSFER_UART, pdMS_TO_TICKS(2000));
+        esp_log_level_set("*", (esp_log_level_t)CONFIG_LOG_DEFAULT_LEVEL);
+        return;
+    }
+    uart_send_line("MDP1 DONE REBOOTING");
+    uart_wait_tx_done(TRANSFER_UART, pdMS_TO_TICKS(3000));
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+}
+
 static void transfer_task(void *argument)
 {
     (void)argument;
@@ -247,6 +334,8 @@ static void transfer_task(void *argument)
             handle_get(line + 9);
         } else if (strncmp(line, "MDP1 PUTTHEME ", 14) == 0) {
             handle_put_theme(line + 14);
+        } else if (strncmp(line, "MDP1 PUTLOGO ", 13) == 0) {
+            handle_put_logo(line + 13);
         }
     }
 }

@@ -2,6 +2,9 @@ MACKODASH SQUARELINE CUSTOMER INSTRUCTIONS
 Object Names, Live Values, Bars, Arcs, and Theme Export
 Version 1 - SquareLine Studio / LVGL 8.4 - Recommended canvas 1024 x 600
 
+MackoDash 2.1 also includes Theme Studio for creating themes directly without
+SquareLine. This sheet remains the reference for SquareLine Theme Builder imports.
+
 
 WHAT THIS SHEET IS FOR
 ======================

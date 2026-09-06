@@ -8,7 +8,7 @@ from pathlib import Path
 
 from theme_preview import (ThemePackage, analyze_theme, display_text, image_runtime_rect,
                            load_theme_package, raw_image_png, resolve_binding, rotated_polygon,
-                           runtime_font_size)
+                           runtime_font_size, sample_path)
 
 
 class ThemePreviewTests(unittest.TestCase):
@@ -48,6 +48,14 @@ class ThemePreviewTests(unittest.TestCase):
     def test_binding_resolution_matches_firmware_typo_tolerance(self) -> None:
         self.assertEqual(resolve_binding("dash_rpm_vlaue"), "rpm")
         self.assertEqual(resolve_binding("ui_dash_record_button_2"), "record")
+        self.assertEqual(resolve_binding("dash_sim_button"), "sim")
+        self.assertEqual(resolve_binding("dash_rpm_path_gauge"), "rpm")
+
+    def test_path_sampling_uses_calibrated_values(self) -> None:
+        samples = sample_path([[0, 0], [10, 0], [100, 0]], 8, [0, 1000, 8000], 0, 8000)
+        self.assertEqual(samples[0][0], 5)
+        self.assertGreater(samples[1][0], 10)
+        self.assertLess(samples[-1][0], 100)
 
     def test_loads_layout_and_referenced_asset(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -75,10 +83,10 @@ class ThemePreviewTests(unittest.TestCase):
         self.assertAlmostEqual(width, 203.24, places=1)
         self.assertAlmostEqual(height, 216.13, places=1)
 
-    def test_font_size_matches_firmware_clamp_and_font_ladder(self) -> None:
-        self.assertEqual(runtime_font_size(280, 1024, 600, 768), 33)
-        self.assertEqual(runtime_font_size(30, 1024, 600, 768), 21)
-        self.assertEqual(runtime_font_size(20, 1024, 600, 768), 10)
+    def test_font_size_matches_continuous_firmware_clamp(self) -> None:
+        self.assertEqual(runtime_font_size(280, 1024, 600, 768), 150)
+        self.assertEqual(runtime_font_size(30, 1024, 600, 768), 22)
+        self.assertEqual(runtime_font_size(20, 1024, 600, 768), 15)
 
     def test_rotated_bar_keeps_its_center(self) -> None:
         points = rotated_polygon(100, 200, 140, 100, -90)

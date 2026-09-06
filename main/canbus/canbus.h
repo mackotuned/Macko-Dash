@@ -26,6 +26,7 @@ typedef struct{
     float tps;
     float ign_angle;
     float fuel_level;
+    float analog_inputs[8];
 } can_dash_data_t;
 
 typedef enum {

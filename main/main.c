@@ -20,6 +20,7 @@
 #include "achievement_system.h"
 #include "session_peaks.h"
 #include "theme_storage.h"
+#include "boot_logo_storage.h"
 
 #define MIN_VALID_SPEED_MPH 3.0f
 #define BOOT_LOGO_DURATION_MS 1500
@@ -40,6 +41,17 @@ static TaskHandle_t s_odometer_tracking_task = NULL;
 static lv_timer_t *s_gauge_timer = NULL;
 static lv_display_t *s_display = NULL;
 static bool s_ota_mode_active = false;
+
+static float current_fuel_percent(void)
+{
+    canbus_diagnostics_t diagnostics;
+    canbus_get_diagnostics(&diagnostics);
+    if (strcmp(diagnostics.protocol, "hondata") == 0) {
+        int input = dash_config_get_fuel_analog_input();
+        return dash_config_fuel_percent(can_data.analog_inputs[input]);
+    }
+    return can_data.fuel_level;
+}
 static bool s_render_paused_active = false;
 
 static void odometer_tracking_task(void *arg);
@@ -112,7 +124,7 @@ void gauge_timer(lv_timer_t * t) {
             startup_base.duty_valid = true;
             startup_base.knock_valid = true;
             startup_base.odo_miles = odometer_get_miles();
-            startup_base.fuel_pct = can_data.fuel_level;
+            startup_base.fuel_pct = current_fuel_percent();
             startup_base_inited = true;
         }
 
@@ -184,7 +196,7 @@ void gauge_timer(lv_timer_t * t) {
     d.knock_valid = optional_grace;
     d.cel        = false;
     d.odo_miles  = odometer_get_miles();
-    d.fuel_pct   = can_data.fuel_level;
+    d.fuel_pct   = current_fuel_percent();
     }
 
     float raw_shift_rpm = dash_sim_is_enabled() ? d.rpm : can_data.rpm;
@@ -384,6 +396,7 @@ void app_main(void) {
 
     esp_err_t theme_storage_err = theme_storage_init();
     ESP_LOGI("main", "Theme storage initialization -> %s", esp_err_to_name(theme_storage_err));
+    boot_logo_storage_init();
     data_logger_init();
     ESP_ERROR_CHECK_WITHOUT_ABORT(uart_file_transfer_start());
 
@@ -402,8 +415,14 @@ void app_main(void) {
         lv_obj_set_style_bg_color(screen, lv_color_black(), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, LV_PART_MAIN);
 
+        lv_img_dsc_t custom_logo;
+        uint8_t *custom_logo_pixels = NULL;
+        const lv_img_dsc_t *logo_source = &boot_logo;
+        if (boot_logo_storage_load_selected(&custom_logo, &custom_logo_pixels) == ESP_OK) {
+            logo_source = &custom_logo;
+        }
         lv_obj_t *logo = lv_img_create(screen);
-        lv_img_set_src(logo, &boot_logo);
+        lv_img_set_src(logo, logo_source);
         lv_obj_center(logo);
 
         lv_refr_now(disp);
@@ -411,6 +430,7 @@ void app_main(void) {
         vTaskDelay(pdMS_TO_TICKS(BOOT_LOGO_DURATION_MS));
 
         lv_obj_clean(screen);
+        free(custom_logo_pixels);
         honda_dash_ui_create(screen);
 #if !ENABLE_STARTUP_SWEEP
         honda_dash_data_t boot_frame = {0};

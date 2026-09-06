@@ -6,7 +6,7 @@ import zipfile
 import zlib
 from pathlib import Path
 
-from device_transfer import DashboardClient, DeviceLog
+from device_transfer import BOOT_LOGO_SIZE, DashboardClient, DeviceLog
 
 
 class FakeSerial:
@@ -38,6 +38,9 @@ class FakeSerial:
             self.input.extend(self.payload)
             self.input.extend(f"\nMDP1 DONE {checksum:08X}\n".encode())
         elif line.startswith("MDP1 PUTTHEME "):
+            self.upload_remaining = int(line.split()[3])
+            self.input.extend(b"MDP1 READY\n")
+        elif line.startswith("MDP1 PUTLOGO "):
             self.upload_remaining = int(line.split()[3])
             self.input.extend(b"MDP1 READY\n")
         return len(data)
@@ -78,6 +81,16 @@ class DeviceTransferTests(unittest.TestCase):
                 archive.writestr("manifest.json", "{}")
             expected = package.read_bytes()
             client.upload_theme(package)
+        self.assertEqual(bytes(connection.upload), expected)
+
+    def test_uploads_valid_boot_logo(self) -> None:
+        connection = FakeSerial()
+        client = DashboardClient(connection, response_timeout=0.1)
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "Creator.mdlogo"
+            expected = b"MDL1" + bytes(BOOT_LOGO_SIZE - 4)
+            package.write_bytes(expected)
+            client.upload_boot_logo(package)
         self.assertEqual(bytes(connection.upload), expected)
 
 

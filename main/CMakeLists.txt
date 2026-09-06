@@ -78,9 +78,11 @@ idf_component_register(
     SRCS 
         "main.c"
         "boot_logo.c"
+        "boot_logo_storage.c"
         "huntertuned_logo.c"
         "dash_sim.c"
         "dash_config.c"
+        "dashboard_i18n.c"
         "data_logger.c"
         "device_log_viewer.c"
         "uart_file_transfer.c"
@@ -105,6 +107,10 @@ idf_component_register(
     EMBED_TXTFILES
         ${CAN_PROTOCOL_JSON}
 
+    EMBED_FILES
+        "fonts/Montserrat-SemiBold.ttf"
+        "fonts/Dashboard-I18n.ttf"
+
     REQUIRES
         esp32_p4_wifi6_touch_lcd_4_3
         esp_driver_twai
@@ -128,9 +134,11 @@ idf_component_register(
     SRCS 
         "main.c"
         "boot_logo.c"
+        "boot_logo_storage.c"
         "huntertuned_logo.c"
         "dash_sim.c"
         "dash_config.c"
+        "dashboard_i18n.c"
         "data_logger.c"
         "device_log_viewer.c"
         "uart_file_transfer.c"
@@ -153,6 +161,10 @@ idf_component_register(
 
     EMBED_TXTFILES
         ${CAN_PROTOCOL_JSON}
+
+    EMBED_FILES
+        "fonts/Montserrat-SemiBold.ttf"
+        "fonts/Dashboard-I18n.ttf"
 
     REQUIRES
         esp32_p4_wifi6_touch_lcd_4_3

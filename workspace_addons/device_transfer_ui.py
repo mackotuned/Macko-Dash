@@ -42,7 +42,12 @@ class DeviceTransferWindow(tk.Toplevel):
     def _build_ui(self) -> None:
         body = ttk.Frame(self, padding=22)
         body.pack(fill="both", expand=True)
-        title = "Download Driving Log" if self.mode == "logs" else "Send Theme to Dashboard"
+        titles = {
+            "logs": "Download Driving Log",
+            "theme": "Send Theme to Dashboard",
+            "boot_logo": "Send Boot Logo to Dashboard",
+        }
+        title = titles[self.mode]
         ttk.Label(body, text=title, style="Title.TLabel").grid(row=0, column=0, columnspan=3, sticky="w")
         ttk.Label(body, text="USB PORT", style="Subtitle.TLabel").grid(row=1, column=0, sticky="w", pady=(20, 5))
         self.port_combo = ttk.Combobox(body, textvariable=self.port, state="readonly")
@@ -61,12 +66,14 @@ class DeviceTransferWindow(tk.Toplevel):
                 body, text="Download and Open", style="Accent.TButton", command=self._download, state="disabled"
             )
         else:
-            package_name = package.name if package else "Choose a .mdtheme.zip package"
+            package_type = ".mdlogo file" if self.mode == "boot_logo" else ".mdtheme.zip package"
+            package_name = self.package.name if self.package else f"Choose a {package_type}"
             ttk.Label(body, text=package_name, style="TileHint.TLabel").grid(
                 row=3, column=0, columnspan=3, sticky="w", pady=(18, 0)
             )
             self.action_button = ttk.Button(
-                body, text="Send Theme", style="Accent.TButton", command=self._upload
+                body, text="Send Boot Logo" if self.mode == "boot_logo" else "Send Theme",
+                style="Accent.TButton", command=self._upload
             )
         self.action_button.grid(row=4 if self.mode == "logs" else 4, column=2, sticky="ew", padx=(8, 0))
         ttk.Progressbar(body, variable=self.progress, maximum=100).grid(
@@ -149,9 +156,11 @@ class DeviceTransferWindow(tk.Toplevel):
     def _upload(self) -> None:
         package = self.package
         if not package or not package.is_file():
+            logo_mode = self.mode == "boot_logo"
             selected = filedialog.askopenfilename(
-                parent=self, title="Choose MackoDash theme",
-                filetypes=[("MackoDash themes", "*.mdtheme.zip")],
+                parent=self, title="Choose MackoDash boot logo" if logo_mode else "Choose MackoDash theme",
+                filetypes=[("MackoDash boot logos", "*.mdlogo")] if logo_mode else
+                          [("MackoDash themes", "*.mdtheme.zip")],
             )
             if not selected:
                 return
@@ -166,7 +175,10 @@ class DeviceTransferWindow(tk.Toplevel):
     def _upload_worker(self, package: Path) -> None:
         try:
             with DashboardClient.connect(self._device()) as client:
-                client.upload_theme(package, self._queue_progress)
+                if self.mode == "boot_logo":
+                    client.upload_boot_logo(package, self._queue_progress)
+                else:
+                    client.upload_theme(package, self._queue_progress)
         except (DeviceTransferError, OSError) as error:
             self.after(0, self._failed, str(error))
             return
@@ -174,9 +186,11 @@ class DeviceTransferWindow(tk.Toplevel):
 
     def _upload_done(self, package: Path) -> None:
         self._set_busy(False)
-        self.status.set("Theme installed. The dashboard is restarting.")
+        item = "Boot logo" if self.mode == "boot_logo" else "Theme"
+        self.status.set(f"{item} installed. The dashboard is restarting.")
         messagebox.showinfo(
-            "Theme installed", f"{package.name} was verified and installed. The dashboard is restarting.", parent=self
+            f"{item} installed",
+            f"{package.name} was verified and installed. The dashboard is restarting.", parent=self
         )
 
     def _queue_progress(self, completed: int, total: int) -> None:
@@ -206,3 +220,7 @@ def open_log_download(parent: tk.Misc, callback) -> DeviceTransferWindow:
 
 def open_theme_upload(parent: tk.Misc, package: Path | None = None) -> DeviceTransferWindow:
     return DeviceTransferWindow(parent, "theme", package=package)
+
+
+def open_boot_logo_upload(parent: tk.Misc, package: Path | None = None) -> DeviceTransferWindow:
+    return DeviceTransferWindow(parent, "boot_logo", package=package)

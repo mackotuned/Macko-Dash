@@ -11,26 +11,31 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from tkinter import ttk
 
+from theme_font import PREVIEW_FONT, register_preview_font
+
+
+register_preview_font()
+
 
 TARGET_WIDTH = 1024
 TARGET_HEIGHT = 600
-SUPPORTED_TYPES = {"label", "bar", "arc", "button", "indicator", "object", "image"}
+SUPPORTED_TYPES = {"label", "bar", "arc", "path_gauge", "button", "indicator", "object", "image", "needle", "analog_tach", "analog_speedo"}
 
 BINDING_NAMES = {
-    "rpm": ("dash_rpm_value", "rpm_value", "engine_rpm_value", "dash_rpm_bar", "rpm_bar", "dash_rpm_arc", "rpm_arc"),
-    "speed": ("dash_speed_value", "speed_value", "mph_value", "kph_value", "dash_speed_bar", "speed_bar", "dash_speed_arc", "speed_arc"),
+    "rpm": ("dash_rpm_value", "rpm_value", "engine_rpm_value", "dash_rpm_bar", "rpm_bar", "dash_rpm_arc", "rpm_arc", "dash_rpm_path_gauge", "rpm_path_gauge"),
+    "speed": ("dash_speed_value", "speed_value", "mph_value", "kph_value", "dash_speed_bar", "speed_bar", "dash_speed_arc", "speed_arc", "dash_speed_path_gauge", "speed_path_gauge"),
     "gear": ("dash_gear_value", "gear_value"),
-    "ect": ("dash_ect_value", "coolant_value", "water_temp_value", "dash_ect_bar", "ect_bar", "coolant_bar", "dash_ect_arc", "ect_arc", "coolant_arc"),
-    "iat": ("dash_iat_value", "intake_temp_value", "air_temp_value", "dash_iat_bar", "iat_bar", "air_temp_bar", "dash_iat_arc", "iat_arc", "air_temp_arc"),
+    "ect": ("dash_ect_value", "coolant_value", "water_temp_value", "dash_ect_bar", "ect_bar", "coolant_bar", "dash_ect_arc", "ect_arc", "coolant_arc", "dash_ect_path_gauge"),
+    "iat": ("dash_iat_value", "intake_temp_value", "air_temp_value", "dash_iat_bar", "iat_bar", "air_temp_bar", "dash_iat_arc", "iat_arc", "air_temp_arc", "dash_iat_path_gauge"),
     "afr": ("dash_afr_value", "afr_value", "lambda_value"),
     "timing": ("dash_timing_value", "timing_value", "ignition_value"),
     "map": ("dash_map_value", "map_value", "boost_value"),
     "batt": ("dash_batt_value", "battery_value", "voltage_value"),
-    "tps": ("dash_tps_value", "tps_value", "throttle_value", "dash_tps_bar", "tps_bar", "dash_tps_arc", "tps_arc"),
-    "oil": ("dash_oil_value", "oil_pressure_value", "dash_oil_bar", "oil_bar", "dash_oil_arc", "oil_arc"),
+    "tps": ("dash_tps_value", "tps_value", "throttle_value", "dash_tps_bar", "tps_bar", "dash_tps_arc", "tps_arc", "dash_tps_path_gauge"),
+    "oil": ("dash_oil_value", "oil_pressure_value", "dash_oil_bar", "oil_bar", "dash_oil_arc", "oil_arc", "dash_oil_path_gauge"),
     "duty": ("dash_duty_value", "injector_duty_value"),
     "knock": ("dash_knock_value", "knock_value"),
-    "fuel": ("dash_fuel_value", "fuel_level_value", "dash_fuel_bar", "fuel_bar", "dash_fuel_arc", "fuel_arc"),
+    "fuel": ("dash_fuel_value", "fuel_level_value", "dash_fuel_bar", "fuel_bar", "dash_fuel_arc", "fuel_arc", "dash_fuel_path_gauge"),
     "odo": ("dash_odo_value", "odometer_value"),
     "cel_indicator": ("dash_cel_indicator", "cel_indicator"),
     "vtec_indicator": ("dash_vtec_indicator", "vtec_indicator"),
@@ -46,6 +51,7 @@ BINDING_NAMES = {
     "oil_unit": ("dash_oil_unit", "oil_unit"),
     "settings": ("dash_settings_button", "settings_button"),
     "record": ("dash_record_button", "record_button", "logging_button"),
+    "sim": ("dash_sim_button", "sim_button", "simulation_button"),
 }
 
 SIMULATED_VALUES = {
@@ -246,17 +252,10 @@ def display_text(item: dict, scenario: str) -> str:
 def runtime_font_size(font_size: object, design_width: int, design_height: int,
                       preview_width: int = TARGET_WIDTH) -> int:
     requested = float(font_size) if isinstance(font_size, (int, float)) else 14
-    requested = max(8, min(96, requested))
+    requested = max(8, min(200, requested))
     runtime_scale = min(TARGET_WIDTH / design_width, TARGET_HEIGHT / design_height)
     scaled_size = max(1, round(requested * runtime_scale))
-    if scaled_size >= 36:
-        actual_size = 44
-    elif scaled_size >= 21:
-        actual_size = 28
-    elif scaled_size >= 14:
-        actual_size = 14
-    else:
-        actual_size = 12
+    actual_size = max(8, min(200, scaled_size))
     return max(6, round(actual_size * preview_width / TARGET_WIDTH))
 
 
@@ -273,6 +272,77 @@ def rotated_polygon(x: float, y: float, width: float, height: float, angle: floa
         points.extend((center_x + offset_x * cosine - offset_y * sine,
                        center_y + offset_x * sine + offset_y * cosine))
     return points
+
+
+def blend_color(foreground: str, background: str, opacity: int) -> str:
+    try:
+        ratio = max(0, min(255, opacity)) / 255
+        foreground_rgb = tuple(int(foreground[index:index + 2], 16) for index in (1, 3, 5))
+        background_rgb = tuple(int(background[index:index + 2], 16) for index in (1, 3, 5))
+        return "#" + "".join(f"{round(front * ratio + back * (1 - ratio)):02x}"
+                              for front, back in zip(foreground_rgb, background_rgb))
+    except (ValueError, IndexError):
+        return foreground
+
+
+def rounded_rotated_polygon(x: float, y: float, width: float, height: float,
+                            radius: float, angle: float, pivot: tuple[float, float] | None = None) -> list[float]:
+    radius = max(0.0, min(radius, width / 2, height / 2))
+    raw_points: list[tuple[float, float]] = []
+    for center_x, center_y, start in (
+        (x + width - radius, y + radius, -90), (x + width - radius, y + height - radius, 0),
+        (x + radius, y + height - radius, 90), (x + radius, y + radius, 180),
+    ):
+        for step in range(5):
+            radians = math.radians(start + step * 22.5)
+            raw_points.append((center_x + radius * math.cos(radians), center_y + radius * math.sin(radians)))
+    pivot_x, pivot_y = pivot or (x + width / 2, y + height / 2)
+    radians = math.radians(angle)
+    cosine, sine = math.cos(radians), math.sin(radians)
+    points: list[float] = []
+    for point_x, point_y in raw_points:
+        offset_x, offset_y = point_x - pivot_x, point_y - pivot_y
+        points.extend((pivot_x + offset_x * cosine - offset_y * sine,
+                       pivot_y + offset_x * sine + offset_y * cosine))
+    return points
+
+
+def sample_path(points: list[list[float]], count: int, point_values: list[float] | None = None,
+                minimum: float = 0, maximum: float = 1) -> list[tuple[float, float, float]]:
+    if len(points) < 2 or count < 1:
+        return []
+    if point_values and len(point_values) == len(points):
+        samples = []
+        for index in range(count):
+            value = minimum + (maximum - minimum) * (index + 0.5) / count
+            segment = next((position for position in range(len(point_values) - 1)
+                            if value <= point_values[position + 1]), len(point_values) - 2)
+            value_span = point_values[segment + 1] - point_values[segment]
+            ratio = min(1.0, max(0.0, (value - point_values[segment]) / max(value_span, 0.001)))
+            start, end = points[segment], points[segment + 1]
+            samples.append((start[0] + (end[0] - start[0]) * ratio,
+                            start[1] + (end[1] - start[1]) * ratio,
+                            math.degrees(math.atan2(end[1] - start[1], end[0] - start[0]))))
+        return samples
+    lengths = [math.hypot(end[0] - start[0], end[1] - start[1])
+               for start, end in zip(points, points[1:])]
+    total = sum(lengths)
+    if total <= 0:
+        return []
+    samples = []
+    for index in range(count):
+        distance = total * (index + 0.5) / count
+        traversed = 0.0
+        for segment, length in enumerate(lengths):
+            if distance <= traversed + length or segment == len(lengths) - 1:
+                ratio = min(1.0, max(0.0, (distance - traversed) / max(length, 0.001)))
+                start, end = points[segment], points[segment + 1]
+                samples.append((start[0] + (end[0] - start[0]) * ratio,
+                                start[1] + (end[1] - start[1]) * ratio,
+                                math.degrees(math.atan2(end[1] - start[1], end[0] - start[0]))))
+                break
+            traversed += length
+    return samples
 
 
 def analyze_theme(theme: ThemePackage) -> list[PreviewIssue]:
@@ -440,28 +510,44 @@ class ThemePreviewWindow(tk.Toplevel):
                                               self.theme.design_height, self.PREVIEW_WIDTH)
                 anchor = {"left": "w", "right": "e"}.get(item.get("align"), "center")
                 text_x = x + (0 if anchor == "w" else width if anchor == "e" else width / 2)
-                self.canvas.create_text(text_x, y + height / 2, text=display_text(item, self.scenario.get()), fill=color,
-                                        anchor=anchor, font=("Segoe UI", font_size, "bold"))
+                text_color = blend_color(color, background, int(item.get("color_opa", 255)))
+                self.canvas.create_text(text_x, y + height / 2, text=display_text(item, self.scenario.get()), fill=text_color,
+                                        anchor=anchor, font=(PREVIEW_FONT, font_size))
             elif object_type == "bar":
                 angle = float(item.get("transform_angle", 0))
                 transform_center = (x + width / 2, y + height / 2)
-                self.canvas.create_polygon(rotated_polygon(x, y, width, height, angle),
-                                           fill=str(item.get("track_color", "#25282d")), outline="")
+                radius = float(item.get("radius", 0)) * self.PREVIEW_WIDTH / TARGET_WIDTH
+                track = blend_color(str(item.get("track_color", "#25282d")), background,
+                                    int(item.get("track_opa", 255)))
+                self.canvas.create_polygon(rounded_rotated_polygon(x, y, width, height, radius, angle),
+                                           fill=track, outline="", smooth=True)
                 value = float(SIMULATED_VALUES[self.scenario.get()].get(binding, item.get("min", 0)))
                 minimum, maximum = float(item.get("min", 0)), float(item.get("max", 100))
                 fraction = max(0.0, min(1.0, (value - minimum) / max(maximum - minimum, 1)))
-                self.canvas.create_polygon(rotated_polygon(x, y, width * fraction, height, angle, transform_center),
-                                           fill=color, outline="")
+                fill = blend_color(color, background, int(item.get("indicator_opa", 255)))
+                self.canvas.create_polygon(rounded_rotated_polygon(x, y, width * fraction, height,
+                                                                   min(radius, width * fraction / 2), angle,
+                                                                   transform_center), fill=fill, outline="", smooth=True)
+            elif object_type == "path_gauge":
+                self._draw_path_gauge(item, x, y, width, height, binding, background)
             elif object_type == "arc":
+                track = blend_color(str(item.get("track_color", "#25282d")), background,
+                                    int(item.get("track_opa", 255)))
+                arc_color = blend_color(color, background, int(item.get("color_opa", 255)))
                 self.canvas.create_arc(x, y, x + width, y + height, start=90 - float(item.get("rotation", 135)),
-                                       extent=-float(item.get("sweep", 270)), style="arc", outline=str(item.get("track_color", "#25282d")), width=max(2, round(min(width, height) * 0.08)))
+                                       extent=-float(item.get("sweep", 270)), style="arc", outline=track, width=max(2, round(min(width, height) * 0.08)))
                 self.canvas.create_arc(x, y, x + width, y + height, start=90 - float(item.get("rotation", 135)),
-                                       extent=-float(item.get("sweep", 270)) * 0.72, style="arc", outline=color, width=max(2, round(min(width, height) * 0.08)))
+                                       extent=-float(item.get("sweep", 270)) * 0.72, style="arc", outline=arc_color, width=max(2, round(min(width, height) * 0.08)))
+            elif object_type in {"needle", "analog_tach", "analog_speedo"}:
+                self._draw_meter(item, x, y, width, height, binding, object_type != "needle")
             else:
                 fill = str(item.get("background", color if object_type != "button" else "#151619"))
+                opacity_key = "background_opa" if object_type in {"button", "object"} else "color_opa"
+                fill = blend_color(fill, background, int(item.get(opacity_key, 255)))
                 self.canvas.create_rectangle(x, y, x + width, y + height, fill=fill, outline="")
                 if object_type == "button":
-                    self.canvas.create_text(x + width / 2, y + height / 2, text=item.get("text", "Settings"), fill="#ffffff", font=("Segoe UI", max(7, round(height * 0.22)), "bold"))
+                    text_color = blend_color(color, fill, int(item.get("color_opa", 255)))
+                    self.canvas.create_text(x + width / 2, y + height / 2, text=item.get("text", "Settings"), fill=text_color, font=("Segoe UI", max(7, round(height * 0.22)), "bold"))
             if index in problematic:
                 if object_type == "bar":
                     self.canvas.create_polygon(rotated_polygon(x, y, width, height,
@@ -473,6 +559,96 @@ class ThemePreviewWindow(tk.Toplevel):
             self._draw_fallback_button(888, "REC", "#4a0413", "#e4002b")
         if "settings" not in rendered_bindings:
             self._draw_fallback_button(952, "\u2699", "#151619", "#151619")
+
+    def _draw_path_gauge(self, item: dict, x: float, y: float, width: float, height: float,
+                         binding: str | None, background: str) -> None:
+        source_width = max(1.0, float(item.get("width", 1)))
+        source_height = max(1.0, float(item.get("height", 1)))
+        points = [[x + float(point[0]) * width / source_width,
+                   y + float(point[1]) * height / source_height]
+                  for point in item.get("points", [])]
+        count = int(item.get("segment_count", 36))
+        minimum, maximum = float(item.get("min", 0)), float(item.get("max", 8000))
+        value = float(SIMULATED_VALUES[self.scenario.get()].get(binding, minimum))
+        lit_count = round(max(0.0, min(1.0, (value - minimum) / max(1.0, maximum - minimum))) * count)
+        normal = blend_color(str(item.get("color", "#FFFFFF")), background, int(item.get("indicator_opa", 255)))
+        alert = blend_color(str(item.get("alert_color", "#E4002B")), background, int(item.get("indicator_opa", 255)))
+        track = blend_color(str(item.get("track_color", "#25282D")), background, int(item.get("track_opa", 80)))
+        segment_width = float(item.get("segment_width", 18)) * width / source_width
+        segment_height = float(item.get("segment_height", 10)) * height / source_height
+        alert_start = float(item.get("alert_start", 6500))
+        for index, (center_x, center_y, angle) in enumerate(
+            sample_path(points, count, item.get("point_values"), minimum, maximum)):
+            segment_value = minimum + (maximum - minimum) * (index + 1) / count
+            fill = (alert if segment_value >= alert_start else normal) if index < lit_count else track
+            polygon = rounded_rotated_polygon(center_x - segment_width / 2, center_y - segment_height / 2,
+                                              segment_width, segment_height, segment_height / 3, angle)
+            self.canvas.create_polygon(polygon, fill=fill, outline="")
+
+    def _draw_meter(self, item: dict, x: float, y: float, width: float, height: float,
+                    binding: str | None, analog: bool) -> None:
+        center_x, center_y = x + width / 2, y + height / 2
+        radius = max(2, min(width, height) / 2 - 2)
+        rotation = float(item.get("rotation", 135))
+        sweep = float(item.get("sweep", 270))
+        minimum, maximum = float(item.get("min", 0)), float(item.get("max", 9000))
+        value = float(SIMULATED_VALUES[self.scenario.get()].get(binding, minimum))
+        fraction = max(0.0, min(1.0, (value - minimum) / max(1.0, maximum - minimum)))
+        preview_scale = self.PREVIEW_WIDTH / TARGET_WIDTH
+        if analog:
+            face = blend_color(str(item.get("background", "#000000")),
+                               str(self.theme.layout.get("background", "#08090a")),
+                               int(item.get("background_opa", 0)))
+            border_width = max(0, round(float(item.get("border_width", 0)) * preview_scale))
+            border = blend_color(str(item.get("border_color", "#30343D")), face,
+                                 int(item.get("border_opa", 255)))
+            self.canvas.create_oval(x, y, x + width, y + height, fill=face,
+                                    outline=border if border_width else "",
+                                    width=border_width)
+            arc_width = max(1, round(float(item.get("arc_width", 8)) * preview_scale))
+            track = blend_color(str(item.get("track_color", "#30343D")), face,
+                                int(item.get("track_opa", 255)))
+            self.canvas.create_arc(x, y, x + width, y + height, start=90 - rotation, extent=-sweep,
+                                   style="arc", outline=track, width=arc_width)
+            tick_count = max(2, int(item.get("tick_count", 19)))
+            major_every = max(1, int(item.get("major_tick_every", 2)))
+            for index in range(tick_count):
+                angle = math.radians(rotation + sweep * index / (tick_count - 1))
+                major = index % major_every == 0
+                length = float(item.get("major_tick_length" if major else "tick_length", 20 if major else 12)) * preview_scale
+                line_width = max(1, round(float(item.get("major_tick_width" if major else "tick_width", 4 if major else 2)) * preview_scale))
+                outer, inner = radius - arc_width / 2, radius - arc_width / 2 - length
+                color_key = "major_tick_color" if major else "tick_color"
+                opacity_key = "major_tick_opa" if major else "tick_opa"
+                tick_color = blend_color(str(item.get(color_key, "#FFFFFF" if major else "#A1A6B0")),
+                                         face, int(item.get(opacity_key, 255)))
+                self.canvas.create_line(center_x + math.sin(angle) * inner, center_y - math.cos(angle) * inner,
+                                        center_x + math.sin(angle) * outer, center_y - math.cos(angle) * outer,
+                                        fill=tick_color, width=line_width)
+                if major:
+                    label_radius = max(1, inner - float(item.get("label_gap", 10)) * preview_scale)
+                    label_value = minimum + (maximum - minimum) * index / (tick_count - 1)
+                    label_size = max(7, round(float(item.get("tick_label_font_size", 14)) * preview_scale))
+                    self.canvas.create_text(center_x + math.sin(angle) * label_radius,
+                                            center_y - math.cos(angle) * label_radius,
+                                            text=f"{label_value:g}", fill=tick_color,
+                                            font=(PREVIEW_FONT, label_size))
+        angle = math.radians(rotation + sweep * fraction)
+        needle_length = max(3, radius + float(item.get("needle_offset", -12)) * preview_scale)
+        needle_width = max(1, round(float(item.get("needle_width", 5)) * preview_scale))
+        needle_color = blend_color(str(item.get("needle_color", "#E4002B")),
+                       str(self.theme.layout.get("background", "#08090a")),
+                       int(item.get("needle_opa", 255)))
+        self.canvas.create_line(center_x, center_y, center_x + math.sin(angle) * needle_length,
+                                center_y - math.cos(angle) * needle_length, fill=needle_color, width=needle_width)
+        self.canvas.create_oval(center_x - needle_width, center_y - needle_width,
+                                center_x + needle_width, center_y + needle_width, fill=needle_color, outline="")
+        if analog and bool(item.get("show_value", True)):
+            value_color = blend_color(str(item.get("value_color", "#FFFFFF")), face,
+                                      int(item.get("value_opa", 255)))
+            self.canvas.create_text(center_x, center_y + float(item.get("value_y", 45)) * preview_scale,
+                                    text=f"{value:.0f}", fill=value_color,
+                                    font=(PREVIEW_FONT, max(7, round(float(item.get("value_font_size", 28)) * preview_scale))))
 
     def _draw_fallback_button(self, runtime_x: int, text: str, fill: str, outline: str) -> None:
         scale = self.PREVIEW_WIDTH / TARGET_WIDTH

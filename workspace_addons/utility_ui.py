@@ -6,17 +6,19 @@ from pathlib import Path
 from tkinter import ttk
 
 
-VOID = "#08090a"
-PANEL = "#151619"
-PANEL_ACTIVE = "#1d1f23"
-LINE = "#2a2c31"
+VOID = "#0c0d10"
+PANEL = "#17191e"
+PANEL_ACTIVE = "#22252c"
+LINE = "#30343d"
+SURFACE = "#111318"
+SURFACE_ACTIVE = "#292d35"
 RED = "#e4002b"
 RED_ACTIVE = "#ff203f"
 RED_DEEP = "#4a0413"
 WHITE = "#f4f3ef"
 AMBER = "#ffb020"
 GREEN = "#39ff8c"
-LABEL = "#84868d"
+LABEL = "#a1a6b0"
 
 
 class VerticalScrollFrame(ttk.Frame):
@@ -50,6 +52,36 @@ class VerticalScrollFrame(ttk.Frame):
         self.canvas.yview_scroll(-int(event.delta / 120), "units")
 
 
+class RoundedPanel(tk.Canvas):
+    def __init__(self, parent: tk.Misc, *, fill: str = PANEL, radius: int = 12, padding: int = 6) -> None:
+        super().__init__(parent, background=VOID, borderwidth=0, highlightthickness=0)
+        self.fill = fill
+        self.radius = radius
+        self.padding = padding
+        self._shape = self.create_polygon(0, 0, fill=fill, outline=LINE, smooth=True)
+        self.content = tk.Frame(self, background=fill)
+        self._window = self.create_window(padding, padding, window=self.content, anchor="nw")
+        self.bind("<Configure>", self._resize)
+        self.content.bind("<Configure>", self._fit_content)
+
+    def _fit_content(self, event: tk.Event) -> None:
+        self.configure(height=event.height + self.padding * 2)
+
+    def _resize(self, event: tk.Event) -> None:
+        padding = self.padding
+        width = max(1, event.width - padding * 2)
+        height = max(1, event.height - padding * 2)
+        self.itemconfigure(self._window, width=width, height=height)
+        radius = min(self.radius, width // 2, height // 2)
+        x0, y0, x1, y1 = padding, padding, event.width - padding, event.height - padding
+        points = (
+            x0 + radius, y0, x1 - radius, y0, x1, y0, x1, y0 + radius,
+            x1, y1 - radius, x1, y1, x1 - radius, y1, x0 + radius, y1,
+            x0, y1, x0, y1 - radius, x0, y0 + radius, x0, y0,
+        )
+        self.coords(self._shape, *points)
+
+
 def asset_path(filename: str) -> Path:
     if getattr(sys, "frozen", False):
         return Path(getattr(sys, "_MEIPASS")) / filename
@@ -60,26 +92,35 @@ def configure_mackodash_style(root: tk.Misc) -> None:
     style = ttk.Style(root)
     style.theme_use("clam")
     style.configure("TFrame", background=VOID)
-    style.configure("TLabel", background=VOID, foreground=WHITE, font=("Segoe UI", 10))
-    style.configure("Title.TLabel", background=VOID, foreground=WHITE, font=("Segoe UI Semibold", 22))
-    style.configure("Subtitle.TLabel", background=VOID, foreground=LABEL, font=("Segoe UI", 10))
-    style.configure("Tile.TFrame", background=PANEL, borderwidth=1, relief="solid")
-    style.configure("Tile.TLabel", background=PANEL, foreground=WHITE, font=("Segoe UI", 10))
-    style.configure("TileTitle.TLabel", background=PANEL, foreground=WHITE, font=("Segoe UI Semibold", 14))
-    style.configure("TileHint.TLabel", background=PANEL, foreground=LABEL, font=("Segoe UI", 9))
+    style.configure("TLabel", background=VOID, foreground=WHITE, font=("Segoe UI Variable Text", 10))
+    style.configure("Title.TLabel", background=VOID, foreground=WHITE, font=("Segoe UI Variable Display Semibold", 24))
+    style.configure("Subtitle.TLabel", background=VOID, foreground=LABEL, font=("Segoe UI Variable Text", 10))
+    style.configure("Section.TLabel", background=PANEL, foreground=LABEL, font=("Segoe UI Variable Text Semibold", 9))
+    style.configure("Tile.TFrame", background=PANEL, borderwidth=0, relief="flat")
+    style.configure("Surface.TFrame", background=SURFACE, borderwidth=0, relief="flat")
+    style.configure("Surface.TLabel", background=SURFACE, foreground=LABEL, font=("Segoe UI Variable Text", 10))
+    style.configure("Tile.TLabel", background=PANEL, foreground=WHITE, font=("Segoe UI Variable Text", 10))
+    style.configure("TileTitle.TLabel", background=PANEL, foreground=WHITE, font=("Segoe UI Variable Display Semibold", 14))
+    style.configure("TileHint.TLabel", background=PANEL, foreground=LABEL, font=("Segoe UI Variable Text", 9))
     style.configure("Good.Tile.TLabel", background=PANEL, foreground=GREEN, font=("Segoe UI Semibold", 10))
     style.configure("Warn.Tile.TLabel", background=PANEL, foreground=AMBER, font=("Segoe UI Semibold", 10))
-    style.configure("TButton", background=PANEL_ACTIVE, foreground=WHITE, font=("Segoe UI Semibold", 10), padding=(14, 10), borderwidth=1)
-    style.map("TButton", background=[("active", LINE), ("disabled", PANEL)], foreground=[("disabled", LABEL)])
-    style.configure("Accent.TButton", background=RED, foreground="#ffffff", font=("Segoe UI Semibold", 11), padding=(18, 11), borderwidth=0)
+    style.configure("TButton", background=PANEL_ACTIVE, foreground=WHITE, font=("Segoe UI Variable Text Semibold", 10), padding=(14, 10), borderwidth=0, relief="flat")
+    style.map("TButton", background=[("active", SURFACE_ACTIVE), ("pressed", RED_DEEP), ("disabled", PANEL)], foreground=[("disabled", LABEL)])
+    style.configure("Accent.TButton", background=RED, foreground="#ffffff", font=("Segoe UI Variable Text Semibold", 10), padding=(18, 11), borderwidth=0, relief="flat")
     style.map("Accent.TButton", background=[("active", RED_ACTIVE), ("disabled", RED_DEEP)], foreground=[("disabled", LABEL)])
-    style.configure("Quiet.TButton", background=PANEL, foreground=LABEL, font=("Segoe UI Semibold", 9), padding=(10, 7), borderwidth=0)
+    style.configure("Quiet.TButton", background=PANEL, foreground=LABEL, font=("Segoe UI Variable Text Semibold", 9), padding=(10, 7), borderwidth=0, relief="flat")
     style.map("Quiet.TButton", background=[("active", PANEL_ACTIVE)], foreground=[("active", WHITE)])
-    style.configure("TEntry", fieldbackground=VOID, foreground=WHITE, insertcolor=WHITE, padding=9, bordercolor=LINE, lightcolor=LINE, darkcolor=LINE)
-    style.configure("TCombobox", fieldbackground=VOID, foreground=WHITE, padding=9, bordercolor=LINE, arrowcolor=WHITE)
-    style.map("TCombobox", fieldbackground=[("readonly", VOID)], foreground=[("readonly", WHITE)])
-    style.configure("TCheckbutton", background=PANEL, foreground=WHITE, font=("Segoe UI", 9))
-    style.map("TCheckbutton", background=[("active", PANEL)], foreground=[("active", WHITE)])
+    style.configure("TEntry", fieldbackground=SURFACE, foreground=WHITE, insertcolor=WHITE, padding=9, borderwidth=1, bordercolor=LINE, lightcolor=LINE, darkcolor=LINE)
+    style.map("TEntry", bordercolor=[("focus", RED)])
+    style.configure("TCombobox", fieldbackground=SURFACE, foreground=WHITE, padding=9, borderwidth=1, bordercolor=LINE, arrowcolor=WHITE)
+    style.map("TCombobox", fieldbackground=[("readonly", SURFACE)], foreground=[("readonly", WHITE)], bordercolor=[("focus", RED)])
+    style.configure("TCheckbutton", background=PANEL, foreground=WHITE, font=("Segoe UI Variable Text", 9), padding=3)
+    style.map("TCheckbutton", background=[("active", PANEL)], foreground=[("active", WHITE)], indicatorcolor=[("selected", RED)])
+    style.configure("TScrollbar", background=PANEL_ACTIVE, troughcolor=SURFACE, borderwidth=0, arrowcolor=LABEL)
+    style.map("TScrollbar", background=[("active", LINE)])
+    style.configure("TNotebook", background=VOID, borderwidth=0, tabmargins=0)
+    style.configure("TNotebook.Tab", background=PANEL, foreground=LABEL, padding=(18, 10), borderwidth=0)
+    style.map("TNotebook.Tab", background=[("selected", PANEL_ACTIVE), ("active", SURFACE_ACTIVE)], foreground=[("selected", WHITE), ("active", WHITE)])
 
 
 def build_brand_header(parent: tk.Misc, title: str, subtitle: str) -> tk.Frame:
@@ -101,12 +142,14 @@ def build_brand_header(parent: tk.Misc, title: str, subtitle: str) -> tk.Frame:
     return header
 
 
-def build_step_tile(parent: tk.Misc, step: int, title: str, hint: str) -> tuple[ttk.Frame, ttk.Frame]:
-    tile = ttk.Frame(parent, style="Tile.TFrame", padding=18)
-    tile.columnconfigure(1, weight=1)
+def build_step_tile(parent: tk.Misc, step: int, title: str, hint: str) -> tuple[RoundedPanel, ttk.Frame]:
+    tile = RoundedPanel(parent)
+    content = tile.content
+    content.configure(padx=18, pady=18)
+    content.columnconfigure(1, weight=1)
 
     badge = tk.Label(
-        tile,
+        content,
         text=f"{step:02d}",
         background=RED,
         foreground="#ffffff",
@@ -116,12 +159,12 @@ def build_step_tile(parent: tk.Misc, step: int, title: str, hint: str) -> tuple[
         pady=4,
     )
     badge.grid(row=0, column=0, rowspan=2, sticky="nw", padx=(0, 12))
-    ttk.Label(tile, text=title, style="TileTitle.TLabel").grid(row=0, column=1, sticky="w")
-    ttk.Label(tile, text=hint, style="TileHint.TLabel", wraplength=570, justify="left").grid(
+    ttk.Label(content, text=title, style="TileTitle.TLabel").grid(row=0, column=1, sticky="w")
+    ttk.Label(content, text=hint, style="TileHint.TLabel", wraplength=570, justify="left").grid(
         row=1, column=1, sticky="w", pady=(1, 0)
     )
 
-    body = ttk.Frame(tile, style="Tile.TFrame")
+    body = ttk.Frame(content, style="Tile.TFrame")
     body.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(15, 0))
     body.columnconfigure(0, weight=1)
     return tile, body

@@ -1,12 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons\\mackodash_logo.png', '.')]
+datas = [('C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\workspace_addons\\mackodash_logo.png', '.'), ('C:\\Users\\mackb\\OneDrive\\Desktop\\FT550 esp\\mackodash_with_build\\main\\fonts\\Montserrat-SemiBold.ttf', '.')]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('esptool')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('serial')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('PIL')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 

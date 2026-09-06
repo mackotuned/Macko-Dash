@@ -15,6 +15,17 @@ extern "C" {
 
 void dash_config_init(void);
 
+typedef enum {
+   DASH_CONFIG_LANGUAGE_ENGLISH = 0,
+   DASH_CONFIG_LANGUAGE_SPANISH,
+   DASH_CONFIG_LANGUAGE_PORTUGUESE,
+   DASH_CONFIG_LANGUAGE_JAPANESE,
+   DASH_CONFIG_LANGUAGE_COUNT,
+} dash_config_language_t;
+
+dash_config_language_t dash_config_get_language(void);
+void dash_config_set_language(dash_config_language_t language);
+
 /* Legacy aggregate preference retained for compatibility. */
 bool dash_config_get_metric(void);
 void dash_config_set_metric(bool metric);
@@ -77,6 +88,15 @@ int dash_config_get_brightness(void);
 void dash_config_set_brightness(int brightness);
 bool dash_config_get_show_sim_button(void);
 void dash_config_set_show_sim_button(bool show);
+
+#define DASH_CONFIG_FUEL_ANALOG_COUNT 7
+int dash_config_get_fuel_analog_input(void);
+void dash_config_set_fuel_analog_input(int input);
+int dash_config_get_fuel_empty_mv(void);
+void dash_config_set_fuel_empty_mv(int millivolts);
+int dash_config_get_fuel_full_mv(void);
+void dash_config_set_fuel_full_mv(int millivolts);
+float dash_config_fuel_percent(float voltage);
 
 typedef enum {
    DASH_CONFIG_SMOOTHING_OFF = 0,
