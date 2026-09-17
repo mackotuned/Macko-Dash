@@ -51,6 +51,7 @@ static int s_active_bitrate = 0;
 #define CAN_OPTIONAL_SIGNAL_TIMEOUT_US 30000000
 #define OBD2_ACTIVE_TIMEOUT_US 2000000
 #define CAN_STATE_CHECK_INTERVAL_US 250000
+#define CAN_STALE_RESTART_INTERVAL_US 2000000
 #define CAN_BITRATE_SCAN_PASSES 3
 #define CAN_BITRATE_PROBE_COUNT 50
 
@@ -361,6 +362,7 @@ void canbus_task(void *arg){
     uint32_t frames_since_yield = 0;
     int64_t last_pid_tx_us = 0;
     int64_t last_state_check_us = 0;
+    int64_t last_stale_restart_us = 0;
     size_t pid_index = 0;
 
     while (1){
@@ -384,6 +386,17 @@ void canbus_task(void *arg){
                     } else if (err != ESP_ERR_INVALID_STATE) {
                         ESP_LOGW(TAG, "CAN restart failed: %s", esp_err_to_name(err));
                     }
+                } else if (status.state == TWAI_STATE_RUNNING && s_last_can_rx_us > 0 &&
+                           (now_us - s_last_can_rx_us) >= CAN_STALE_RESTART_INTERVAL_US &&
+                           (now_us - last_stale_restart_us) >= CAN_STALE_RESTART_INTERVAL_US) {
+                    last_stale_restart_us = now_us;
+                    esp_err_t stop_err = twai_stop();
+                    esp_err_t start_err = stop_err == ESP_OK ? twai_start() : stop_err;
+                    if (start_err == ESP_OK) {
+                        ESP_LOGW(TAG, "CAN traffic stale; controller restarted");
+                    } else {
+                        ESP_LOGW(TAG, "CAN stale restart failed: %s", esp_err_to_name(start_err));
+                    }
                 }
             }
         }
@@ -392,8 +405,8 @@ void canbus_task(void *arg){
             s_obd2_active = false;
         }
 
-        // If drivetrain is not live, start OBD2 polling and keep polling while active.
-        if ((s_obd2_active || !canbus_has_live_drivetrain()) &&
+        // Do not inject generic OBD-II requests after a configured ECU protocol is active.
+        if ((s_obd2_active || (!active_protocol && !canbus_has_live_drivetrain())) &&
             (now_us - last_pid_tx_us) >= 80000) {
             if (send_obd2_pid_request(s_obd2_pids[pid_index])) {
                 pid_index = (pid_index + 1) % (sizeof(s_obd2_pids) / sizeof(s_obd2_pids[0]));

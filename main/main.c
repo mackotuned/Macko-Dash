@@ -149,37 +149,37 @@ void gauge_timer(lv_timer_t * t) {
         d.duty_valid = true;
         d.knock_valid = true;
     } else {
-    static float displayRPM = 0.0f;
-    displayRPM += 0.20f * (can_data.rpm - displayRPM);
-
     int gear = 0;
     can_live = canbus_has_live_data();
     drivetrain_live = canbus_has_live_drivetrain();
     bool can_gear_live = canbus_has_live_gear();
-
-    if (can_live && can_gear_live && can_data.gear > 0.0f && can_data.gear < 10.0f) {
-        gear = (int)can_data.gear;
-    }
 
     float speed_mph = can_data.speed * 0.621371f;
 
     if (speed_mph < MIN_VALID_SPEED_MPH)
         speed_mph = 0.0f;
 
+    if (speed_mph > 0.0f && can_live && can_gear_live &&
+            can_data.gear > 0.0f && can_data.gear < 10.0f) {
+        gear = (int)can_data.gear;
+    }
+
     float display_tps = can_data.tps;
 
-    if (display_tps < 1.0f)
+    if (!isfinite(display_tps) || display_tps < 0.0f || display_tps > 100.0f)
         display_tps = 0.0f;
-    else if (display_tps > 100.0f)
-        display_tps = 100.0f;
 
-    d.rpm        = (uint16_t)(displayRPM < 0 ? 0 : displayRPM);
+    float display_timing = can_data.ign_angle;
+    if (!isfinite(display_timing) || display_timing < -100.0f || display_timing > 100.0f)
+        display_timing = 0.0f;
+
+    d.rpm        = (uint16_t)(can_data.rpm < 0 ? 0 : can_data.rpm);
     d.speed_mph  = speed_mph;
     d.gear       = (int8_t)gear;
     d.ect_f      = can_data.coolant_temp;
     d.iat_f      = can_data.air_temp;
     d.afr        = can_data.air_fuel_ratio;
-    d.timing_deg = can_data.ign_angle;
+    d.timing_deg = display_timing;
     d.map_psi    = can_data.boost;
     d.batt_v     = can_data.battery_voltage;
     d.tps_pct    = display_tps;

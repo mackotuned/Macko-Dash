@@ -1,5 +1,9 @@
 $ErrorActionPreference = 'Stop'
-$python = 'C:\Python314\python.exe'
+$pythonCandidates = @(
+    'C:\Program Files\Python314\python.exe',
+    'C:\Python314\python.exe'
+)
+$python = $pythonCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $addonsRoot = Resolve-Path (Join-Path $root '..')
 $projectRoot = Resolve-Path (Join-Path $root '..\..')
@@ -10,8 +14,8 @@ $buildDir = Join-Path $projectRoot 'build'
 $firmwareBundle = Join-Path $root 'dist\MackoDash-Firmware.zip'
 $themeInstructions = Join-Path $addonsRoot 'references\MackoDash_SquareLine_Customer_Instructions.txt'
 
-if (-not (Test-Path $python)) {
-    throw "Python with Tkinter was not found at $python"
+if (-not $python) {
+    throw "Python 3.14 with Tkinter was not found"
 }
 if (-not (Test-Path (Join-Path $buildDir 'mackodash.bin'))) {
     throw "Build the complete MackoDash firmware first; $buildDir is incomplete"
