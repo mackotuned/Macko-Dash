@@ -1,6 +1,6 @@
 MACKODASH UTILITY
 =================
-Version 2.1.2
+Version 2.1.3
 
 Keep all files in this folder together:
   MackoDashUtility.exe

@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import io
 import json
+import ssl
 import struct
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.request import Request, urlopen
 
+import certifi
 import esptool
 from esptool.bin_image import LoadFirmwareImage
 
@@ -181,9 +183,10 @@ def download_latest_firmware(destination: str | Path) -> Path:
     output = Path(destination).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     request = Request(LATEST_FIRMWARE_URL, headers={"User-Agent": "MackoDashUtility"})
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
     temporary_path: Path | None = None
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=30, context=ssl_context) as response:
             content_length = response.headers.get("Content-Length")
             if content_length and int(content_length) > MAX_BUNDLE_SIZE:
                 raise FirmwareValidationError("The downloaded firmware ZIP is unexpectedly large.")

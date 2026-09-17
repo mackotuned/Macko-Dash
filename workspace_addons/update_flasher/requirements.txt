@@ -1,3 +1,4 @@
 esptool==5.3.1
 pyserial==3.5
+certifi>=2025.8.3
 PyInstaller>=6.22,<7

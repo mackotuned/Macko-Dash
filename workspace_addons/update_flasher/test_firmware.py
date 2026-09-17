@@ -62,8 +62,9 @@ class FirmwareValidationTests(unittest.TestCase):
             def __exit__(self, *_args):
                 self.close()
 
-        with patch("firmware.urlopen", return_value=Response(self.bundle.read_bytes())):
+        with patch("firmware.urlopen", return_value=Response(self.bundle.read_bytes())) as urlopen:
             downloaded = download_latest_firmware(destination)
+        self.assertIsNotNone(urlopen.call_args.kwargs["context"])
         self.assertEqual(downloaded, destination)
         self.assertEqual(validate_firmware(downloaded).version, validate_firmware(self.bundle).version)
 

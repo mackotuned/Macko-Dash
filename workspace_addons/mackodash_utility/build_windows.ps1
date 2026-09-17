@@ -21,7 +21,7 @@ if (-not (Test-Path (Join-Path $buildDir 'mackodash.bin'))) {
     throw "Build the complete MackoDash firmware first; $buildDir is incomplete"
 }
 
-& $python -c "import tkinter, esptool, serial, PIL; print('Tk', tkinter.Tcl().call('info', 'patchlevel')); print('esptool', esptool.__version__); print('Pillow', PIL.__version__)"
+& $python -c "import tkinter, certifi, esptool, serial, PIL; print('Tk', tkinter.Tcl().call('info', 'patchlevel')); print('certifi', certifi.where()); print('esptool', esptool.__version__); print('Pillow', PIL.__version__)"
 & $python -c "import PyInstaller; assert tuple(map(int, PyInstaller.__version__.split('.')[:2])) >= (6, 22), 'PyInstaller 6.22 or newer is required for Tcl/Tk 9 support'; print('PyInstaller', PyInstaller.__version__)"
 if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller 6.22 or newer is required"
@@ -37,6 +37,7 @@ if ($LASTEXITCODE -ne 0) {
     --collect-all esptool `
     --collect-all serial `
     --collect-all PIL `
+    --collect-all certifi `
     --distpath (Join-Path $root 'dist') `
     --workpath (Join-Path $root 'build') `
     --specpath $root `
