@@ -22,3 +22,29 @@ menu "C6 OTA Bridge"
             Path to the onboard C6 firmware image used by the ESP-Hosted slave OTA bridge.
 
 endmenu
+
+menu "Rotary Controller"
+
+    config ROTARY_CONTROLLER_ENABLE
+        bool "Enable dedicated rotary-controller UART"
+        default y
+        help
+            Enables the framed UART1 link to the external ESP32-S3 rotary
+            controller.
+
+    config ROTARY_CONTROLLER_TX_GPIO
+        int "Dashboard UART TX GPIO"
+        range -1 54
+        default 49
+
+    config ROTARY_CONTROLLER_RX_GPIO
+        int "Dashboard UART RX GPIO"
+        range -1 54
+        default 50
+
+    config ROTARY_CONTROLLER_BAUD
+        int "Controller UART baud rate"
+        range 9600 2000000
+        default 115200
+
+endmenu

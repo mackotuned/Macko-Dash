@@ -1,4 +1,5 @@
 /build/
+/rotary_controller/
 /managed_components/
 /workspace_addons/archives/
 /workspace_addons/**/__pycache__/

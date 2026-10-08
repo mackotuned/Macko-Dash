@@ -124,7 +124,8 @@ static void handle_list(void)
     snprintf(response, sizeof(response), "MDP1 LIST %u", (unsigned)count);
     uart_send_line(response);
     for (size_t index = 0; index < count; ++index) {
-        snprintf(response, sizeof(response), "MDP1 FILE %s %lu", files[index].filename,
+        snprintf(response, sizeof(response), "MDP1 FILE %.*s %lu",
+                 (int)sizeof(files[index].filename) - 1, files[index].filename,
                  (unsigned long)files[index].size_bytes);
         uart_send_line(response);
     }

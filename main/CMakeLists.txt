@@ -77,6 +77,7 @@ if(CONFIG_HONDA_DASH_ENABLE_WIFI_OTA)
 idf_component_register(
     SRCS 
         "main.c"
+        "air_ride.c"
         "boot_logo.c"
         "boot_logo_storage.c"
         "huntertuned_logo.c"
@@ -86,6 +87,8 @@ idf_component_register(
         "data_logger.c"
         "device_log_viewer.c"
         "uart_file_transfer.c"
+        "rotary_controller_uart.c"
+        "ruin_capture_recorder.c"
         "achievement_system.c"
         "session_peaks.c"
         "theme_storage.c"
@@ -133,6 +136,7 @@ else()
 idf_component_register(
     SRCS 
         "main.c"
+        "air_ride.c"
         "boot_logo.c"
         "boot_logo_storage.c"
         "huntertuned_logo.c"
@@ -142,6 +146,8 @@ idf_component_register(
         "data_logger.c"
         "device_log_viewer.c"
         "uart_file_transfer.c"
+        "rotary_controller_uart.c"
+        "ruin_capture_recorder.c"
         "achievement_system.c"
         "session_peaks.c"
         "theme_storage.c"

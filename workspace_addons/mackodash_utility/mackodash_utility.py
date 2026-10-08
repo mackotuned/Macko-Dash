@@ -38,7 +38,7 @@ from utility_ui import (
 class MackoDashUtility(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("MackoDash Utility 2.1.3")
+        self.title("MackoDash Utility 3.0.0")
         self.geometry("1440x900")
         self.minsize(1180, 740)
         self.configure(background=VOID)

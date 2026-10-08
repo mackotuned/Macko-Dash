@@ -35,7 +35,7 @@ static const int can_rates[] = {
 // =======================================================
 
 volatile can_dash_data_t can_data = {0};
-static volatile int64_t s_last_can_rx_us = 0;
+static volatile uint32_t s_last_can_rx_ms = 0;
 static volatile int64_t s_last_gear_rx_us = 0;
 static volatile int64_t s_last_rpm_rx_us = 0;
 static volatile int64_t s_last_speed_rx_us = 0;
@@ -43,15 +43,17 @@ static volatile int64_t s_last_oil_pressure_rx_us = 0;
 static volatile int64_t s_last_obd2_rx_us = 0;
 static bool s_obd2_active = false;
 static bool s_can_driver_ready = false;
+static bool s_auto_bitrate = false;
 static int s_active_bitrate = 0;
+static uint32_t s_can_started_ms = 0;
 
-#define CAN_LIVE_TIMEOUT_US 500000
+#define CAN_LIVE_TIMEOUT_MS 1500
 #define CAN_GEAR_LIVE_TIMEOUT_US 1500000
 #define CAN_DRIVETRAIN_LIVE_TIMEOUT_US 1500000
 #define CAN_OPTIONAL_SIGNAL_TIMEOUT_US 30000000
 #define OBD2_ACTIVE_TIMEOUT_US 2000000
 #define CAN_STATE_CHECK_INTERVAL_US 250000
-#define CAN_STALE_RESTART_INTERVAL_US 2000000
+#define CAN_STALE_RESTART_INTERVAL_MS 2000
 #define CAN_BITRATE_SCAN_PASSES 3
 #define CAN_BITRATE_PROBE_COUNT 50
 
@@ -233,8 +235,23 @@ static twai_timing_config_t get_timing(int bitrate){
     return t;
 }
 
+static void start_can_driver(int bitrate)
+{
+    twai_general_config_t g_config =
+        TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX, CAN_RX, TWAI_MODE_NORMAL);
+    twai_timing_config_t t_config = get_timing(bitrate);
+    twai_filter_config_t f_config = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
-int detect_can_bitrate()
+    ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
+    ESP_ERROR_CHECK(twai_start());
+    s_can_driver_ready = true;
+    s_active_bitrate = bitrate;
+    s_last_can_rx_ms = 0;
+    s_can_started_ms = (uint32_t)(esp_timer_get_time() / 1000);
+}
+
+
+static int detect_can_bitrate(bool *driver_running)
 {
     twai_general_config_t g_config =
         TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX, CAN_RX, TWAI_MODE_NORMAL);
@@ -243,6 +260,7 @@ int detect_can_bitrate()
         TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
     twai_message_t msg;
+    *driver_running = false;
 
     for (int pass = 0; pass < CAN_BITRATE_SCAN_PASSES; pass++){
         for (int i = 0; i < NUM_RATES; i++){
@@ -261,17 +279,24 @@ int detect_can_bitrate()
 
             while (timeout--){
                 if (twai_receive(&msg, pdMS_TO_TICKS(10)) == ESP_OK){
-                    if (msg.extd || msg.rtr)
+                    if (msg.rtr)
                         continue;
 
+                    s_last_can_rx_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                    if (!msg.extd) {
+                        (void)process_obd2_response(msg.identifier, msg.data);
+                        process_can_frame(msg.identifier, msg.data);
+                    }
                     frames++;
 
-                    if (frames >= 3){
+                    bool protocol_frame = !msg.extd && active_protocol &&
+                        msg.identifier < CAN_ID_MAX && frame_lookup[msg.identifier] != NULL;
+                    if (protocol_frame || frames >= 3){
                         ESP_LOGI(TAG, "Detected CAN bitrate %d", rate);
-
-                        twai_stop();
-                        twai_driver_uninstall();
-
+                        s_can_driver_ready = true;
+                        s_active_bitrate = rate;
+                        s_can_started_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                        *driver_running = true;
                         return rate;
                     }
                 }
@@ -299,25 +324,16 @@ void canbus_init(void)
     protocol_loader_init();
 
     int bitrate;
+    bool driver_running = false;
+    s_auto_bitrate = !(active_protocol && active_protocol->bitrate > 0);
     if (active_protocol && active_protocol->bitrate > 0) {
         bitrate = active_protocol->bitrate;
         ESP_LOGI(TAG, "Using %s protocol bitrate %d", active_protocol->name, bitrate);
     } else {
-        bitrate = detect_can_bitrate();
+        bitrate = detect_can_bitrate(&driver_running);
     }
 
-    twai_general_config_t g_config =
-        TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX, CAN_RX, TWAI_MODE_NORMAL);
-
-    twai_timing_config_t t_config = get_timing(bitrate);
-
-    twai_filter_config_t f_config =
-        TWAI_FILTER_CONFIG_ACCEPT_ALL();
-
-    ESP_ERROR_CHECK(twai_driver_install(&g_config, &t_config, &f_config));
-    ESP_ERROR_CHECK(twai_start());
-    s_can_driver_ready = true;
-    s_active_bitrate = bitrate;
+    if (!driver_running) start_can_driver(bitrate);
 
     ESP_LOGI(TAG, "CAN initialized at %d", bitrate);
 }
@@ -325,11 +341,12 @@ void canbus_init(void)
 void canbus_shutdown(void)
 {
     s_obd2_active = false;
-    s_last_can_rx_us = 0;
+    s_last_can_rx_ms = 0;
     s_last_gear_rx_us = 0;
     s_last_rpm_rx_us = 0;
     s_last_speed_rx_us = 0;
     s_last_oil_pressure_rx_us = 0;
+    s_auto_bitrate = false;
 
     active_protocol = NULL;
     memset(frame_lookup, 0, sizeof(frame_lookup));
@@ -350,6 +367,7 @@ void canbus_shutdown(void)
 
     s_can_driver_ready = false;
     s_active_bitrate = 0;
+    s_can_started_ms = 0;
 }
 
 
@@ -362,11 +380,12 @@ void canbus_task(void *arg){
     uint32_t frames_since_yield = 0;
     int64_t last_pid_tx_us = 0;
     int64_t last_state_check_us = 0;
-    int64_t last_stale_restart_us = 0;
+    uint32_t last_stale_restart_ms = 0;
     size_t pid_index = 0;
 
     while (1){
         int64_t now_us = esp_timer_get_time();
+        uint32_t now_ms = (uint32_t)(now_us / 1000);
         if ((now_us - last_state_check_us) >= CAN_STATE_CHECK_INTERVAL_US) {
             twai_status_info_t status;
             last_state_check_us = now_us;
@@ -386,16 +405,33 @@ void canbus_task(void *arg){
                     } else if (err != ESP_ERR_INVALID_STATE) {
                         ESP_LOGW(TAG, "CAN restart failed: %s", esp_err_to_name(err));
                     }
-                } else if (status.state == TWAI_STATE_RUNNING && s_last_can_rx_us > 0 &&
-                           (now_us - s_last_can_rx_us) >= CAN_STALE_RESTART_INTERVAL_US &&
-                           (now_us - last_stale_restart_us) >= CAN_STALE_RESTART_INTERVAL_US) {
-                    last_stale_restart_us = now_us;
-                    esp_err_t stop_err = twai_stop();
-                    esp_err_t start_err = stop_err == ESP_OK ? twai_start() : stop_err;
-                    if (start_err == ESP_OK) {
-                        ESP_LOGW(TAG, "CAN traffic stale; controller restarted");
-                    } else {
-                        ESP_LOGW(TAG, "CAN stale restart failed: %s", esp_err_to_name(start_err));
+                } else if (status.state == TWAI_STATE_RUNNING &&
+                           (uint32_t)(now_ms - last_stale_restart_ms) >= CAN_STALE_RESTART_INTERVAL_MS) {
+                    bool traffic_missing = s_last_can_rx_ms == 0 &&
+                        (uint32_t)(now_ms - s_can_started_ms) >= CAN_STALE_RESTART_INTERVAL_MS;
+                    bool traffic_stale = s_last_can_rx_ms > 0 &&
+                        (uint32_t)(now_ms - s_last_can_rx_ms) >= CAN_STALE_RESTART_INTERVAL_MS;
+
+                    if (s_auto_bitrate && (traffic_missing || traffic_stale)) {
+                        last_stale_restart_ms = now_ms;
+                        ESP_LOGW(TAG, "CAN traffic unavailable; rescanning bitrates");
+                        ESP_ERROR_CHECK(twai_stop());
+                        ESP_ERROR_CHECK(twai_driver_uninstall());
+                        s_can_driver_ready = false;
+                        bool driver_running = false;
+                        int bitrate = detect_can_bitrate(&driver_running);
+                        if (!driver_running) start_can_driver(bitrate);
+                        ESP_LOGI(TAG, "CAN reinitialized at %d", bitrate);
+                    } else if (traffic_stale) {
+                        last_stale_restart_ms = now_ms;
+                        esp_err_t stop_err = twai_stop();
+                        esp_err_t start_err = stop_err == ESP_OK ? twai_start() : stop_err;
+                        if (start_err == ESP_OK) {
+                            s_can_started_ms = now_ms;
+                            ESP_LOGW(TAG, "CAN traffic stale; controller restarted");
+                        } else {
+                            ESP_LOGW(TAG, "CAN stale restart failed: %s", esp_err_to_name(start_err));
+                        }
                     }
                 }
             }
@@ -415,10 +451,12 @@ void canbus_task(void *arg){
         }
 
         if (twai_receive(&message, pdMS_TO_TICKS(10)) == ESP_OK){
-            if (!message.extd && !message.rtr) {
-                s_last_can_rx_us = esp_timer_get_time();
-                (void)process_obd2_response(message.identifier, message.data);
-                process_can_frame(message.identifier, message.data);
+            if (!message.rtr) {
+                s_last_can_rx_ms = (uint32_t)(esp_timer_get_time() / 1000);
+                if (!message.extd) {
+                    (void)process_obd2_response(message.identifier, message.data);
+                    process_can_frame(message.identifier, message.data);
+                }
                 frames_since_yield++;
 
                 // Prevent CPU starvation on very busy CAN buses.
@@ -435,11 +473,12 @@ void canbus_task(void *arg){
 
 bool canbus_has_live_data(void)
 {
-    int64_t last = s_last_can_rx_us;
+    uint32_t last = s_last_can_rx_ms;
     if (last == 0) {
         return false;
     }
-    return (esp_timer_get_time() - last) <= CAN_LIVE_TIMEOUT_US;
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    return (uint32_t)(now - last) <= CAN_LIVE_TIMEOUT_MS;
 }
 
 bool canbus_has_live_gear(void)
@@ -486,10 +525,10 @@ void canbus_get_diagnostics(canbus_diagnostics_t *diagnostics)
     diagnostics->oil_pressure_recent = canbus_has_recent_oil_pressure();
     diagnostics->bitrate = s_active_bitrate;
 
-    int64_t last_rx_us = s_last_can_rx_us;
-    if (last_rx_us > 0) {
-        int64_t age_ms = (esp_timer_get_time() - last_rx_us) / 1000;
-        diagnostics->last_frame_age_ms = age_ms > UINT32_MAX ? UINT32_MAX : (uint32_t)age_ms;
+    uint32_t last_rx_ms = s_last_can_rx_ms;
+    if (last_rx_ms > 0) {
+        uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        diagnostics->last_frame_age_ms = (uint32_t)(now_ms - last_rx_ms);
     }
 
     strlcpy(diagnostics->protocol, active_protocol ? active_protocol->name : "Detecting",

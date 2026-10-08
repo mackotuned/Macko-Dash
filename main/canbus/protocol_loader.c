@@ -67,8 +67,10 @@ static void activate_protocol(can_protocol_t *proto){
 static void load_protocol_from_json(const char *json){
     cJSON *root = cJSON_Parse(json);
 
-    if (!root)
+    if (!cJSON_IsObject(root)) {
+        cJSON_Delete(root);
         return;
+    }
 
     if (protocol_count >= MAX_PROTOCOLS){
         cJSON_Delete(root);
@@ -81,33 +83,45 @@ static void load_protocol_from_json(const char *json){
     cJSON *frames = cJSON_GetObjectItem(root, "frames");
     cJSON *bitrate = cJSON_GetObjectItem(root, "bitrate");
 
-    if (name && name->valuestring){
-        strncpy(proto->name, name->valuestring, sizeof(proto->name) - 1);
-        proto->name[sizeof(proto->name) - 1] = 0;
+        if (!cJSON_IsString(name) || !name->valuestring[0] ||
+            strlen(name->valuestring) >= sizeof(proto->name) ||
+            !cJSON_IsArray(frames) || !cJSON_IsNumber(bitrate)) {
+        goto invalid_protocol;
     }
 
-    if (bitrate)
-        proto->bitrate = bitrate->valueint;
+    memset(proto, 0, sizeof(*proto));
+    snprintf(proto->name, sizeof(proto->name), "%s", name->valuestring);
+    proto->bitrate = bitrate->valueint;
 
     int frame_count = cJSON_GetArraySize(frames);
     proto->frame_count = frame_count > MAX_FRAMES ? MAX_FRAMES : frame_count;
 
     for (int i = 0; i < proto->frame_count; i++){
         cJSON *frame = cJSON_GetArrayItem(frames, i);
+        if (!cJSON_IsObject(frame)) goto invalid_protocol;
 
         cJSON *id = cJSON_GetObjectItem(frame, "id");
         cJSON *signals = cJSON_GetObjectItem(frame, "signals");
 
-        if (cJSON_IsString(id))
-            proto->frames[i].id = strtol(id->valuestring, NULL, 0);
-        else
+        if (!cJSON_IsArray(signals)) goto invalid_protocol;
+        if (cJSON_IsString(id)) {
+            char *end = NULL;
+            unsigned long parsed_id = strtoul(id->valuestring, &end, 0);
+            if (!end || *end != '\0' || parsed_id >= CAN_ID_MAX) goto invalid_protocol;
+            proto->frames[i].id = (uint32_t)parsed_id;
+        } else if (cJSON_IsNumber(id) && id->valuedouble >= 0 && id->valuedouble < CAN_ID_MAX &&
+                   id->valuedouble == (double)id->valueint) {
             proto->frames[i].id = id->valueint;
+        } else {
+            goto invalid_protocol;
+        }
 
         int sig_count = cJSON_GetArraySize(signals);
         proto->frames[i].signal_count = sig_count > MAX_SIGNALS ? MAX_SIGNALS : sig_count;
 
         for (int s = 0; s < proto->frames[i].signal_count; s++){
             cJSON *sig = cJSON_GetArrayItem(signals, s);
+            if (!cJSON_IsObject(sig)) goto invalid_protocol;
 
             can_signal_t *signal = &proto->frames[i].signals[s];
 
@@ -118,13 +132,32 @@ static void load_protocol_from_json(const char *json){
             cJSON *offset_val = cJSON_GetObjectItem(sig, "offset_val");
             cJSON *endian = cJSON_GetObjectItem(sig, "endian");
 
-            signal->target = sig_name ? signal_name_to_ptr(sig_name->valuestring) : NULL;
-            signal->offset = offset ? offset->valueint : 0;
-            signal->len = len ? len->valueint : 1;
+            if (!cJSON_IsString(sig_name) ||
+                    (offset && !cJSON_IsNumber(offset)) ||
+                    (len && !cJSON_IsNumber(len)) ||
+                    (scale && !cJSON_IsNumber(scale)) ||
+                    (offset_val && !cJSON_IsNumber(offset_val)) ||
+                    (endian && !cJSON_IsString(endian))) {
+                goto invalid_protocol;
+            }
+
+                int signal_offset = offset ? offset->valueint : 0;
+                int signal_length = len ? len->valueint : 1;
+                if ((offset && offset->valuedouble != (double)signal_offset) ||
+                    (len && len->valuedouble != (double)signal_length) ||
+                    signal_offset < 0 || signal_offset >= 8 ||
+                    (signal_length != 1 && signal_length != 2) ||
+                    signal_offset + signal_length > 8) {
+                goto invalid_protocol;
+            }
+
+                signal->offset = (uint8_t)signal_offset;
+                signal->len = (uint8_t)signal_length;
+            signal->target = signal_name_to_ptr(sig_name->valuestring);
             signal->scale = scale ? scale->valuedouble : 1.0f;
             signal->offset_val = offset_val ? offset_val->valuedouble : 0;
 
-            if (endian && endian->valuestring && !strcmp(endian->valuestring, "little"))
+            if (endian && !strcmp(endian->valuestring, "little"))
                 signal->endian = ENDIAN_LITTLE;
             else
                 signal->endian = ENDIAN_BIG;
@@ -132,6 +165,12 @@ static void load_protocol_from_json(const char *json){
     }
 
     protocol_count++;
+    cJSON_Delete(root);
+    return;
+
+invalid_protocol:
+    ESP_LOGW(TAG, "Skipping invalid CAN protocol JSON");
+    memset(proto, 0, sizeof(*proto));
     cJSON_Delete(root);
 }
 
@@ -143,6 +182,7 @@ void protocol_loader_init(void){
     detection_done = false;
 
     memset(frame_lookup, 0, sizeof(frame_lookup));
+    memset(protocols, 0, sizeof(protocols));
     memset(protocol_hits, 0, sizeof(protocol_hits));
 
     for (int i = 0; i < protocol_json_count; i++)

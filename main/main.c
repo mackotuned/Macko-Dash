@@ -13,10 +13,13 @@
 #include "canbus.h"
 #include "dashboard_runtime.h"
 #include "uart_file_transfer.h"
+#include "rotary_controller_uart.h"
+#include "ruin_capture_recorder.h"
 #include "ota_c6_hosted_bridge.h"
 #include "dash_sim.h"
 #include "dash_config.h"
 #include "data_logger.h"
+#include "air_ride.h"
 #include "achievement_system.h"
 #include "session_peaks.h"
 #include "theme_storage.h"
@@ -41,6 +44,7 @@ static TaskHandle_t s_odometer_tracking_task = NULL;
 static lv_timer_t *s_gauge_timer = NULL;
 static lv_display_t *s_display = NULL;
 static bool s_ota_mode_active = false;
+static volatile bool s_startup_sweep_done = !ENABLE_STARTUP_SWEEP;
 
 static float current_fuel_percent(void)
 {
@@ -94,14 +98,13 @@ void gauge_timer(lv_timer_t * t) {
         return;
     }
 
-    static bool startup_sweep_done = !ENABLE_STARTUP_SWEEP;
     static int64_t startup_sweep_start_us = 0;
     static bool startup_base_inited = false;
     static honda_dash_data_t startup_base = {0};
 
     honda_dash_data_t d = {0};
 
-    if (!startup_sweep_done) {
+    if (!s_startup_sweep_done) {
         int64_t now_us = esp_timer_get_time();
 
         if (startup_sweep_start_us == 0)
@@ -136,7 +139,7 @@ void gauge_timer(lv_timer_t * t) {
         honda_dash_ui_update_shift_lights(d.rpm);
 
         if (elapsed_ms >= STARTUP_SWEEP_DURATION_MS)
-            startup_sweep_done = true;
+            s_startup_sweep_done = true;
 
         return;
     }
@@ -366,6 +369,7 @@ void dashboard_runtime_get_stats(dashboard_runtime_stats_t *stats)
 void app_main(void) {
     ESP_LOGW("main", "Reset reason: %d", (int)esp_reset_reason());
     dash_config_init();
+    air_ride_init();
     achievement_system_init();
     session_peaks_init();
 
@@ -397,15 +401,7 @@ void app_main(void) {
     esp_err_t theme_storage_err = theme_storage_init();
     ESP_LOGI("main", "Theme storage initialization -> %s", esp_err_to_name(theme_storage_err));
     boot_logo_storage_init();
-    data_logger_init();
-    ESP_ERROR_CHECK_WITHOUT_ABORT(uart_file_transfer_start());
-
-#if CONFIG_HONDA_DASH_ENABLE_WIFI_OTA
-    esp_err_t bridge_err = ota_c6_hosted_bridge_register();
-    ESP_LOGI("main", "C6 hosted OTA bridge register -> %s", esp_err_to_name(bridge_err));
-#else
-    ESP_LOGI("main", "WiFi/OTA feature disabled at build time");
-#endif
+    odometer_init();
 
     esp_err_t ui_lock_err = bsp_display_lock(1000);
     if (ui_lock_err != ESP_OK) {
@@ -442,12 +438,25 @@ void app_main(void) {
         bsp_display_unlock();
     }
 
-    vTaskDelay(pdMS_TO_TICKS(1));
-
-    odometer_init();
-    vTaskDelay(pdMS_TO_TICKS(1));
-
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rotary_controller_uart_start());
     start_can_background_tasks();
+
+    while (!s_startup_sweep_done) {
+        vTaskDelay(pdMS_TO_TICKS(GAUGE_TIMER_PERIOD_MS));
+    }
+
+    data_logger_init();
+    ruin_capture_recorder_init();
+    ESP_ERROR_CHECK_WITHOUT_ABORT(uart_file_transfer_start());
+
+#if CONFIG_HONDA_DASH_ENABLE_WIFI_OTA
+    esp_err_t bridge_err = ota_c6_hosted_bridge_register();
+    ESP_LOGI("main", "C6 hosted OTA bridge register -> %s", esp_err_to_name(bridge_err));
+#else
+    ESP_LOGI("main", "WiFi/OTA feature disabled at build time");
+#endif
+
+    vTaskDelay(pdMS_TO_TICKS(1));
 
     xTaskCreatePinnedToCore(save_miles_task, "save_miles_task", 4096, NULL, 4, NULL, 0);
 

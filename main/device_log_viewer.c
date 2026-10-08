@@ -105,9 +105,11 @@ size_t device_log_list(device_log_file_t *files, size_t capacity)
         if (!valid_filename(entry->d_name)) continue;
         char path[LOG_PATH_SIZE];
         struct stat info;
-        snprintf(path, sizeof(path), "%s/%s", LOG_DIRECTORY, entry->d_name);
+        snprintf(path, sizeof(path), "%s/%.*s", LOG_DIRECTORY,
+                 (int)sizeof(files[count].filename) - 1, entry->d_name);
         if (stat(path, &info) != 0 || !S_ISREG(info.st_mode)) continue;
-        snprintf(files[count].filename, sizeof(files[count].filename), "%s", entry->d_name);
+        size_t filename_length = strlen(entry->d_name);
+        memcpy(files[count].filename, entry->d_name, filename_length + 1);
         files[count].size_bytes = (uint32_t)info.st_size;
         ++count;
     }

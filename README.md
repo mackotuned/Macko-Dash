@@ -6,7 +6,7 @@
 
 **A configurable digital gauge cluster for the 9-inch Elecrow CrowPanel ESP32-P4/C6**
 
-**Current firmware: 2.1.3**
+**Current firmware: 3.0.0**
 
 [Get Latest Release](https://github.com/mackotuned/MackoDash-Flash-Tools/releases/latest) | [Browse Older Versions](https://github.com/mackotuned/MackoDash-Flash-Tools/releases) | [Firmware Update Guide](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update) | [Custom Theme Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) | [Get Support](#support)
 
@@ -79,6 +79,8 @@ Settings, theme selection, odometer data, and trip data are retained after power
 - On-device diagnostics, Contact & Support QR links, Shortcuts & Tips, and Read Me guides under Settings > System
 - Persistent odometer plus Trip A and Trip B
 - Adjustable display brightness and value smoothing
+- Optional [MackoDash S3 rotary controller](https://github.com/mackotuned/MackoDash-S3-Controller)
+	with local Air Ride controls
 - Persisted English, Spanish, Portuguese, and Japanese dashboard languages
 - Idle, Cruise, Full Throttle, and Redline simulation modes
 - Protected factory reset

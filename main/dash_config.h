@@ -98,6 +98,11 @@ int dash_config_get_fuel_full_mv(void);
 void dash_config_set_fuel_full_mv(int millivolts);
 float dash_config_fuel_percent(float voltage);
 
+int dash_config_get_compressor_on_psi(void);
+void dash_config_set_compressor_on_psi(int psi);
+int dash_config_get_compressor_off_psi(void);
+void dash_config_set_compressor_off_psi(int psi);
+
 typedef enum {
    DASH_CONFIG_SMOOTHING_OFF = 0,
    DASH_CONFIG_SMOOTHING_LIGHT,

@@ -97,6 +97,40 @@ typedef struct {
     float    fuel_pct;     /* fuel level, 0-100                        */
 } honda_dash_data_t;
 
+typedef enum {
+    HONDA_DASH_CONTROLLER_HOME = 0,
+    HONDA_DASH_CONTROLLER_VIEW,
+    HONDA_DASH_CONTROLLER_BRIGHTNESS,
+    HONDA_DASH_CONTROLLER_RECORD,
+    HONDA_DASH_CONTROLLER_TRIP,
+    HONDA_DASH_CONTROLLER_PEAKS,
+    HONDA_DASH_CONTROLLER_SHIFT,
+    HONDA_DASH_CONTROLLER_LOGS,
+    HONDA_DASH_CONTROLLER_TRIP_RESET,
+    HONDA_DASH_CONTROLLER_ALERT,
+    HONDA_DASH_CONTROLLER_AIR_RIDE,
+} honda_dash_controller_page_t;
+
+typedef enum {
+    HONDA_DASH_CONTROLLER_OPEN = 0,
+    HONDA_DASH_CONTROLLER_ROTATE,
+    HONDA_DASH_CONTROLLER_PRESS,
+    HONDA_DASH_CONTROLLER_LONG_PRESS,
+    HONDA_DASH_CONTROLLER_BACK,
+    HONDA_DASH_CONTROLLER_GET_STATE,
+} honda_dash_controller_event_t;
+
+typedef struct {
+    honda_dash_controller_page_t page;
+    int32_t selection;
+    int32_t count;
+    int32_t value;
+    bool recording;
+    bool air_pressure_valid;
+    uint16_t air_pressure_psi[4];
+    char label[48];
+} honda_dash_controller_state_t;
+
 /* Builds the full cluster UI as a child of `parent` (usually lv_scr_act()).
  * Call once, after LVGL + your display driver are initialized.
  * Returns the root container object (1024x600). */
@@ -115,6 +149,11 @@ void honda_dash_ui_show_achievement(const char *name);
 /* Applies staged shift colors to built-in RPM indicators from raw drivetrain
  * data. Imported themes retain their authored RPM colors. */
 void honda_dash_ui_update_shift_lights(uint16_t rpm);
+
+/* Handles one external rotary-controller event. Call while holding the LVGL lock. */
+bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
+                                     int32_t value,
+                                     honda_dash_controller_state_t *state);
 
 #ifdef __cplusplus
 }

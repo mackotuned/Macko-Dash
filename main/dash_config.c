@@ -26,6 +26,8 @@
 #define KEY_FUEL_ANALOG  "cfg_fuel_ain"
 #define KEY_FUEL_EMPTY   "cfg_fuel_emp"
 #define KEY_FUEL_FULL    "cfg_fuel_full"
+#define KEY_COMP_ON      "air_comp_on"
+#define KEY_COMP_OFF     "air_comp_off"
 
 #define DEFAULT_VTEC_RPM    5600
 #define DEFAULT_REDLINE_RPM 8400
@@ -40,6 +42,11 @@
 #define DEFAULT_FUEL_ANALOG 0
 #define DEFAULT_FUEL_EMPTY_MV 3290
 #define DEFAULT_FUEL_FULL_MV 290
+#define DEFAULT_COMPRESSOR_ON_PSI 120
+#define DEFAULT_COMPRESSOR_OFF_PSI 150
+#define COMPRESSOR_PSI_MIN 80
+#define COMPRESSOR_PSI_MAX 200
+#define COMPRESSOR_PSI_GAP 5
 
 static const char *const SHIFT_STAGE_RPM_KEYS[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
     "cfg_shift_s1", "cfg_shift_s2", "cfg_shift_s3",
@@ -112,6 +119,8 @@ static bool s_show_sim_button = false;
 static int s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
 static int s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
 static int s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
+static int s_compressor_on_psi = DEFAULT_COMPRESSOR_ON_PSI;
+static int s_compressor_off_psi = DEFAULT_COMPRESSOR_OFF_PSI;
 static dash_config_smoothing_strength_t s_smoothing_strength = DASH_CONFIG_SMOOTHING_OFF;
 static bool s_auto_record = false;
 static dash_config_log_name_t s_log_name = DASH_CONFIG_LOG_NAME_GENERAL;
@@ -186,6 +195,18 @@ void dash_config_init(void)
     }
     if (nvs_get_i32(h, KEY_FUEL_FULL, &val) == ESP_OK && val >= 0 && val <= 5000) {
         s_fuel_full_mv = (int)val;
+    }
+    if (nvs_get_i32(h, KEY_COMP_ON, &val) == ESP_OK &&
+            val >= COMPRESSOR_PSI_MIN && val <= COMPRESSOR_PSI_MAX) {
+        s_compressor_on_psi = (int)val;
+    }
+    if (nvs_get_i32(h, KEY_COMP_OFF, &val) == ESP_OK &&
+            val >= COMPRESSOR_PSI_MIN && val <= COMPRESSOR_PSI_MAX) {
+        s_compressor_off_psi = (int)val;
+    }
+    if (s_compressor_on_psi + COMPRESSOR_PSI_GAP > s_compressor_off_psi) {
+        s_compressor_on_psi = DEFAULT_COMPRESSOR_ON_PSI;
+        s_compressor_off_psi = DEFAULT_COMPRESSOR_OFF_PSI;
     }
     if (nvs_get_i32(h, KEY_SMOOTH_LEVEL, &val) == ESP_OK &&
             val >= DASH_CONFIG_SMOOTHING_OFF && val < DASH_CONFIG_SMOOTHING_COUNT) {
@@ -387,6 +408,36 @@ static void persist_i32(const char *key, int value)
     nvs_set_i32(h, key, value);
     nvs_commit(h);
     nvs_close(h);
+}
+
+int dash_config_get_compressor_on_psi(void)
+{
+    return s_compressor_on_psi;
+}
+
+void dash_config_set_compressor_on_psi(int psi)
+{
+    if (psi < COMPRESSOR_PSI_MIN) psi = COMPRESSOR_PSI_MIN;
+    if (psi > s_compressor_off_psi - COMPRESSOR_PSI_GAP) {
+        psi = s_compressor_off_psi - COMPRESSOR_PSI_GAP;
+    }
+    s_compressor_on_psi = psi;
+    persist_i32(KEY_COMP_ON, psi);
+}
+
+int dash_config_get_compressor_off_psi(void)
+{
+    return s_compressor_off_psi;
+}
+
+void dash_config_set_compressor_off_psi(int psi)
+{
+    if (psi > COMPRESSOR_PSI_MAX) psi = COMPRESSOR_PSI_MAX;
+    if (psi < s_compressor_on_psi + COMPRESSOR_PSI_GAP) {
+        psi = s_compressor_on_psi + COMPRESSOR_PSI_GAP;
+    }
+    s_compressor_off_psi = psi;
+    persist_i32(KEY_COMP_OFF, psi);
 }
 
 void dash_config_set_language(dash_config_language_t language)
@@ -843,6 +894,8 @@ void dash_config_factory_reset(void)
     s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
     s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
     s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
+    s_compressor_on_psi = DEFAULT_COMPRESSOR_ON_PSI;
+    s_compressor_off_psi = DEFAULT_COMPRESSOR_OFF_PSI;
     s_smoothing_strength = DASH_CONFIG_SMOOTHING_OFF;
     s_auto_record = false;
     s_log_name = DASH_CONFIG_LOG_NAME_GENERAL;
@@ -877,6 +930,8 @@ void dash_config_factory_reset(void)
     nvs_set_i32(h, KEY_FUEL_ANALOG, s_fuel_analog_input);
     nvs_set_i32(h, KEY_FUEL_EMPTY, s_fuel_empty_mv);
     nvs_set_i32(h, KEY_FUEL_FULL, s_fuel_full_mv);
+    nvs_set_i32(h, KEY_COMP_ON, s_compressor_on_psi);
+    nvs_set_i32(h, KEY_COMP_OFF, s_compressor_off_psi);
     nvs_set_i32(h, KEY_VALUE_SMOOTH, 0);
     nvs_set_i32(h, KEY_SMOOTH_LEVEL, DASH_CONFIG_SMOOTHING_OFF);
     nvs_set_i32(h, KEY_AUTO_RECORD, 0);
