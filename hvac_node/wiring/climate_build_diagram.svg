@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200" viewBox="0 0 1600 1200">
+  <defs>
+    <style>
+      text { font-family: "Segoe UI", Arial, sans-serif; fill: #182026; letter-spacing: 0; }
+      .title { font-size: 34px; font-weight: 700; }
+      .subtitle { font-size: 18px; fill: #52606a; }
+      .step { font-size: 22px; font-weight: 700; fill: #ffffff; }
+      .head { font-size: 21px; font-weight: 700; }
+      .label { font-size: 16px; font-weight: 700; }
+      .body { font-size: 15px; }
+      .small { font-size: 13px; fill: #52606a; }
+      .box { fill: #ffffff; stroke: #34454f; stroke-width: 2; }
+      .soft { fill: #f5f7f8; stroke: #8b9aa3; stroke-width: 2; }
+      .warning { fill: #fff5e6; stroke: #c47b16; stroke-width: 2; }
+      .power { stroke: #c43d36; stroke-width: 5; fill: none; }
+      .ground { stroke: #2878a0; stroke-width: 5; fill: none; }
+      .signal { stroke: #278166; stroke-width: 4; fill: none; }
+      .contact { stroke: #7c52a1; stroke-width: 4; fill: none; }
+      .wireless { stroke: #b06a24; stroke-width: 4; fill: none; stroke-dasharray: 12 8; }
+    </style>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#c43d36"/></marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#278166"/></marker>
+    <marker id="arrow-purple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7c52a1"/></marker>
+  </defs>
+
+  <rect width="1600" height="1200" fill="#edf1f3"/>
+  <text x="60" y="58" class="title">MackoDash Climate Controller - Simple Build Diagram</text>
+  <text x="60" y="88" class="subtitle">Current ESP-NOW build: ESP32-WROOM-32 + 2 ULN2803A drivers + 3 four-channel 5 V relay modules</text>
+
+  <!-- Step 1 -->
+  <circle cx="82" cy="155" r="27" fill="#c43d36"/><text x="82" y="163" class="step" text-anchor="middle">1</text>
+  <text x="125" y="162" class="head">Build the protected 5 V power supply</text>
+  <rect x="60" y="190" width="1480" height="145" rx="8" class="soft"/>
+  <rect x="90" y="225" width="180" height="66" rx="6" class="box"/>
+  <text x="180" y="251" class="label" text-anchor="middle">IGN +12 V</text><text x="180" y="274" class="small" text-anchor="middle">switched vehicle power</text>
+  <line x1="270" y1="258" x2="350" y2="258" class="power"/>
+  <rect x="350" y="225" width="145" height="66" rx="6" class="box"/>
+  <text x="422" y="251" class="label" text-anchor="middle">2 A FUSE</text><text x="422" y="274" class="small" text-anchor="middle">inline holder</text>
+  <line x1="495" y1="258" x2="630" y2="258" class="power"/>
+  <text x="560" y="238" class="small" text-anchor="middle">SMBJ24A to ground</text>
+  <rect x="630" y="215" width="260" height="86" rx="6" class="box"/>
+  <text x="760" y="247" class="label" text-anchor="middle">AUTOMOTIVE BUCK</text><text x="760" y="272" class="body" text-anchor="middle">9-36 V in / regulated 5 V 3 A out</text>
+  <line x1="890" y1="245" x2="1020" y2="245" class="power" marker-end="url(#arrow-red)"/>
+  <line x1="890" y1="277" x2="1020" y2="277" class="ground"/>
+  <rect x="1020" y="215" width="480" height="86" rx="6" class="box"/>
+  <text x="1260" y="242" class="label" text-anchor="middle">5 V DISTRIBUTION</text>
+  <text x="1260" y="267" class="body" text-anchor="middle">ESP32 VIN + all relay VCC/JD-VCC</text>
+  <text x="1260" y="289" class="small" text-anchor="middle">1000 uF capacitor across 5 V and GND</text>
+
+  <!-- Step 2 -->
+  <circle cx="82" cy="390" r="27" fill="#278166"/><text x="82" y="398" class="step" text-anchor="middle">2</text>
+  <text x="125" y="397" class="head">Wire the ESP32 outputs through the two ULN2803A drivers</text>
+  <rect x="60" y="425" width="430" height="335" rx="8" class="box"/>
+  <text x="275" y="458" class="head" text-anchor="middle">ESP32-WROOM-32</text>
+  <text x="95" y="497" class="label">FAN</text><text x="185" y="497" class="body">GPIO 16, 17, 18, 19</text>
+  <text x="95" y="537" class="label">MODE</text><text x="185" y="537" class="body">GPIO 23, 25, 26, 27</text>
+  <text x="95" y="577" class="label">TEMP</text><text x="185" y="577" class="body">GPIO 32, 33, 4, 13</text>
+  <rect x="90" y="620" width="370" height="105" rx="6" class="warning"/>
+  <text x="275" y="651" class="label" text-anchor="middle">Wireless link to rotary S3</text>
+  <text x="275" y="677" class="body" text-anchor="middle">ESP-NOW channel 6</text>
+  <text x="275" y="702" class="small" text-anchor="middle">No SDA, SCL, TX, or RX wires</text>
+
+  <line x1="490" y1="515" x2="610" y2="515" class="signal" marker-end="url(#arrow-green)"/>
+  <line x1="490" y1="555" x2="610" y2="555" class="signal" marker-end="url(#arrow-green)"/>
+  <line x1="490" y1="650" x2="610" y2="650" class="signal" marker-end="url(#arrow-green)"/>
+
+  <rect x="610" y="425" width="410" height="335" rx="8" class="box"/>
+  <text x="815" y="458" class="head" text-anchor="middle">ULN2803A DRIVERS</text>
+  <text x="650" y="495" class="label">U1 handles FAN + MODE</text>
+  <text x="650" y="525" class="body">Inputs 1-4: GPIO 16, 17, 18, 19</text>
+  <text x="650" y="553" class="body">Inputs 5-8: GPIO 23, 25, 26, 27</text>
+  <text x="650" y="600" class="label">U2 handles TEMP</text>
+  <text x="650" y="630" class="body">Inputs 1-4: GPIO 32, 33, 4, 13</text>
+  <text x="650" y="658" class="body">Tie unused inputs 5-8 to GND</text>
+  <text x="650" y="704" class="body">Both ICs: pin 9 to GND</text>
+  <text x="650" y="730" class="body">Both ICs: pin 10 left open</text>
+
+  <!-- Step 3 -->
+  <circle cx="1085" cy="390" r="27" fill="#4f6f88"/><text x="1085" y="398" class="step" text-anchor="middle">3</text>
+  <text x="1128" y="397" class="head">Connect the relay modules</text>
+  <rect x="1060" y="425" width="480" height="335" rx="8" class="box"/>
+  <text x="1300" y="458" class="head" text-anchor="middle">THREE 4-CHANNEL RELAY MODULES</text>
+  <rect x="1100" y="485" width="400" height="62" rx="6" fill="#e7f4ed" stroke="#278166" stroke-width="2"/>
+  <text x="1120" y="511" class="label">FAN module</text><text x="1120" y="534" class="body">U1 outputs 18, 17, 16, 15 -> IN1-IN4</text>
+  <rect x="1100" y="565" width="400" height="62" rx="6" fill="#e9f0f5" stroke="#4f6f88" stroke-width="2"/>
+  <text x="1120" y="591" class="label">MODE module</text><text x="1120" y="614" class="body">U1 outputs 14, 13, 12, 11 -> IN1-IN4</text>
+  <rect x="1100" y="645" width="400" height="62" rx="6" fill="#f8eee7" stroke="#b06a24" stroke-width="2"/>
+  <text x="1120" y="671" class="label">TEMP module</text><text x="1120" y="694" class="body">U2 outputs 18, 17, 16, 15 -> IN1-IN4</text>
+  <text x="1300" y="738" class="small" text-anchor="middle">Set every channel to LOW trigger. Keep VCC/JD-VCC jumpers installed.</text>
+
+  <line x1="1020" y1="545" x2="1060" y2="545" class="signal" marker-end="url(#arrow-green)"/>
+  <line x1="1020" y1="650" x2="1060" y2="650" class="signal" marker-end="url(#arrow-green)"/>
+
+  <!-- Step 4 -->
+  <circle cx="82" cy="820" r="27" fill="#7c52a1"/><text x="82" y="828" class="step" text-anchor="middle">4</text>
+  <text x="125" y="827" class="head">Connect relay contacts to the three separate Civic dial pad groups</text>
+  <rect x="60" y="860" width="1480" height="245" rx="8" class="soft"/>
+
+  <rect x="95" y="900" width="405" height="150" rx="7" fill="#e7f4ed" stroke="#278166" stroke-width="2"/>
+  <text x="297" y="930" class="head" text-anchor="middle">FAN</text>
+  <text x="125" y="966" class="body">K1 NO -> A    K2 NO -> B</text>
+  <text x="125" y="994" class="body">K3 NO -> C    K4 NO -> D</text>
+  <text x="125" y="1022" class="label">All four relay COM -> FAN COM</text>
+
+  <rect x="598" y="900" width="405" height="150" rx="7" fill="#e9f0f5" stroke="#4f6f88" stroke-width="2"/>
+  <text x="800" y="930" class="head" text-anchor="middle">MODE</text>
+  <text x="628" y="966" class="body">K1 NO -> A    K2 NO -> B</text>
+  <text x="628" y="994" class="body">K3 NO -> C    K4 NO -> D</text>
+  <text x="628" y="1022" class="label">All four relay COM -> MODE COM</text>
+
+  <rect x="1100" y="900" width="405" height="150" rx="7" fill="#f8eee7" stroke="#b06a24" stroke-width="2"/>
+  <text x="1302" y="930" class="head" text-anchor="middle">TEMP</text>
+  <text x="1130" y="966" class="body">K1 NO -> A    K2 NO -> B</text>
+  <text x="1130" y="994" class="body">K3 NO -> C    K4 NO -> D</text>
+  <text x="1130" y="1022" class="label">All four relay COM -> TEMP COM</text>
+
+  <line x1="1300" y1="760" x2="1300" y2="900" class="contact" marker-end="url(#arrow-purple)"/>
+  <rect x="60" y="1130" width="1480" height="48" rx="6" class="warning"/>
+  <text x="800" y="1161" class="label" text-anchor="middle">Never join FAN COM, MODE COM, and TEMP COM. Leave every NC terminal empty.</text>
+</svg>

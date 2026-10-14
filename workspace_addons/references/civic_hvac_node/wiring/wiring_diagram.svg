@@ -1,0 +1,383 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1420" viewBox="0 0 1600 1420">
+<rect width="1600" height="1420" fill="#ffffff"/>
+<text x="30" y="44" font-size="24" text-anchor="start" font-weight="bold" fill="#222" font-family="Segoe UI, Arial, sans-serif">Civic HVAC node: ESP32 DevKitC + 12x AQY212 PhotoMOS dial emulator</text>
+<text x="30" y="70" font-size="14" text-anchor="start" font-weight="normal" fill="#555" font-family="Segoe UI, Arial, sans-serif">2000 Honda Civic climate board, dials removed. Each dial pad set is COM + A/B/C/D. Every relay closes COM to one code pad.</text>
+<rect x="420" y="100" width="160" height="950" rx="6" stroke="#222" stroke-width="2" fill="#f4f6f8"/>
+<text x="500.0" y="126" font-size="16" text-anchor="middle" font-weight="bold" fill="#222" font-family="Consolas, monospace">ESP32</text>
+<text x="500.0" y="144" font-size="13" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">DevKitC</text>
+<text x="500.0" y="160" font-size="12" text-anchor="middle" font-weight="normal" fill="#555" font-family="Consolas, monospace">(WROOM-32)</text>
+<text x="574" y="204" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO16</text>
+<line x1="580" y1="200" x2="630" y2="200" stroke="#222" stroke-width="2"/>
+<rect x="630" y="192" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="187" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R1 330Ω</text>
+<line x1="700" y1="200" x2="760" y2="200" stroke="#222" stroke-width="2"/>
+<rect x="760" y="184" width="140" height="52" rx="3" stroke="#1f5fbf" stroke-width="2" fill="#fff"/>
+<text x="830" y="207" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">U1</text>
+<text x="830" y="223" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="204" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="224" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="204" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="224" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,220 738,220 738,232" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="232" x2="747" y2="232" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="236" x2="744" y2="236" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="240" x2="741" y2="240" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="200" x2="980" y2="200" stroke="#1f5fbf" stroke-width="2"/>
+<polygon points="980,200 990,189 1059,189 1059,211 990,211" fill="#fff" stroke="#1f5fbf" stroke-width="2"/>
+<text x="992" y="204" font-size="12" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">FAN COM</text>
+<line x1="900" y1="220" x2="1180" y2="220" stroke="#1f5fbf" stroke-width="2"/>
+<circle cx="1180" cy="220" r="4" fill="#1f5fbf"/>
+<text x="1192" y="224" font-size="14" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">A</text>
+<text x="574" y="264" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO17</text>
+<line x1="580" y1="260" x2="630" y2="260" stroke="#222" stroke-width="2"/>
+<rect x="630" y="252" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="247" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R2 330Ω</text>
+<line x1="700" y1="260" x2="760" y2="260" stroke="#222" stroke-width="2"/>
+<rect x="760" y="244" width="140" height="52" rx="3" stroke="#1f5fbf" stroke-width="2" fill="#fff"/>
+<text x="830" y="267" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">U2</text>
+<text x="830" y="283" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="264" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="284" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="264" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="284" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,280 738,280 738,292" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="292" x2="747" y2="292" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="296" x2="744" y2="296" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="300" x2="741" y2="300" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="260" x2="980" y2="260" stroke="#1f5fbf" stroke-width="2"/>
+<polygon points="980,260 990,249 1059,249 1059,271 990,271" fill="#fff" stroke="#1f5fbf" stroke-width="2"/>
+<text x="992" y="264" font-size="12" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">FAN COM</text>
+<line x1="900" y1="280" x2="1180" y2="280" stroke="#1f5fbf" stroke-width="2"/>
+<circle cx="1180" cy="280" r="4" fill="#1f5fbf"/>
+<text x="1192" y="284" font-size="14" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">B</text>
+<text x="574" y="324" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO18</text>
+<line x1="580" y1="320" x2="630" y2="320" stroke="#222" stroke-width="2"/>
+<rect x="630" y="312" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="307" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R3 330Ω</text>
+<line x1="700" y1="320" x2="760" y2="320" stroke="#222" stroke-width="2"/>
+<rect x="760" y="304" width="140" height="52" rx="3" stroke="#1f5fbf" stroke-width="2" fill="#fff"/>
+<text x="830" y="327" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">U3</text>
+<text x="830" y="343" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="324" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="344" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="324" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="344" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,340 738,340 738,352" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="352" x2="747" y2="352" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="356" x2="744" y2="356" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="360" x2="741" y2="360" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="320" x2="980" y2="320" stroke="#1f5fbf" stroke-width="2"/>
+<polygon points="980,320 990,309 1059,309 1059,331 990,331" fill="#fff" stroke="#1f5fbf" stroke-width="2"/>
+<text x="992" y="324" font-size="12" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">FAN COM</text>
+<line x1="900" y1="340" x2="1180" y2="340" stroke="#1f5fbf" stroke-width="2"/>
+<circle cx="1180" cy="340" r="4" fill="#1f5fbf"/>
+<text x="1192" y="344" font-size="14" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">C</text>
+<text x="574" y="384" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO19</text>
+<line x1="580" y1="380" x2="630" y2="380" stroke="#222" stroke-width="2"/>
+<rect x="630" y="372" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="367" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R4 330Ω</text>
+<line x1="700" y1="380" x2="760" y2="380" stroke="#222" stroke-width="2"/>
+<rect x="760" y="364" width="140" height="52" rx="3" stroke="#1f5fbf" stroke-width="2" fill="#fff"/>
+<text x="830" y="387" font-size="13" text-anchor="middle" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">U4</text>
+<text x="830" y="403" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="384" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="404" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="384" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="404" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,400 738,400 738,412" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="412" x2="747" y2="412" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="416" x2="744" y2="416" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="420" x2="741" y2="420" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="380" x2="980" y2="380" stroke="#1f5fbf" stroke-width="2"/>
+<polygon points="980,380 990,369 1059,369 1059,391 990,391" fill="#fff" stroke="#1f5fbf" stroke-width="2"/>
+<text x="992" y="384" font-size="12" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">FAN COM</text>
+<line x1="900" y1="400" x2="1180" y2="400" stroke="#1f5fbf" stroke-width="2"/>
+<circle cx="1180" cy="400" r="4" fill="#1f5fbf"/>
+<text x="1192" y="404" font-size="14" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">D</text>
+<rect x="1180" y="130" width="230" height="285" rx="6" stroke="#1f5fbf" stroke-width="2" fill="none"/>
+<text x="1240" y="152" font-size="15" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">FAN dial pads</text>
+<text x="1240" y="168" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">on climate board</text>
+<polygon points="1150,170 1140,159 1071,159 1071,181 1140,181" fill="#fff" stroke="#1f5fbf" stroke-width="2"/>
+<text x="1138" y="174" font-size="12" text-anchor="end" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">FAN COM</text>
+<line x1="1150" y1="170" x2="1180" y2="170" stroke="#1f5fbf" stroke-width="2"/>
+<circle cx="1180" cy="170" r="4" fill="#1f5fbf"/>
+<text x="1192" y="174" font-size="14" text-anchor="start" font-weight="bold" fill="#1f5fbf" font-family="Consolas, monospace">COM</text>
+<text x="1240" y="274" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">A → U1 pin 3</text>
+<text x="1240" y="290" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">B → U2 pin 3</text>
+<text x="1240" y="306" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">C → U3 pin 3</text>
+<text x="1240" y="322" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">D → U4 pin 3</text>
+<text x="1240" y="338" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">COM → pin 4 of all 4</text>
+<text x="574" y="504" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO23</text>
+<line x1="580" y1="500" x2="630" y2="500" stroke="#222" stroke-width="2"/>
+<rect x="630" y="492" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="487" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R5 330Ω</text>
+<line x1="700" y1="500" x2="760" y2="500" stroke="#222" stroke-width="2"/>
+<rect x="760" y="484" width="140" height="52" rx="3" stroke="#1e8a3e" stroke-width="2" fill="#fff"/>
+<text x="830" y="507" font-size="13" text-anchor="middle" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">U5</text>
+<text x="830" y="523" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="504" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="524" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="504" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="524" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,520 738,520 738,532" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="532" x2="747" y2="532" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="536" x2="744" y2="536" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="540" x2="741" y2="540" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="500" x2="980" y2="500" stroke="#1e8a3e" stroke-width="2"/>
+<polygon points="980,500 990,489 1068,489 1068,511 990,511" fill="#fff" stroke="#1e8a3e" stroke-width="2"/>
+<text x="992" y="504" font-size="12" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">MODE COM</text>
+<line x1="900" y1="520" x2="1180" y2="520" stroke="#1e8a3e" stroke-width="2"/>
+<circle cx="1180" cy="520" r="4" fill="#1e8a3e"/>
+<text x="1192" y="524" font-size="14" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">A</text>
+<text x="574" y="564" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO25</text>
+<line x1="580" y1="560" x2="630" y2="560" stroke="#222" stroke-width="2"/>
+<rect x="630" y="552" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="547" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R6 330Ω</text>
+<line x1="700" y1="560" x2="760" y2="560" stroke="#222" stroke-width="2"/>
+<rect x="760" y="544" width="140" height="52" rx="3" stroke="#1e8a3e" stroke-width="2" fill="#fff"/>
+<text x="830" y="567" font-size="13" text-anchor="middle" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">U6</text>
+<text x="830" y="583" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="564" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="584" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="564" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="584" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,580 738,580 738,592" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="592" x2="747" y2="592" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="596" x2="744" y2="596" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="600" x2="741" y2="600" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="560" x2="980" y2="560" stroke="#1e8a3e" stroke-width="2"/>
+<polygon points="980,560 990,549 1068,549 1068,571 990,571" fill="#fff" stroke="#1e8a3e" stroke-width="2"/>
+<text x="992" y="564" font-size="12" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">MODE COM</text>
+<line x1="900" y1="580" x2="1180" y2="580" stroke="#1e8a3e" stroke-width="2"/>
+<circle cx="1180" cy="580" r="4" fill="#1e8a3e"/>
+<text x="1192" y="584" font-size="14" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">B</text>
+<text x="574" y="624" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO26</text>
+<line x1="580" y1="620" x2="630" y2="620" stroke="#222" stroke-width="2"/>
+<rect x="630" y="612" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="607" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R7 330Ω</text>
+<line x1="700" y1="620" x2="760" y2="620" stroke="#222" stroke-width="2"/>
+<rect x="760" y="604" width="140" height="52" rx="3" stroke="#1e8a3e" stroke-width="2" fill="#fff"/>
+<text x="830" y="627" font-size="13" text-anchor="middle" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">U7</text>
+<text x="830" y="643" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="624" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="644" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="624" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="644" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,640 738,640 738,652" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="652" x2="747" y2="652" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="656" x2="744" y2="656" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="660" x2="741" y2="660" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="620" x2="980" y2="620" stroke="#1e8a3e" stroke-width="2"/>
+<polygon points="980,620 990,609 1068,609 1068,631 990,631" fill="#fff" stroke="#1e8a3e" stroke-width="2"/>
+<text x="992" y="624" font-size="12" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">MODE COM</text>
+<line x1="900" y1="640" x2="1180" y2="640" stroke="#1e8a3e" stroke-width="2"/>
+<circle cx="1180" cy="640" r="4" fill="#1e8a3e"/>
+<text x="1192" y="644" font-size="14" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">C</text>
+<text x="574" y="684" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO27</text>
+<line x1="580" y1="680" x2="630" y2="680" stroke="#222" stroke-width="2"/>
+<rect x="630" y="672" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="667" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R8 330Ω</text>
+<line x1="700" y1="680" x2="760" y2="680" stroke="#222" stroke-width="2"/>
+<rect x="760" y="664" width="140" height="52" rx="3" stroke="#1e8a3e" stroke-width="2" fill="#fff"/>
+<text x="830" y="687" font-size="13" text-anchor="middle" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">U8</text>
+<text x="830" y="703" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="684" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="704" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="684" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="704" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,700 738,700 738,712" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="712" x2="747" y2="712" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="716" x2="744" y2="716" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="720" x2="741" y2="720" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="680" x2="980" y2="680" stroke="#1e8a3e" stroke-width="2"/>
+<polygon points="980,680 990,669 1068,669 1068,691 990,691" fill="#fff" stroke="#1e8a3e" stroke-width="2"/>
+<text x="992" y="684" font-size="12" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">MODE COM</text>
+<line x1="900" y1="700" x2="1180" y2="700" stroke="#1e8a3e" stroke-width="2"/>
+<circle cx="1180" cy="700" r="4" fill="#1e8a3e"/>
+<text x="1192" y="704" font-size="14" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">D</text>
+<rect x="1180" y="430" width="230" height="285" rx="6" stroke="#1e8a3e" stroke-width="2" fill="none"/>
+<text x="1240" y="452" font-size="15" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">MODE dial pads</text>
+<text x="1240" y="468" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">on climate board</text>
+<polygon points="1150,470 1140,459 1062,459 1062,481 1140,481" fill="#fff" stroke="#1e8a3e" stroke-width="2"/>
+<text x="1138" y="474" font-size="12" text-anchor="end" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">MODE COM</text>
+<line x1="1150" y1="470" x2="1180" y2="470" stroke="#1e8a3e" stroke-width="2"/>
+<circle cx="1180" cy="470" r="4" fill="#1e8a3e"/>
+<text x="1192" y="474" font-size="14" text-anchor="start" font-weight="bold" fill="#1e8a3e" font-family="Consolas, monospace">COM</text>
+<text x="1240" y="574" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">A → U5 pin 3</text>
+<text x="1240" y="590" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">B → U6 pin 3</text>
+<text x="1240" y="606" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">C → U7 pin 3</text>
+<text x="1240" y="622" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">D → U8 pin 3</text>
+<text x="1240" y="638" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">COM → pin 4 of all 4</text>
+<text x="574" y="804" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO32</text>
+<line x1="580" y1="800" x2="630" y2="800" stroke="#222" stroke-width="2"/>
+<rect x="630" y="792" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="787" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R9 330Ω</text>
+<line x1="700" y1="800" x2="760" y2="800" stroke="#222" stroke-width="2"/>
+<rect x="760" y="784" width="140" height="52" rx="3" stroke="#c0392b" stroke-width="2" fill="#fff"/>
+<text x="830" y="807" font-size="13" text-anchor="middle" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">U9</text>
+<text x="830" y="823" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="804" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="824" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="804" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="824" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,820 738,820 738,832" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="832" x2="747" y2="832" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="836" x2="744" y2="836" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="840" x2="741" y2="840" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="800" x2="980" y2="800" stroke="#c0392b" stroke-width="2"/>
+<polygon points="980,800 990,789 1068,789 1068,811 990,811" fill="#fff" stroke="#c0392b" stroke-width="2"/>
+<text x="992" y="804" font-size="12" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">TEMP COM</text>
+<line x1="900" y1="820" x2="1180" y2="820" stroke="#c0392b" stroke-width="2"/>
+<circle cx="1180" cy="820" r="4" fill="#c0392b"/>
+<text x="1192" y="824" font-size="14" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">A</text>
+<text x="574" y="864" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO33</text>
+<line x1="580" y1="860" x2="630" y2="860" stroke="#222" stroke-width="2"/>
+<rect x="630" y="852" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="847" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R10 330Ω</text>
+<line x1="700" y1="860" x2="760" y2="860" stroke="#222" stroke-width="2"/>
+<rect x="760" y="844" width="140" height="52" rx="3" stroke="#c0392b" stroke-width="2" fill="#fff"/>
+<text x="830" y="867" font-size="13" text-anchor="middle" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">U10</text>
+<text x="830" y="883" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="864" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="884" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="864" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="884" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,880 738,880 738,892" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="892" x2="747" y2="892" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="896" x2="744" y2="896" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="900" x2="741" y2="900" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="860" x2="980" y2="860" stroke="#c0392b" stroke-width="2"/>
+<polygon points="980,860 990,849 1068,849 1068,871 990,871" fill="#fff" stroke="#c0392b" stroke-width="2"/>
+<text x="992" y="864" font-size="12" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">TEMP COM</text>
+<line x1="900" y1="880" x2="1180" y2="880" stroke="#c0392b" stroke-width="2"/>
+<circle cx="1180" cy="880" r="4" fill="#c0392b"/>
+<text x="1192" y="884" font-size="14" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">B</text>
+<text x="574" y="924" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO4</text>
+<line x1="580" y1="920" x2="630" y2="920" stroke="#222" stroke-width="2"/>
+<rect x="630" y="912" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="907" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R11 330Ω</text>
+<line x1="700" y1="920" x2="760" y2="920" stroke="#222" stroke-width="2"/>
+<rect x="760" y="904" width="140" height="52" rx="3" stroke="#c0392b" stroke-width="2" fill="#fff"/>
+<text x="830" y="927" font-size="13" text-anchor="middle" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">U11</text>
+<text x="830" y="943" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="924" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="944" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="924" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="944" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,940 738,940 738,952" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="952" x2="747" y2="952" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="956" x2="744" y2="956" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="960" x2="741" y2="960" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="920" x2="980" y2="920" stroke="#c0392b" stroke-width="2"/>
+<polygon points="980,920 990,909 1068,909 1068,931 990,931" fill="#fff" stroke="#c0392b" stroke-width="2"/>
+<text x="992" y="924" font-size="12" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">TEMP COM</text>
+<line x1="900" y1="940" x2="1180" y2="940" stroke="#c0392b" stroke-width="2"/>
+<circle cx="1180" cy="940" r="4" fill="#c0392b"/>
+<text x="1192" y="944" font-size="14" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">C</text>
+<text x="574" y="984" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO13</text>
+<line x1="580" y1="980" x2="630" y2="980" stroke="#222" stroke-width="2"/>
+<rect x="630" y="972" width="70" height="16" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="665.0" y="967" font-size="11" text-anchor="middle" font-weight="normal" fill="#222" font-family="Consolas, monospace">R12 330Ω</text>
+<line x1="700" y1="980" x2="760" y2="980" stroke="#222" stroke-width="2"/>
+<rect x="760" y="964" width="140" height="52" rx="3" stroke="#c0392b" stroke-width="2" fill="#fff"/>
+<text x="830" y="987" font-size="13" text-anchor="middle" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">U12</text>
+<text x="830" y="1003" font-size="11" text-anchor="middle" font-weight="normal" fill="#444" font-family="Consolas, monospace">AQY212</text>
+<text x="766" y="984" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">1</text>
+<text x="766" y="1004" font-size="10" text-anchor="start" font-weight="normal" fill="#888" font-family="Consolas, monospace">2</text>
+<text x="894" y="984" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">4</text>
+<text x="894" y="1004" font-size="10" text-anchor="end" font-weight="normal" fill="#888" font-family="Consolas, monospace">3</text>
+<polyline points="760,1000 738,1000 738,1012" stroke="#222" stroke-width="2" fill="none"/>
+<line x1="729" y1="1012" x2="747" y2="1012" stroke="#222" stroke-width="2"/>
+<line x1="732" y1="1016" x2="744" y2="1016" stroke="#222" stroke-width="2"/>
+<line x1="735" y1="1020" x2="741" y2="1020" stroke="#222" stroke-width="2"/>
+<line x1="900" y1="980" x2="980" y2="980" stroke="#c0392b" stroke-width="2"/>
+<polygon points="980,980 990,969 1068,969 1068,991 990,991" fill="#fff" stroke="#c0392b" stroke-width="2"/>
+<text x="992" y="984" font-size="12" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">TEMP COM</text>
+<line x1="900" y1="1000" x2="1180" y2="1000" stroke="#c0392b" stroke-width="2"/>
+<circle cx="1180" cy="1000" r="4" fill="#c0392b"/>
+<text x="1192" y="1004" font-size="14" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">D</text>
+<rect x="1180" y="730" width="230" height="285" rx="6" stroke="#c0392b" stroke-width="2" fill="none"/>
+<text x="1240" y="752" font-size="15" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">TEMP dial pads</text>
+<text x="1240" y="768" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">on climate board</text>
+<polygon points="1150,770 1140,759 1062,759 1062,781 1140,781" fill="#fff" stroke="#c0392b" stroke-width="2"/>
+<text x="1138" y="774" font-size="12" text-anchor="end" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">TEMP COM</text>
+<line x1="1150" y1="770" x2="1180" y2="770" stroke="#c0392b" stroke-width="2"/>
+<circle cx="1180" cy="770" r="4" fill="#c0392b"/>
+<text x="1192" y="774" font-size="14" text-anchor="start" font-weight="bold" fill="#c0392b" font-family="Consolas, monospace">COM</text>
+<text x="1240" y="874" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">A → U9 pin 3</text>
+<text x="1240" y="890" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">B → U10 pin 3</text>
+<text x="1240" y="906" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">C → U11 pin 3</text>
+<text x="1240" y="922" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">D → U12 pin 3</text>
+<text x="1240" y="938" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">COM → pin 4 of all 4</text>
+<text x="40" y="120" font-size="14" text-anchor="start" font-weight="bold" fill="#555" font-family="Consolas, monospace">POWER</text>
+<text x="40" y="150" font-size="12" text-anchor="start" font-weight="bold" fill="#222" font-family="Consolas, monospace">+12 V switched ignition</text>
+<line x1="100" y1="158" x2="100" y2="196" stroke="#222" stroke-width="2"/>
+<rect x="92" y="196" width="16" height="40" rx="0" stroke="#222" stroke-width="2" fill="#fff"/>
+<text x="118" y="220" font-size="11" text-anchor="start" font-weight="normal" fill="#222" font-family="Consolas, monospace">F1 1 A fuse</text>
+<line x1="100" y1="236" x2="100" y2="330" stroke="#222" stroke-width="2"/>
+<circle cx="100" cy="280" r="4" fill="#222"/>
+<line x1="100" y1="280" x2="190" y2="280" stroke="#222" stroke-width="2"/>
+<line x1="190" y1="280" x2="190" y2="290" stroke="#222" stroke-width="2"/>
+<polygon points="180,306 200,306 190,292" fill="#fff" stroke="#222" stroke-width="2"/>
+<line x1="180" y1="292" x2="200" y2="292" stroke="#222" stroke-width="2"/>
+<line x1="190" y1="306" x2="190" y2="316" stroke="#222" stroke-width="2"/>
+<line x1="181" y1="316" x2="199" y2="316" stroke="#222" stroke-width="2"/>
+<line x1="184" y1="320" x2="196" y2="320" stroke="#222" stroke-width="2"/>
+<line x1="187" y1="324" x2="193" y2="324" stroke="#222" stroke-width="2"/>
+<text x="206" y="300" font-size="11" text-anchor="start" font-weight="normal" fill="#222" font-family="Consolas, monospace">D1 SMBJ24A</text>
+<text x="206" y="314" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">TVS</text>
+<rect x="40" y="330" width="200" height="100" rx="4" stroke="#222" stroke-width="2" fill="#f4f6f8"/>
+<text x="140" y="362" font-size="12" text-anchor="middle" font-weight="bold" fill="#222" font-family="Consolas, monospace">U13 buck 12 → 5 V</text>
+<text x="140" y="380" font-size="11" text-anchor="middle" font-weight="normal" fill="#555" font-family="Consolas, monospace">automotive, ≥1 A</text>
+<text x="48" y="346" font-size="10" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">IN+</text>
+<text x="232" y="354" font-size="10" text-anchor="end" font-weight="normal" fill="#555" font-family="Consolas, monospace">OUT+</text>
+<text x="48" y="424" font-size="10" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">IN−</text>
+<text x="232" y="414" font-size="10" text-anchor="end" font-weight="normal" fill="#555" font-family="Consolas, monospace">OUT−</text>
+<line x1="100" y1="430" x2="100" y2="446" stroke="#222" stroke-width="2"/>
+<line x1="91" y1="446" x2="109" y2="446" stroke="#222" stroke-width="2"/>
+<line x1="94" y1="450" x2="106" y2="450" stroke="#222" stroke-width="2"/>
+<line x1="97" y1="454" x2="103" y2="454" stroke="#222" stroke-width="2"/>
+<polyline points="240,350 330,350 330,200 420,200" stroke="#c0392b" stroke-width="2" fill="none"/>
+<text x="426" y="204" font-size="12" text-anchor="start" font-weight="bold" fill="#222" font-family="Consolas, monospace">5V / VIN</text>
+<polyline points="240,410 360,410 360,250 420,250" stroke="#222" stroke-width="2" fill="none"/>
+<text x="426" y="254" font-size="12" text-anchor="start" font-weight="bold" fill="#222" font-family="Consolas, monospace">GND</text>
+<text x="40" y="560" font-size="14" text-anchor="start" font-weight="bold" fill="#555" font-family="Consolas, monospace">I2C LINK TO DASH</text>
+<rect x="40" y="580" width="150" height="220" rx="6" stroke="#222" stroke-width="2" fill="#f4f6f8"/>
+<text x="115" y="606" font-size="15" text-anchor="middle" font-weight="bold" fill="#222" font-family="Consolas, monospace">ESP32-S3</text>
+<text x="115" y="624" font-size="12" text-anchor="middle" font-weight="normal" fill="#555" font-family="Consolas, monospace">dash</text>
+<text x="184" y="664" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">SDA</text>
+<text x="184" y="724" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">SCL</text>
+<text x="184" y="784" font-size="12" text-anchor="end" font-weight="bold" fill="#222" font-family="Consolas, monospace">GND</text>
+<text x="48" y="640" font-size="10" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">(your I2C pins)</text>
+<line x1="190" y1="660" x2="420" y2="660" stroke="#7b3fbf" stroke-width="2"/>
+<line x1="190" y1="720" x2="420" y2="720" stroke="#b8860b" stroke-width="2"/>
+<line x1="190" y1="780" x2="420" y2="780" stroke="#222" stroke-width="2"/>
+<text x="426" y="664" font-size="12" text-anchor="start" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO21 SDA</text>
+<text x="426" y="724" font-size="12" text-anchor="start" font-weight="bold" fill="#222" font-family="Consolas, monospace">GPIO22 SCL</text>
+<text x="426" y="784" font-size="12" text-anchor="start" font-weight="bold" fill="#222" font-family="Consolas, monospace">GND</text>
+<circle cx="260" cy="660" r="4" fill="#7b3fbf"/>
+<line x1="260" y1="660" x2="260" y2="648" stroke="#7b3fbf" stroke-width="2"/>
+<rect x="252" y="620" width="16" height="28" rx="0" stroke="#7b3fbf" stroke-width="2" fill="#fff"/>
+<text x="273" y="638.0" font-size="11" text-anchor="start" font-weight="normal" fill="#7b3fbf" font-family="Consolas, monospace">R13 4.7k</text>
+<line x1="260" y1="620" x2="260" y2="608" stroke="#7b3fbf" stroke-width="2"/>
+<text x="260" y="604" font-size="11" text-anchor="middle" font-weight="bold" fill="#222" font-family="Consolas, monospace">3V3 (S3)</text>
+<circle cx="330" cy="720" r="4" fill="#b8860b"/>
+<line x1="330" y1="720" x2="330" y2="728" stroke="#b8860b" stroke-width="2"/>
+<rect x="322" y="728" width="16" height="22" rx="0" stroke="#b8860b" stroke-width="2" fill="#fff"/>
+<text x="343" y="743.0" font-size="11" text-anchor="start" font-weight="normal" fill="#b8860b" font-family="Consolas, monospace">R14 4.7k</text>
+<line x1="330" y1="750" x2="330" y2="756" stroke="#b8860b" stroke-width="2"/>
+<text x="330" y="768" font-size="11" text-anchor="middle" font-weight="bold" fill="#222" font-family="Consolas, monospace">3V3 (S3)</text>
+<text x="40" y="830" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">Keep under ~1 m. Twist SDA with GND, SCL with GND.</text>
+<text x="40" y="846" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">Skip R13/R14 if the S3 bus already has pull-ups.</text>
+<text x="40" y="862" font-size="11" text-anchor="start" font-weight="normal" fill="#555" font-family="Consolas, monospace">Node address 0x42, 100 kHz.</text>
+<rect x="30" y="1110" width="1540" height="280" rx="6" stroke="#bbb" stroke-width="1" fill="#fafafa"/>
+<text x="50" y="1140" font-size="15" text-anchor="start" font-weight="bold" fill="#555" font-family="Segoe UI, Arial, sans-serif">NOTES</text>
+<text x="50" y="1168" font-size="14" text-anchor="start" font-weight="normal" fill="#222" font-family="Segoe UI, Arial, sans-serif">AQY212 (DIP-4): pin 1 = LED anode, pin 2 = LED cathode, pins 3 and 4 = switch output (either way round).</text>
+<text x="50" y="1196" font-size="14" text-anchor="start" font-weight="normal" fill="#222" font-family="Segoe UI, Arial, sans-serif">Each relay: ESP32 GPIO → 330 Ω → pin 1, pin 2 → ESP32 GND, pin 4 → that dial's COM pad, pin 3 → that dial's A/B/C/D pad.</text>
+<text x="50" y="1224" font-size="14" text-anchor="start" font-weight="normal" fill="#222" font-family="Segoe UI, Arial, sans-serif">All four pin-4 wires of one dial join at that dial's COM pad (shown as the FAN COM / MODE COM / TEMP COM labels).</text>
+<text x="50" y="1252" font-size="14" text-anchor="start" font-weight="normal" fill="#222" font-family="Segoe UI, Arial, sans-serif">Remove the original dials, or they will short the codes. Solder wires to the empty dial pads (COM, A, B, C, D are printed on the board).</text>
+<text x="50" y="1280" font-size="14" text-anchor="start" font-weight="normal" fill="#222" font-family="Segoe UI, Arial, sans-serif">The relay outputs are isolated: no wire from the ESP32 goes to the climate board except through the relays.</text>
+<text x="50" y="1308" font-size="14" text-anchor="start" font-weight="normal" fill="#222" font-family="Segoe UI, Arial, sans-serif">The climate board stays on its 3 factory plugs, powered by the car as before.</text>
+<text x="50" y="1336" font-size="14" text-anchor="start" font-weight="normal" fill="#222" font-family="Segoe UI, Arial, sans-serif">Ground symbols on the left side of each relay are ESP32 GND. LED current ≈ 6.5 mA per relay, 78 mA max total.</text>
+<text x="50" y="1364" font-size="14" text-anchor="start" font-weight="normal" fill="#222" font-family="Segoe UI, Arial, sans-serif">TVS diode D1: band (cathode) towards +12 V. The fuse protects the node wiring; use a fuse tap on an ignition-switched circuit.</text>
+</svg>

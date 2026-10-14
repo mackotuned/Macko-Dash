@@ -25,6 +25,8 @@
 static const char *TAG = "rotary_uart";
 static uint8_t s_tx_sequence;
 static SemaphoreHandle_t s_tx_mutex;
+static portMUX_TYPE s_hvac_lock = portMUX_INITIALIZER_UNLOCKED;
+static rotary_controller_hvac_state_t s_hvac_state;
 
 typedef struct {
     uint8_t data[ROTARY_PROTOCOL_MAX_FRAME];
@@ -107,6 +109,23 @@ static void handle_frame(const uint8_t *frame, size_t frame_length)
             .rear_right_psi = rotary_protocol_get_u16(&payload[12]),
         };
         air_ride_update_state(&state);
+        return;
+    }
+    if (type == ROTARY_PROTOCOL_HVAC_STATE) {
+        if (payload_length != 9) return;
+        portENTER_CRITICAL(&s_hvac_lock);
+        s_hvac_state = (rotary_controller_hvac_state_t) {
+            .connected = payload[0] != 0,
+            .fan = payload[1],
+            .mode = payload[2],
+            .temp = payload[3],
+            .target_fan = payload[4],
+            .target_mode = payload[5],
+            .target_temp = payload[6],
+            .moving_mask = payload[7],
+            .fault_flags = payload[8],
+        };
+        portEXIT_CRITICAL(&s_hvac_lock);
         return;
     }
 
@@ -214,6 +233,24 @@ esp_err_t rotary_controller_air_ride_request(uint8_t command)
     }
     return send_frame(ROTARY_PROTOCOL_AIR_RIDE_COMMAND, ++s_tx_sequence,
                       &command, sizeof(command));
+}
+
+void rotary_controller_hvac_get_state(rotary_controller_hvac_state_t *state)
+{
+    if (!state) return;
+    portENTER_CRITICAL(&s_hvac_lock);
+    *state = s_hvac_state;
+    portEXIT_CRITICAL(&s_hvac_lock);
+}
+
+esp_err_t rotary_controller_hvac_request(uint8_t fan_level, uint8_t mode_level,
+                                         uint8_t temp_level)
+{
+    if (!CONFIG_ROTARY_CONTROLLER_ENABLE || !s_tx_mutex) return ESP_ERR_INVALID_STATE;
+    if (fan_level > 4 || mode_level > 4 || temp_level > 4) return ESP_ERR_INVALID_ARG;
+    uint8_t payload[3] = {fan_level, mode_level, temp_level};
+    return send_frame(ROTARY_PROTOCOL_HVAC_COMMAND, ++s_tx_sequence,
+                      payload, sizeof(payload));
 }
 
 esp_err_t rotary_controller_capture_start(char *filename, size_t filename_size)

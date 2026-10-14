@@ -35,7 +35,7 @@ void air_ride_update_state(const air_ride_state_t *state)
 
 esp_err_t air_ride_request(air_ride_command_t command)
 {
-    if (command < AIR_RIDE_FRONT_LEFT_UP || command > AIR_RIDE_AIR_OUT_10S) {
+    if (command < AIR_RIDE_FRONT_LEFT_UP || command > AIR_RIDE_RELEASE) {
         return ESP_ERR_INVALID_ARG;
     }
     air_ride_state_t state;

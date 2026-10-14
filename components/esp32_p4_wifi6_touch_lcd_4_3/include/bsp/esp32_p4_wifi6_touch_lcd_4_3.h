@@ -278,6 +278,11 @@ esp_err_t bsp_sdcard_unmount(void);
 #define BSP_LCD_DRAW_BUFF_SIZE     (BSP_LCD_H_RES * 50) // Frame buffer size in pixels
 #define BSP_LCD_DRAW_BUFF_DOUBLE   (0)
 
+typedef enum {
+    BSP_DISPLAY_TIMING_STANDARD = 0,
+    BSP_DISPLAY_TIMING_EK79007_60HZ,
+} bsp_display_timing_t;
+
 /**
  * @brief BSP display configuration structure
  *
@@ -286,6 +291,7 @@ typedef struct {
     esp_lv_adapter_config_t          lv_adapter_cfg;
     esp_lv_adapter_rotation_t        rotation;
     esp_lv_adapter_tear_avoid_mode_t tear_avoid_mode;
+    bsp_display_timing_t             panel_timing;
     struct {
         unsigned int swap_xy;  /*!< Swap X and Y after read coordinates */
         unsigned int mirror_x; /*!< Mirror X after read coordinates */

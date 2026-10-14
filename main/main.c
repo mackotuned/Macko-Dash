@@ -377,6 +377,8 @@ void app_main(void) {
         .lv_adapter_cfg = ESP_LV_ADAPTER_DEFAULT_CONFIG(),
         .rotation = ESP_LV_ADAPTER_ROTATE_0,
         .tear_avoid_mode = ESP_LV_ADAPTER_TEAR_AVOID_MODE_TRIPLE_PARTIAL,
+        .panel_timing = dash_config_get_display_timing() == DASH_CONFIG_DISPLAY_TIMING_60HZ ?
+                BSP_DISPLAY_TIMING_EK79007_60HZ : BSP_DISPLAY_TIMING_STANDARD,
         .touch_flags = {
             .swap_xy = 0,
             .mirror_x = 0,

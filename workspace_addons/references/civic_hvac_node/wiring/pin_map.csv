@@ -1,0 +1,23 @@
+Relay,ESP32 GPIO,Resistor (to relay pin 1),Relay pin 2,Relay pin 3 goes to,Relay pin 4 goes to
+U1,GPIO16,R1 330R,ESP32 GND,FAN dial pad A,FAN dial pad COM
+U2,GPIO17,R2 330R,ESP32 GND,FAN dial pad B,FAN dial pad COM
+U3,GPIO18,R3 330R,ESP32 GND,FAN dial pad C,FAN dial pad COM
+U4,GPIO19,R4 330R,ESP32 GND,FAN dial pad D,FAN dial pad COM
+U5,GPIO23,R5 330R,ESP32 GND,MODE dial pad A,MODE dial pad COM
+U6,GPIO25,R6 330R,ESP32 GND,MODE dial pad B,MODE dial pad COM
+U7,GPIO26,R7 330R,ESP32 GND,MODE dial pad C,MODE dial pad COM
+U8,GPIO27,R8 330R,ESP32 GND,MODE dial pad D,MODE dial pad COM
+U9,GPIO32,R9 330R,ESP32 GND,TEMP dial pad A,TEMP dial pad COM
+U10,GPIO33,R10 330R,ESP32 GND,TEMP dial pad B,TEMP dial pad COM
+U11,GPIO4,R11 330R,ESP32 GND,TEMP dial pad C,TEMP dial pad COM
+U12,GPIO13,R12 330R,ESP32 GND,TEMP dial pad D,TEMP dial pad COM
+,,,,,
+Link,DevKitC pin,S3 pin,,,
+I2C SDA,GPIO21,your dash SDA (4.7k pull-up to S3 3V3),,,
+I2C SCL,GPIO22,your dash SCL (4.7k pull-up to S3 3V3),,,
+Ground,GND,GND,,,
+,,,,,
+Power,From,To,,,
++12 V,ignition-switched fuse tap,F1 1A fuse -> buck IN+ (D1 TVS from here to GND),,,
+5 V,buck OUT+,DevKitC 5V / VIN,,,
+GND,buck OUT- / IN-,DevKitC GND and car ground,,,

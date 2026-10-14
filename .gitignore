@@ -1,4 +1,7 @@
 /build/
+/hvac_node/build/
+/hvac_node/sdkconfig
+/hvac_node/sdkconfig.old
 /rotary_controller/
 /managed_components/
 /workspace_addons/archives/

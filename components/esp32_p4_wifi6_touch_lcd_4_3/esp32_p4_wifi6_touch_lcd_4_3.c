@@ -47,6 +47,7 @@ static bool s_i2c_diag_logged = false;
 static bool s_stc8_audio_sd_active_high = false;
 static i2c_master_dev_handle_t s_stc8_dev = NULL;
 static bool s_backlight_initialized = false;
+static bsp_display_timing_t s_panel_timing = BSP_DISPLAY_TIMING_STANDARD;
 
 static esp_err_t bsp_stc8_audio_sd_set(bool on)
 {
@@ -795,7 +796,20 @@ esp_err_t bsp_display_new_with_handles(const bsp_display_config_t *config, bsp_l
         },                                            
         .flags.use_dma2d = false,                      
     };
+    if (s_panel_timing == BSP_DISPLAY_TIMING_EK79007_60HZ) {
+        dpi_config.dpi_clock_freq_mhz = 52;
+        dpi_config.video_timing.hsync_back_porch = 160;
+        dpi_config.video_timing.hsync_pulse_width = 10;
+        dpi_config.video_timing.hsync_front_porch = 160;
+        dpi_config.video_timing.vsync_back_porch = 23;
+        dpi_config.video_timing.vsync_pulse_width = 1;
+        dpi_config.video_timing.vsync_front_porch = 12;
+        dpi_config.flags.use_dma2d = true;
+    }
     dpi_config.num_fbs = CONFIG_BSP_LCD_DPI_BUFFER_NUMS;
+    ESP_LOGI(TAG, "Panel timing profile: %s (%d MHz)",
+             s_panel_timing == BSP_DISPLAY_TIMING_EK79007_60HZ ? "EK79007 60 Hz" : "standard",
+             dpi_config.dpi_clock_freq_mhz);
 
     ek79007_vendor_config_t vendor_config = {
         .mipi_config = {
@@ -1001,9 +1015,21 @@ static lv_indev_t *bsp_display_indev_init(const bsp_display_cfg_t *cfg, lv_displ
 {
     assert(cfg != NULL);
 
+    /* Some panel revisions need extra time for GT911 power-up after a cold boot. */
+    vTaskDelay(pdMS_TO_TICKS(250));
+
     esp_err_t touch_err = ESP_FAIL;
     for (int attempt = 1; attempt <= 3; ++attempt)
     {
+        if (attempt > 1)
+        {
+            esp_err_t reset_err = gt911_reset_to_primary_address();
+            if (reset_err != ESP_OK)
+            {
+                ESP_LOGW(TAG, "Touch retry reset failed: %s", esp_err_to_name(reset_err));
+            }
+        }
+
         touch_err = bsp_touch_new(cfg, &tp);
         if (touch_err == ESP_OK && tp)
         {
@@ -1017,7 +1043,7 @@ static lv_indev_t *bsp_display_indev_init(const bsp_display_cfg_t *cfg, lv_displ
             touch_err = ESP_ERR_INVALID_STATE;
         }
         ESP_LOGW(TAG, "Touch init attempt %d/3 failed: %s", attempt, esp_err_to_name(touch_err));
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(100 * attempt));
         tp = NULL;
     }
 
@@ -1056,6 +1082,7 @@ lv_display_t *bsp_display_start_with_config(bsp_display_cfg_t *cfg)
     lv_display_t *disp;
 
     assert(cfg != NULL);
+    s_panel_timing = cfg->panel_timing;
     BSP_ERROR_CHECK_RETURN_NULL(esp_lv_adapter_init(&cfg->lv_adapter_cfg));
 
     BSP_ERROR_CHECK_RETURN_NULL(bsp_display_brightness_init());

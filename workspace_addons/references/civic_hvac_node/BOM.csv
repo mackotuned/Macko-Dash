@@ -1,0 +1,12 @@
+Ref,Qty,Part,Notes
+ESP32,1,ESP32 DevKitC (ESP32-WROOM-32),"30 or 38 pin, both fine"
+U1-U12,12,AQY212 PhotoMOS relay (DIP-4),"AQY212GH, AQY212EH or TLP222A also work; 12 sockets (DIP-4) recommended"
+R1-R12,12,330 ohm resistor 1/4 W,LED current ~6.5 mA from 3.3 V
+R13-R14,2,4.7k resistor 1/4 W,I2C pull-ups to S3 3V3; skip if your S3 bus already has them
+U13,1,12 V to 5 V buck converter (automotive rated) 1 A or more,"wide input (up to ~30 V+) so load dump spikes don't kill it"
+D1,1,SMBJ24A TVS diode,"across buck input, band to +12 V"
+F1,1,1 A fuse + add-a-fuse tap,on an ignition-switched circuit
+-,1,Perfboard / protoboard about 7x9 cm,
+-,1,Wire: 15 conductors to the climate board,"3 dials x 5 pads (COM, A, B, C, D); ribbon cable works well"
+-,1,3-wire cable to the S3 (SDA SCL GND),"keep under ~1 m, twisted pairs if possible"
+-,1,Project case,

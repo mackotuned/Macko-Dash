@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <rect width="1200" height="760" fill="#f7f8fa"/>
+  <style>
+    .title { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #17202a; }
+    .subtitle { font: 18px 'Segoe UI', Arial, sans-serif; fill: #34495e; }
+    .label { font: 700 20px 'Segoe UI', Arial, sans-serif; fill: #17202a; }
+    .pin { font: 700 18px Consolas, monospace; fill: #17202a; text-anchor: middle; dominant-baseline: middle; }
+    .note { font: 17px 'Segoe UI', Arial, sans-serif; fill: #253443; }
+    .small { font: 15px 'Segoe UI', Arial, sans-serif; fill: #4b5d6b; }
+    .cell { fill: #ffffff; stroke: #253443; stroke-width: 2; }
+    .power { fill: #ffd166; stroke: #9a6700; stroke-width: 3; }
+    .ground { fill: #8ecae6; stroke: #126782; stroke-width: 3; }
+    .unused { fill: #e7eaee; stroke: #7b8790; stroke-width: 2; }
+    .wirePower { stroke: #c2410c; stroke-width: 5; fill: none; }
+    .wireGround { stroke: #126782; stroke-width: 5; fill: none; }
+  </style>
+
+  <text x="55" y="55" class="title">1999-2000 Civic heater board: bench power</text>
+  <text x="55" y="88" class="subtitle">CONNECTOR-FACE VIEW: look into the male PCB connectors from the harness side. Match latch/key shapes before powering.</text>
+
+  <text x="55" y="145" class="label">8P connector</text>
+  <path d="M55 180 L80 155 H140 V190 H180 V155 H340 L365 180 V305 H55 Z" fill="#dfe5ea" stroke="#253443" stroke-width="3"/>
+  <rect x="75" y="180" width="55" height="55" class="cell"/><text x="102.5" y="207.5" class="pin">1</text>
+  <rect x="185" y="180" width="55" height="55" class="cell"/><text x="212.5" y="207.5" class="pin">2</text>
+  <rect x="240" y="180" width="55" height="55" class="cell"/><text x="267.5" y="207.5" class="pin">3</text>
+  <rect x="75" y="235" width="55" height="55" class="cell"/><text x="102.5" y="262.5" class="pin">4</text>
+  <rect x="130" y="235" width="55" height="55" class="cell"/><text x="157.5" y="262.5" class="pin">5</text>
+  <rect x="185" y="235" width="55" height="55" class="ground"/><text x="212.5" y="262.5" class="pin">6</text>
+  <rect x="240" y="235" width="55" height="55" class="cell"/><text x="267.5" y="262.5" class="pin">7</text>
+  <rect x="295" y="235" width="55" height="55" class="power"/><text x="322.5" y="262.5" class="pin">8</text>
+  <text x="212" y="320" class="note" text-anchor="middle">Pin 6: GROUND</text>
+  <text x="322" y="345" class="note" text-anchor="middle">Pin 8: IG2 +12 V</text>
+
+  <text x="440" y="145" class="label">20P connector</text>
+  <path d="M440 180 H590 V155 H700 V180 H1040 V300 H440 Z" fill="#dfe5ea" stroke="#253443" stroke-width="3"/>
+  <g>
+    <rect x="455" y="190" width="55" height="55" class="cell"/><text x="482.5" y="217.5" class="pin">1</text>
+    <rect x="510" y="190" width="55" height="55" class="cell"/><text x="537.5" y="217.5" class="pin">2</text>
+    <rect x="565" y="190" width="55" height="55" class="cell"/><text x="592.5" y="217.5" class="pin">3</text>
+    <rect x="620" y="190" width="55" height="55" class="cell"/><text x="647.5" y="217.5" class="pin">4</text>
+    <rect x="675" y="190" width="55" height="55" class="cell"/><text x="702.5" y="217.5" class="pin">5</text>
+    <rect x="730" y="190" width="55" height="55" class="cell"/><text x="757.5" y="217.5" class="pin">6</text>
+    <rect x="785" y="190" width="55" height="55" class="cell"/><text x="812.5" y="217.5" class="pin">7</text>
+    <rect x="840" y="190" width="55" height="55" class="cell"/><text x="867.5" y="217.5" class="pin">8</text>
+    <rect x="895" y="190" width="55" height="55" class="cell"/><text x="922.5" y="217.5" class="pin">9</text>
+    <rect x="950" y="190" width="55" height="55" class="power"/><text x="977.5" y="217.5" class="pin">10</text>
+    <rect x="455" y="245" width="55" height="55" class="cell"/><text x="482.5" y="272.5" class="pin">11</text>
+    <rect x="510" y="245" width="55" height="55" class="cell"/><text x="537.5" y="272.5" class="pin">12</text>
+    <rect x="565" y="245" width="55" height="55" class="cell"/><text x="592.5" y="272.5" class="pin">13</text>
+    <rect x="620" y="245" width="55" height="55" class="unused"/><text x="647.5" y="272.5" class="pin">14</text>
+    <rect x="675" y="245" width="55" height="55" class="cell"/><text x="702.5" y="272.5" class="pin">15</text>
+    <rect x="730" y="245" width="55" height="55" class="unused"/><text x="757.5" y="272.5" class="pin">16</text>
+    <rect x="785" y="245" width="55" height="55" class="unused"/><text x="812.5" y="272.5" class="pin">17</text>
+    <rect x="840" y="245" width="55" height="55" class="unused"/><text x="867.5" y="272.5" class="pin">18</text>
+    <rect x="895" y="245" width="55" height="55" class="unused"/><text x="922.5" y="272.5" class="pin">19</text>
+    <rect x="950" y="245" width="55" height="55" class="cell"/><text x="977.5" y="272.5" class="pin">20</text>
+  </g>
+  <text x="977" y="332" class="note" text-anchor="middle">Pin 10: +B +12 V</text>
+
+  <rect x="55" y="400" width="1090" height="285" fill="#ffffff" stroke="#9aa5ad" stroke-width="2"/>
+  <text x="85" y="440" class="label">Current-limited supply connection</text>
+  <path d="M95 490 H310" class="wireGround"/><text x="330" y="496" class="note">Supply negative to 8P pin 6</text>
+  <path d="M95 540 H310" class="wirePower"/><text x="330" y="546" class="note">Fused supply positive to both 8P pin 8 and 20P pin 10</text>
+  <text x="85" y="595" class="note">Set 12.0 V, 100 mA current limit initially. Use a 500 mA or 1 A inline fuse.</text>
+  <text x="85" y="630" class="note">Power off while attaching probes. Clip leads in place; do not hand-probe live connector cavities.</text>
+  <text x="85" y="665" class="note">Do not power the 12P connector or any other 8P/20P cavity.</text>
+
+  <text x="55" y="725" class="small">Source: Honda Civic 1996-2000 Service Manual, page 21-36. Board marking reported: Y-0966G / 0011111JP.</text>
+</svg>

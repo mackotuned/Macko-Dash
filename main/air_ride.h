@@ -33,6 +33,7 @@ typedef enum {
     AIR_RIDE_COMPRESSOR_ON,
     AIR_RIDE_COMPRESSOR_OFF,
     AIR_RIDE_AIR_OUT_10S,
+    AIR_RIDE_RELEASE,
 } air_ride_command_t;
 
 typedef struct {

@@ -86,6 +86,15 @@ void dash_config_set_shift_redline_flash(bool enabled);
 
 int dash_config_get_brightness(void);
 void dash_config_set_brightness(int brightness);
+
+typedef enum {
+   DASH_CONFIG_DISPLAY_TIMING_STANDARD = 0,
+   DASH_CONFIG_DISPLAY_TIMING_60HZ,
+   DASH_CONFIG_DISPLAY_TIMING_COUNT,
+} dash_config_display_timing_t;
+
+dash_config_display_timing_t dash_config_get_display_timing(void);
+void dash_config_set_display_timing(dash_config_display_timing_t timing);
 bool dash_config_get_show_sim_button(void);
 void dash_config_set_show_sim_button(bool show);
 
@@ -102,6 +111,8 @@ int dash_config_get_compressor_on_psi(void);
 void dash_config_set_compressor_on_psi(int psi);
 int dash_config_get_compressor_off_psi(void);
 void dash_config_set_compressor_off_psi(int psi);
+bool dash_config_get_show_air_ride(void);
+void dash_config_set_show_air_ride(bool show);
 
 typedef enum {
    DASH_CONFIG_SMOOTHING_OFF = 0,

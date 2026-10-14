@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1400" viewBox="0 0 1800 1400">
+  <defs>
+    <style>
+      text { font-family: Consolas, monospace; fill: #17202a; letter-spacing: 0; }
+      .title { font-family: Segoe UI, sans-serif; font-size: 34px; font-weight: 700; }
+      .sub { font-family: Segoe UI, sans-serif; font-size: 18px; fill: #46515c; }
+      .head { font-family: Segoe UI, sans-serif; font-size: 22px; font-weight: 700; }
+      .label { font-size: 17px; font-weight: 700; }
+      .small { font-size: 14px; }
+      .tiny { font-size: 12px; }
+      .wire { fill: none; stroke: #273746; stroke-width: 3; }
+      .power { fill: none; stroke: #c0392b; stroke-width: 4; }
+      .ground { fill: none; stroke: #1f618d; stroke-width: 4; }
+      .signal { fill: none; stroke: #117864; stroke-width: 3; }
+      .isolated { fill: none; stroke: #7d3c98; stroke-width: 3; }
+      .box { fill: #ffffff; stroke: #273746; stroke-width: 2; }
+      .panel { fill: #f7f9f9; stroke: #85929e; stroke-width: 2; }
+      .warn { fill: #fff4e5; stroke: #d68910; stroke-width: 2; }
+      .keepout { fill: #fdecec; stroke: #c0392b; stroke-width: 2; stroke-dasharray: 8 6; }
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#273746"/>
+    </marker>
+  </defs>
+
+  <rect width="1800" height="1400" fill="#eef2f3"/>
+  <text x="55" y="58" class="title">MackoDash Civic HVAC Node - ESP-NOW Board Pinout</text>
+  <text x="55" y="90" class="sub">30-pin ESPDEVKITV1 / ESP32-WROOM-32 | 12 x AQY212EH | No wired connection to rotary S3</text>
+
+  <!-- Power -->
+  <rect x="55" y="125" width="1690" height="155" rx="8" class="panel"/>
+  <text x="75" y="158" class="head">Protected power input</text>
+  <rect x="75" y="183" width="180" height="55" rx="4" class="box"/>
+  <text x="165" y="207" class="label" text-anchor="middle">IGN +12 V</text>
+  <text x="165" y="227" class="small" text-anchor="middle">switched source</text>
+  <line x1="255" y1="210" x2="330" y2="210" class="power"/>
+  <rect x="330" y="183" width="120" height="55" rx="4" class="box"/>
+  <text x="390" y="207" class="label" text-anchor="middle">F1</text>
+  <text x="390" y="227" class="small" text-anchor="middle">1 A fuse</text>
+  <line x1="450" y1="210" x2="585" y2="210" class="power"/>
+  <circle cx="510" cy="210" r="5" fill="#c0392b"/>
+  <line x1="510" y1="210" x2="510" y2="252" class="power"/>
+  <rect x="465" y="240" width="90" height="25" class="box"/>
+  <text x="510" y="258" class="small" text-anchor="middle">D1 SMBJ24A</text>
+  <text x="570" y="257" class="tiny">band/cathode to +12 V</text>
+  <rect x="585" y="174" width="245" height="72" rx="4" class="box"/>
+  <text x="707" y="201" class="label" text-anchor="middle">Automotive buck</text>
+  <text x="707" y="224" class="small" text-anchor="middle">9-36 V IN / regulated 5 V OUT</text>
+  <line x1="830" y1="198" x2="975" y2="198" class="power"/>
+  <text x="900" y="189" class="small" text-anchor="middle">+5 V</text>
+  <line x1="830" y1="232" x2="975" y2="232" class="ground"/>
+  <text x="900" y="255" class="small" text-anchor="middle">GND</text>
+  <rect x="975" y="174" width="255" height="72" rx="4" class="box"/>
+  <text x="1102" y="201" class="label" text-anchor="middle">ESPDEVKITV1</text>
+  <text x="1102" y="224" class="small" text-anchor="middle">VIN/5V and GND</text>
+  <line x1="910" y1="198" x2="910" y2="150" class="power"/>
+  <rect x="865" y="132" width="90" height="28" class="box"/>
+  <text x="910" y="151" class="small" text-anchor="middle">C1 470 uF</text>
+  <line x1="930" y1="160" x2="930" y2="232" class="ground"/>
+  <line x1="510" y1="265" x2="510" y2="268" class="ground"/>
+  <line x1="510" y1="268" x2="830" y2="268" class="ground"/>
+  <line x1="830" y1="268" x2="830" y2="232" class="ground"/>
+  <rect x="1290" y="170" width="415" height="78" rx="5" class="warn"/>
+  <text x="1498" y="197" class="label" text-anchor="middle">Never feed 12 V to the DevKit</text>
+  <text x="1498" y="221" class="small" text-anchor="middle">Disconnect buck power while programming by USB.</text>
+
+  <!-- DevKit -->
+  <rect x="55" y="315" width="460" height="930" rx="10" class="panel"/>
+  <text x="285" y="353" class="head" text-anchor="middle">30-pin ESPDEVKITV1</text>
+  <rect x="155" y="385" width="260" height="770" rx="18" fill="#17324d" stroke="#0b1f31" stroke-width="3"/>
+  <rect x="185" y="410" width="200" height="128" rx="5" fill="#d7dbdd" stroke="#566573" stroke-width="2"/>
+  <text x="285" y="448" class="label" text-anchor="middle">ESP32-WROOM-32</text>
+  <text x="285" y="477" class="small" text-anchor="middle">ANTENNA END</text>
+  <rect x="175" y="398" width="220" height="155" rx="5" class="keepout"/>
+  <text x="285" y="526" class="tiny" text-anchor="middle">NO COPPER / RELAYS / METAL HERE</text>
+  <rect x="230" y="1090" width="110" height="45" rx="5" fill="#adb5bd"/>
+  <text x="285" y="1118" class="small" text-anchor="middle">Micro-USB</text>
+
+  <!-- left pins -->
+  <g class="small" text-anchor="end">
+    <text x="145" y="590">GPIO32</text><circle cx="160" cy="585" r="5" fill="#117864"/>
+    <text x="145" y="635">GPIO33</text><circle cx="160" cy="630" r="5" fill="#117864"/>
+    <text x="145" y="680">GPIO25</text><circle cx="160" cy="675" r="5" fill="#117864"/>
+    <text x="145" y="725">GPIO26</text><circle cx="160" cy="720" r="5" fill="#117864"/>
+    <text x="145" y="770">GPIO27</text><circle cx="160" cy="765" r="5" fill="#117864"/>
+    <text x="145" y="815">GPIO13</text><circle cx="160" cy="810" r="5" fill="#117864"/>
+    <text x="145" y="860">GND</text><circle cx="160" cy="855" r="5" fill="#1f618d"/>
+    <text x="145" y="905">VIN/5V</text><circle cx="160" cy="900" r="5" fill="#c0392b"/>
+  </g>
+  <!-- right pins -->
+  <g class="small">
+    <circle cx="410" cy="585" r="5" fill="#117864"/><text x="425" y="590">GPIO4</text>
+    <circle cx="410" cy="630" r="5" fill="#117864"/><text x="425" y="635">GPIO16</text>
+    <circle cx="410" cy="675" r="5" fill="#117864"/><text x="425" y="680">GPIO17</text>
+    <circle cx="410" cy="720" r="5" fill="#117864"/><text x="425" y="725">GPIO18</text>
+    <circle cx="410" cy="765" r="5" fill="#117864"/><text x="425" y="770">GPIO19</text>
+    <circle cx="410" cy="810" r="5" fill="#117864"/><text x="425" y="815">GPIO23</text>
+    <circle cx="410" cy="855" r="5" fill="#1f618d"/><text x="425" y="860">GND</text>
+  </g>
+  <text x="285" y="1190" class="small" text-anchor="middle">Socket with two 15-position</text>
+  <text x="285" y="1212" class="small" text-anchor="middle">2.54 mm female headers</text>
+
+  <!-- Relay banks -->
+  <rect x="550" y="315" width="1195" height="930" rx="10" class="panel"/>
+  <text x="570" y="350" class="head">Relay channels</text>
+  <text x="930" y="350" class="small">Every row: GPIO -> 330R -> AQY212EH pin 1; pin 2 -> ESP32 GND</text>
+  <text x="930" y="374" class="small">AQY pin 3 -> dial A/B/C/D; pin 4 -> that dial COM</text>
+
+  <!-- Column headings -->
+  <text x="590" y="410" class="label">GPIO</text>
+  <text x="760" y="410" class="label">Resistor</text>
+  <text x="955" y="410" class="label">PhotoMOS</text>
+  <text x="1200" y="410" class="label">Isolated output</text>
+  <text x="1510" y="410" class="label">Climate connector</text>
+
+  <!-- FAN block -->
+  <rect x="570" y="430" width="1150" height="225" rx="6" fill="#eaf7f1" stroke="#117864" stroke-width="2"/>
+  <text x="590" y="460" class="head">FAN - J1</text>
+  <g class="small">
+    <text x="600" y="500">GPIO16</text><line x1="670" y1="495" x2="735" y2="495" class="signal"/><rect x="735" y="478" width="105" height="34" class="box"/><text x="788" y="500" text-anchor="middle">R1 330R</text><line x1="840" y1="495" x2="910" y2="495" class="signal"/><rect x="910" y="473" width="165" height="44" class="box"/><text x="992" y="492" text-anchor="middle">U1 AQY212EH</text><text x="992" y="509" class="tiny" text-anchor="middle">1 anode / 2 GND</text><line x1="1075" y1="495" x2="1395" y2="495" class="isolated"/><text x="1215" y="486">pin 3 -> A</text>
+    <text x="600" y="540">GPIO17</text><line x1="670" y1="535" x2="735" y2="535" class="signal"/><rect x="735" y="518" width="105" height="34" class="box"/><text x="788" y="540" text-anchor="middle">R2 330R</text><line x1="840" y1="535" x2="910" y2="535" class="signal"/><rect x="910" y="518" width="165" height="34" class="box"/><text x="992" y="540" text-anchor="middle">U2 AQY212EH</text><line x1="1075" y1="535" x2="1395" y2="535" class="isolated"/><text x="1215" y="526">pin 3 -> B</text>
+    <text x="600" y="580">GPIO18</text><line x1="670" y1="575" x2="735" y2="575" class="signal"/><rect x="735" y="558" width="105" height="34" class="box"/><text x="788" y="580" text-anchor="middle">R3 330R</text><line x1="840" y1="575" x2="910" y2="575" class="signal"/><rect x="910" y="558" width="165" height="34" class="box"/><text x="992" y="580" text-anchor="middle">U3 AQY212EH</text><line x1="1075" y1="575" x2="1395" y2="575" class="isolated"/><text x="1215" y="566">pin 3 -> C</text>
+    <text x="600" y="620">GPIO19</text><line x1="670" y1="615" x2="735" y2="615" class="signal"/><rect x="735" y="598" width="105" height="34" class="box"/><text x="788" y="620" text-anchor="middle">R4 330R</text><line x1="840" y1="615" x2="910" y2="615" class="signal"/><rect x="910" y="598" width="165" height="34" class="box"/><text x="992" y="620" text-anchor="middle">U4 AQY212EH</text><line x1="1075" y1="615" x2="1395" y2="615" class="isolated"/><text x="1215" y="606">pin 3 -> D</text>
+  </g>
+  <rect x="1395" y="472" width="290" height="165" class="box"/>
+  <text x="1540" y="498" class="label" text-anchor="middle">J1 FAN</text>
+  <text x="1420" y="525" class="small">1 COM</text><text x="1420" y="550" class="small">2 A</text><text x="1420" y="575" class="small">3 B</text><text x="1545" y="550" class="small">4 C</text><text x="1545" y="575" class="small">5 D</text>
+  <text x="1420" y="615" class="tiny">All U1-U4 pin 4 -> J1-1 COM</text>
+
+  <!-- MODE block -->
+  <rect x="570" y="675" width="1150" height="225" rx="6" fill="#eef3fb" stroke="#2874a6" stroke-width="2"/>
+  <text x="590" y="705" class="head">MODE - J2</text>
+  <g class="small">
+    <text x="600" y="745">GPIO23</text><line x1="670" y1="740" x2="735" y2="740" class="signal"/><rect x="735" y="723" width="105" height="34" class="box"/><text x="788" y="745" text-anchor="middle">R5 330R</text><line x1="840" y1="740" x2="910" y2="740" class="signal"/><rect x="910" y="723" width="165" height="34" class="box"/><text x="992" y="745" text-anchor="middle">U5 AQY212EH</text><line x1="1075" y1="740" x2="1395" y2="740" class="isolated"/><text x="1215" y="731">pin 3 -> A</text>
+    <text x="600" y="785">GPIO25</text><line x1="670" y1="780" x2="735" y2="780" class="signal"/><rect x="735" y="763" width="105" height="34" class="box"/><text x="788" y="785" text-anchor="middle">R6 330R</text><line x1="840" y1="780" x2="910" y2="780" class="signal"/><rect x="910" y="763" width="165" height="34" class="box"/><text x="992" y="785" text-anchor="middle">U6 AQY212EH</text><line x1="1075" y1="780" x2="1395" y2="780" class="isolated"/><text x="1215" y="771">pin 3 -> B</text>
+    <text x="600" y="825">GPIO26</text><line x1="670" y1="820" x2="735" y2="820" class="signal"/><rect x="735" y="803" width="105" height="34" class="box"/><text x="788" y="825" text-anchor="middle">R7 330R</text><line x1="840" y1="820" x2="910" y2="820" class="signal"/><rect x="910" y="803" width="165" height="34" class="box"/><text x="992" y="825" text-anchor="middle">U7 AQY212EH</text><line x1="1075" y1="820" x2="1395" y2="820" class="isolated"/><text x="1215" y="811">pin 3 -> C</text>
+    <text x="600" y="865">GPIO27</text><line x1="670" y1="860" x2="735" y2="860" class="signal"/><rect x="735" y="843" width="105" height="34" class="box"/><text x="788" y="865" text-anchor="middle">R8 330R</text><line x1="840" y1="860" x2="910" y2="860" class="signal"/><rect x="910" y="843" width="165" height="34" class="box"/><text x="992" y="865" text-anchor="middle">U8 AQY212EH</text><line x1="1075" y1="860" x2="1395" y2="860" class="isolated"/><text x="1215" y="851">pin 3 -> D</text>
+  </g>
+  <rect x="1395" y="717" width="290" height="165" class="box"/>
+  <text x="1540" y="743" class="label" text-anchor="middle">J2 MODE</text>
+  <text x="1420" y="770" class="small">1 COM</text><text x="1420" y="795" class="small">2 A</text><text x="1420" y="820" class="small">3 B</text><text x="1545" y="795" class="small">4 C</text><text x="1545" y="820" class="small">5 D</text>
+  <text x="1420" y="860" class="tiny">All U5-U8 pin 4 -> J2-1 COM</text>
+
+  <!-- TEMP block -->
+  <rect x="570" y="920" width="1150" height="225" rx="6" fill="#fbf3e8" stroke="#b9770e" stroke-width="2"/>
+  <text x="590" y="950" class="head">TEMP - J3</text>
+  <g class="small">
+    <text x="600" y="990">GPIO32</text><line x1="670" y1="985" x2="735" y2="985" class="signal"/><rect x="735" y="968" width="105" height="34" class="box"/><text x="788" y="990" text-anchor="middle">R9 330R</text><line x1="840" y1="985" x2="910" y2="985" class="signal"/><rect x="910" y="968" width="165" height="34" class="box"/><text x="992" y="990" text-anchor="middle">U9 AQY212EH</text><line x1="1075" y1="985" x2="1395" y2="985" class="isolated"/><text x="1215" y="976">pin 3 -> A</text>
+    <text x="600" y="1030">GPIO33</text><line x1="670" y1="1025" x2="735" y2="1025" class="signal"/><rect x="735" y="1008" width="105" height="34" class="box"/><text x="788" y="1030" text-anchor="middle">R10 330R</text><line x1="840" y1="1025" x2="910" y2="1025" class="signal"/><rect x="910" y="1008" width="165" height="34" class="box"/><text x="992" y="1030" text-anchor="middle">U10 AQY212EH</text><line x1="1075" y1="1025" x2="1395" y2="1025" class="isolated"/><text x="1215" y="1016">pin 3 -> B</text>
+    <text x="600" y="1070">GPIO4</text><line x1="670" y1="1065" x2="735" y2="1065" class="signal"/><rect x="735" y="1048" width="105" height="34" class="box"/><text x="788" y="1070" text-anchor="middle">R11 330R</text><line x1="840" y1="1065" x2="910" y2="1065" class="signal"/><rect x="910" y="1048" width="165" height="34" class="box"/><text x="992" y="1070" text-anchor="middle">U11 AQY212EH</text><line x1="1075" y1="1065" x2="1395" y2="1065" class="isolated"/><text x="1215" y="1056">pin 3 -> C</text>
+    <text x="600" y="1110">GPIO13</text><line x1="670" y1="1105" x2="735" y2="1105" class="signal"/><rect x="735" y="1088" width="105" height="34" class="box"/><text x="788" y="1110" text-anchor="middle">R12 330R</text><line x1="840" y1="1105" x2="910" y2="1105" class="signal"/><rect x="910" y="1088" width="165" height="34" class="box"/><text x="992" y="1110" text-anchor="middle">U12 AQY212EH</text><line x1="1075" y1="1105" x2="1395" y2="1105" class="isolated"/><text x="1215" y="1096">pin 3 -> D</text>
+  </g>
+  <rect x="1395" y="962" width="290" height="165" class="box"/>
+  <text x="1540" y="988" class="label" text-anchor="middle">J3 TEMP</text>
+  <text x="1420" y="1015" class="small">1 COM</text><text x="1420" y="1040" class="small">2 A</text><text x="1420" y="1065" class="small">3 B</text><text x="1545" y="1040" class="small">4 C</text><text x="1545" y="1065" class="small">5 D</text>
+  <text x="1420" y="1105" class="tiny">All U9-U12 pin 4 -> J3-1 COM</text>
+
+  <!-- Wireless and isolation notes -->
+  <rect x="55" y="1270" width="1690" height="90" rx="8" class="warn"/>
+  <text x="80" y="1303" class="head">ESP-NOW link</text>
+  <text x="265" y="1303" class="label">No SDA, SCL, UART, or other wire to the rotary S3. Both devices use Wi-Fi channel 6.</text>
+  <text x="80" y="1338" class="small">Isolation rule: only AQY212EH pins 3/4 touch the factory climate PCB. ESP32 ground is used only on the relay LED/input and power sides.</text>
+</svg>

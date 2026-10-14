@@ -109,6 +109,7 @@ typedef enum {
     HONDA_DASH_CONTROLLER_TRIP_RESET,
     HONDA_DASH_CONTROLLER_ALERT,
     HONDA_DASH_CONTROLLER_AIR_RIDE,
+    HONDA_DASH_CONTROLLER_CLIMATE,
 } honda_dash_controller_page_t;
 
 typedef enum {

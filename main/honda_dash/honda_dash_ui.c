@@ -113,6 +113,24 @@ static void initialize_i18n_fonts(void)
 #define C_LABEL_DIM  lv_color_hex(0x4c4e54)
 #define C_SEG_OFF    lv_color_hex(0x232429)
 
+/* Settings uses a separate mobile UI palette so dashboard themes stay unchanged. */
+#define C_PHONE_BG        lv_color_hex(0x111214)
+#define C_PHONE_SURFACE   lv_color_hex(0x1c1d20)
+#define C_PHONE_RAISED    lv_color_hex(0x292a2e)
+#define C_PHONE_STROKE    lv_color_hex(0x3a3b40)
+#define C_PHONE_TEXT      lv_color_hex(0xf2f2f3)
+#define C_PHONE_SECONDARY lv_color_hex(0x98999e)
+#define C_PHONE_BLUE      lv_color_hex(0x5b8fc9)
+#define C_PHONE_CYAN      lv_color_hex(0x69a4b5)
+#define C_PHONE_GREEN     lv_color_hex(0x62a579)
+#define C_PHONE_ORANGE    lv_color_hex(0xc18a51)
+#define C_PHONE_TEAL      lv_color_hex(0x6c9b9b)
+#define C_PHONE_INDIGO    lv_color_hex(0x777da8)
+#define C_PHONE_GLASS     lv_color_hex(0x202125)
+#define C_PHONE_GLASS_EDGE lv_color_hex(0x45464b)
+#define PHONE_RADIUS_CARD 16
+#define PHONE_RADIUS_SHEET 24
+
 /* per-tile accent colors now live directly in TILE_DEFS[].accent_hex */
 
 /* gradient stops used on the RPM bar after VTEC engages */
@@ -268,6 +286,7 @@ static void odo_cycle_cb(lv_event_t *e)
 }
 static lv_obj_t *s_fuel_val_label;
 static lv_obj_t *s_fuel_bar;
+static lv_obj_t *s_air_glance;
 static lv_obj_t *s_air_glance_pressure_labels[5];
 
 /* theme containers -- exactly one is visible at a time */
@@ -312,6 +331,7 @@ static int s_shift_light_last_rpms[DASH_CONFIG_SHIFT_STAGE_COUNT] = {-1, -1, -1}
 static int s_shift_light_last_colors[DASH_CONFIG_SHIFT_STAGE_COUNT] = {-1, -1, -1};
 
 static void add_press_feedback(lv_obj_t *obj);
+static void climate_icons_refresh(int control);
 static void record_btn_cb(lv_event_t *event);
 static void sim_btn_cb(lv_event_t *event);
 static void sim_btn_long_press_cb(lv_event_t *event);
@@ -463,8 +483,23 @@ static lv_obj_t *s_page_ecu;
 static lv_obj_t *s_page_theme_resets;
 static lv_obj_t *s_page_contact;
 static lv_obj_t *s_page_air_ride;
+static lv_obj_t *s_page_climate;
 static lv_obj_t *s_page_air_presets;
 static lv_obj_t *s_page_air_setup;
+static lv_obj_t *s_air_main_tile;
+static lv_obj_t *s_climate_status_label;
+static lv_obj_t *s_climate_value_labels[3];
+static lv_obj_t *s_climate_segments[3][5];
+static lv_obj_t *s_climate_icons[3];
+static lv_obj_t *s_climate_controller_overlay;
+static lv_obj_t *s_climate_overlay_cards[3];
+static lv_obj_t *s_climate_overlay_values[3];
+static lv_obj_t *s_climate_overlay_icons[3];
+static lv_obj_t *s_climate_overlay_help_label;
+static int s_climate_levels[3] = {0, 0, 2};
+static int s_climate_icon_levels[2][3] = {{-1, -1, -1}, {-1, -1, -1}};
+static lv_timer_t *s_climate_refresh_timer;
+static lv_obj_t *s_air_setup_show_switch;
 static lv_obj_t *s_air_pressure_labels[5];
 static lv_obj_t *s_air_overlay_pressure_labels[4];
 static lv_obj_t *s_air_status_label;
@@ -491,6 +526,9 @@ static int64_t s_air_notice_until_us;
 static air_ride_state_t s_air_last_rendered_state;
 static bool s_air_last_rendered_state_valid;
 static bool s_air_notice_was_active;
+static lv_timer_t *s_air_hold_timer;
+static air_ride_command_t s_air_hold_command = AIR_RIDE_RELEASE;
+static esp_err_t air_ride_cancel_hold(void);
 enum {
     DIAG_CAN_BUS = 0,
     DIAG_PROTOCOL,
@@ -1172,16 +1210,19 @@ static lv_obj_t *build_telltales(lv_obj_t *parent)
     s_achievement_count_label = make_label(achievement_block, "0/10", DASH_FONT_LABEL14, C_AMBER);
     odo_tiles_refresh_display();
 
-    lv_obj_t *air_glance = make_plain_container(strip);
-    lv_obj_set_size(air_glance, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_grid_cell(air_glance, LV_GRID_ALIGN_STRETCH, 2, 1,
+    s_air_glance = make_plain_container(strip);
+    lv_obj_set_size(s_air_glance, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_grid_cell(s_air_glance, LV_GRID_ALIGN_STRETCH, 2, 1,
                          LV_GRID_ALIGN_CENTER, 0, 1);
-    lv_obj_set_flex_flow(air_glance, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(air_glance, LV_FLEX_ALIGN_SPACE_EVENLY,
+    lv_obj_set_flex_flow(s_air_glance, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(s_air_glance, LV_FLEX_ALIGN_SPACE_EVENLY,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    if (!dash_config_get_show_air_ride()) {
+        lv_obj_add_flag(s_air_glance, LV_OBJ_FLAG_HIDDEN);
+    }
     static const char *const pressure_names[] = {"TANK", "FL", "FR", "RL", "RR"};
     for (size_t index = 0; index < 5; ++index) {
-        lv_obj_t *pressure = make_plain_container(air_glance);
+        lv_obj_t *pressure = make_plain_container(s_air_glance);
         lv_obj_set_size(pressure, 54, LV_SIZE_CONTENT);
         lv_obj_set_flex_flow(pressure, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(pressure, LV_FLEX_ALIGN_CENTER,
@@ -1264,6 +1305,9 @@ static void ui_fade(lv_obj_t *object, lv_opa_t from, lv_opa_t to, uint32_t durat
 
 static void settings_show_page(lv_obj_t *page)
 {
+    if (s_settings_current_page == s_page_air_ride && page != s_page_air_ride) {
+        air_ride_cancel_hold();
+    }
     lv_obj_add_flag(s_page_main, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_theme, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_logs_menu, LV_OBJ_FLAG_HIDDEN);
@@ -1284,8 +1328,19 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_add_flag(s_page_achievements, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_contact, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_air_ride, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_page_climate, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_air_presets, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_air_setup, LV_OBJ_FLAG_HIDDEN);
+    if (page == s_page_air_ride) {
+        lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scrollbar_mode(page, LV_SCROLLBAR_MODE_OFF);
+        lv_obj_set_style_pad_bottom(page, 0, LV_PART_MAIN);
+    } else {
+        lv_obj_add_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scroll_dir(page, LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(page, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_style_pad_bottom(page, 44, LV_PART_MAIN);
+    }
     lv_obj_clear_flag(page, LV_OBJ_FLAG_HIDDEN);
     s_settings_current_page = page;
     if (s_settings_nav_label) {
@@ -1348,13 +1403,13 @@ static void quick_brightness_open(void)
                         LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *panel = lv_obj_create(s_quick_brightness_overlay);
-    lv_obj_set_size(panel, 620, 210);
-    lv_obj_center(panel);
-    lv_obj_set_style_bg_color(panel, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_size(panel, 720, 230);
+    lv_obj_align(panel, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_set_style_bg_color(panel, C_PHONE_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(panel, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(panel, 12, LV_PART_MAIN);
+    lv_obj_set_style_border_color(panel, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(panel, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(panel, 18, LV_PART_MAIN);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
@@ -1370,12 +1425,11 @@ static void quick_brightness_open(void)
     for (size_t index = 0; index < 3; ++index) {
         bool selected = current == values[index];
         lv_obj_t *button = lv_obj_create(choices);
-        lv_obj_set_size(button, 180, 112);
-        lv_obj_set_style_bg_color(button, selected ? C_RED_DEEP : C_VOID, LV_PART_MAIN);
+        lv_obj_set_size(button, 210, 112);
+        lv_obj_set_style_bg_color(button, selected ? C_PHONE_BLUE : C_PHONE_SURFACE, LV_PART_MAIN);
         lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_border_width(button, selected ? 3 : 1, LV_PART_MAIN);
-        lv_obj_set_style_border_color(button, selected ? C_RED : C_LINE, LV_PART_MAIN);
-        lv_obj_set_style_radius(button, 10, LV_PART_MAIN);
+        lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(button, 8, LV_PART_MAIN);
         lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(button, quick_brightness_select_cb, LV_EVENT_CLICKED,
@@ -1388,7 +1442,8 @@ static void quick_brightness_open(void)
         make_label(button, names[index], DASH_FONT_LABEL14, C_WHITE);
         char value[8];
         snprintf(value, sizeof(value), "%d%%", values[index]);
-        make_label(button, value, DASH_FONT_LABEL14, selected ? C_RED : C_LABEL);
+        make_label(button, value, DASH_FONT_LABEL14,
+               selected ? C_PHONE_TEXT : C_PHONE_SECONDARY);
     }
     lv_obj_move_foreground(s_quick_brightness_overlay);
     ui_fade(s_quick_brightness_overlay, LV_OPA_TRANSP, LV_OPA_COVER, 120, NULL);
@@ -1429,6 +1484,7 @@ static void settings_set_render_paused(bool paused)
 static void settings_close_cb(lv_event_t *e)
 {
     (void)e;
+    air_ride_cancel_hold();
     if (!ota_update_is_running() && !ota_update_is_starting()) {
         settings_set_update_background_paused(false);
     }
@@ -1491,6 +1547,13 @@ static void settings_open_fuel_cb(lv_event_t *e) { (void)e; settings_show_page(s
 
 static void air_setup_refresh(void)
 {
+    if (s_air_setup_show_switch) {
+        if (dash_config_get_show_air_ride()) {
+            lv_obj_add_state(s_air_setup_show_switch, LV_STATE_CHECKED);
+        } else {
+            lv_obj_clear_state(s_air_setup_show_switch, LV_STATE_CHECKED);
+        }
+    }
     s_air_setup_pending_on = dash_config_get_compressor_on_psi();
     s_air_setup_pending_off = dash_config_get_compressor_off_psi();
     if (s_air_setup_on_slider) {
@@ -1517,6 +1580,20 @@ static void air_setup_refresh(void)
                           recording ? s_air_setup_capture_filename : "OFF");
         lv_obj_set_style_text_color(s_air_setup_capture_label,
                                     recording ? C_RED : C_LABEL, LV_PART_MAIN);
+    }
+}
+
+static void air_setup_show_toggle_cb(lv_event_t *event)
+{
+    bool show = lv_obj_has_state(lv_event_get_target(event), LV_STATE_CHECKED);
+    dash_config_set_show_air_ride(show);
+    if (s_air_main_tile) {
+        if (show) lv_obj_clear_flag(s_air_main_tile, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(s_air_main_tile, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (s_air_glance) {
+        if (show) lv_obj_clear_flag(s_air_glance, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(s_air_glance, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -1667,16 +1744,60 @@ static void air_ride_refresh_timer_cb(lv_timer_t *timer)
     air_ride_refresh();
 }
 
+static void air_ride_show_command_result(esp_err_t error, const char *success_text)
+{
+    if (!s_air_status_label) return;
+    lv_label_set_text(s_air_status_label,
+                      error == ESP_OK ? success_text : "COMMAND FAILED - RUIN LINK OFFLINE");
+    lv_obj_set_style_text_color(s_air_status_label,
+                                error == ESP_OK ? C_GREEN : C_AMBER, LV_PART_MAIN);
+    s_air_notice_until_us = esp_timer_get_time() + 2500000;
+}
+
 static void air_ride_action_cb(lv_event_t *event)
 {
     air_ride_command_t command = (air_ride_command_t)(intptr_t)lv_event_get_user_data(event);
     esp_err_t error = air_ride_request(command);
-    if (s_air_status_label) {
-        lv_label_set_text(s_air_status_label,
-                          error == ESP_OK ? "COMMAND SENT" : "COMMAND FAILED - RUIN LINK OFFLINE");
-        lv_obj_set_style_text_color(s_air_status_label,
-                                    error == ESP_OK ? C_GREEN : C_AMBER, LV_PART_MAIN);
-        s_air_notice_until_us = esp_timer_get_time() + 2500000;
+    air_ride_show_command_result(error, "COMMAND SENT");
+}
+
+static void air_ride_hold_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    esp_err_t error = air_ride_request(s_air_hold_command);
+    if (error != ESP_OK) air_ride_show_command_result(error, "HOLDING");
+}
+
+static esp_err_t air_ride_cancel_hold(void)
+{
+    if (s_air_hold_timer) {
+        lv_timer_del(s_air_hold_timer);
+        s_air_hold_timer = NULL;
+    }
+    if (s_air_hold_command == AIR_RIDE_RELEASE) return ESP_OK;
+    s_air_hold_command = AIR_RIDE_RELEASE;
+    return air_ride_request(AIR_RIDE_RELEASE);
+}
+
+static void air_ride_manual_cb(lv_event_t *event)
+{
+    lv_event_code_t code = lv_event_get_code(event);
+    air_ride_command_t command = (air_ride_command_t)(intptr_t)lv_event_get_user_data(event);
+    if (code == LV_EVENT_PRESSED) {
+        air_ride_cancel_hold();
+        s_air_hold_command = command;
+        esp_err_t error = air_ride_request(command);
+        if (error == ESP_OK) {
+            s_air_hold_timer = lv_timer_create(air_ride_hold_timer_cb, 150, NULL);
+        } else {
+            s_air_hold_timer = NULL;
+        }
+        air_ride_show_command_result(error, "HOLDING - RELEASE TO STOP");
+        return;
+    }
+    if ((code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) &&
+        s_air_hold_command == command) {
+        air_ride_show_command_result(air_ride_cancel_hold(), "RELEASED");
     }
 }
 
@@ -1723,13 +1844,13 @@ static void air_out_request_cb(lv_event_t *event)
     lv_obj_move_foreground(s_air_out_modal);
 
     lv_obj_t *panel = lv_obj_create(s_air_out_modal);
-    lv_obj_set_size(panel, 500, 230);
-    lv_obj_center(panel);
-    lv_obj_set_style_bg_color(panel, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_size(panel, 620, 240);
+    lv_obj_align(panel, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_set_style_bg_color(panel, C_PHONE_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(panel, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(panel, C_RED, LV_PART_MAIN);
-    lv_obj_set_style_radius(panel, 10, LV_PART_MAIN);
+    lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(panel, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(panel, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(panel, 20, LV_PART_MAIN);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
@@ -1743,7 +1864,8 @@ static void air_out_request_cb(lv_event_t *event)
     lv_obj_set_size(buttons, LV_PCT(100), 48);
     lv_obj_set_flex_flow(buttons, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(buttons, 12, LV_PART_MAIN);
-    trip_reset_modal_button(buttons, "Cancel", C_VOID, C_LABEL, air_out_cancel_cb);
+    trip_reset_modal_button(buttons, "Cancel", C_PHONE_RAISED, C_PHONE_TEXT,
+                            air_out_cancel_cb);
     trip_reset_modal_button(buttons, "Air Out", C_RED, C_WHITE, air_out_confirm_cb);
 }
 
@@ -1779,6 +1901,165 @@ static void settings_open_air_ride_cb(lv_event_t *event)
     (void)event;
     settings_show_page(s_page_air_ride);
     air_ride_refresh();
+}
+
+enum {
+    CLIMATE_FAN = 0,
+    CLIMATE_MODE,
+    CLIMATE_TEMP,
+    CLIMATE_CONTROL_COUNT,
+};
+
+static const char *const s_climate_names[] = {"FAN", "BLEND", "TEMP"};
+static const char *const s_climate_fan_labels[] = {"OFF", "1", "2", "3", "4"};
+static const char *const s_climate_mode_labels[] = {
+    "FACE", "BI-LEVEL", "FLOOR", "MIX", "DEFROST",
+};
+static const char *const s_climate_temp_labels[] = {
+    "COLD", "COOL", "NEUTRAL", "WARM", "HOT",
+};
+static const uint8_t s_climate_fan_native[] = {0, 2, 4, 7, 10};
+static const uint8_t s_climate_temp_native[] = {0, 4, 7, 10, 14};
+
+static lv_color_t climate_accent(int control)
+{
+    if (control == CLIMATE_FAN) return C_PHONE_BLUE;
+    if (control == CLIMATE_MODE) return C_PHONE_CYAN;
+    return C_PHONE_ORANGE;
+}
+
+static lv_color_t climate_level_color(int control, int level)
+{
+    if (control != CLIMATE_TEMP) return climate_accent(control);
+    if (level < 0) level = 0;
+    if (level > 4) level = 4;
+    return lerp_color(lv_color_hex(0x3b82d0), lv_color_hex(0xd65353), level / 4.0f);
+}
+
+static const char *climate_level_label(int control, int level)
+{
+    if (level < 0) level = 0;
+    if (level > 4) level = 4;
+    if (control == CLIMATE_FAN) return s_climate_fan_labels[level];
+    if (control == CLIMATE_MODE) return s_climate_mode_labels[level];
+    return s_climate_temp_labels[level];
+}
+
+static int climate_nearest_level(uint8_t native, const uint8_t *positions)
+{
+    int best = 0;
+    int best_distance = 255;
+    for (int level = 0; level < 5; ++level) {
+        int distance = abs((int)native - positions[level]);
+        if (distance < best_distance) {
+            best = level;
+            best_distance = distance;
+        }
+    }
+    return best;
+}
+
+static void climate_refresh(void)
+{
+    rotary_controller_hvac_state_t state;
+    rotary_controller_hvac_get_state(&state);
+    if (state.connected) {
+        s_climate_levels[CLIMATE_FAN] = climate_nearest_level(
+            state.target_fan, s_climate_fan_native);
+        s_climate_levels[CLIMATE_MODE] = state.target_mode > 4 ? 4 : state.target_mode;
+        s_climate_levels[CLIMATE_TEMP] = climate_nearest_level(
+            state.target_temp, s_climate_temp_native);
+    }
+    for (int control = 0; control < CLIMATE_CONTROL_COUNT; ++control) {
+        const char *text = climate_level_label(control, s_climate_levels[control]);
+        lv_color_t accent = climate_level_color(control, s_climate_levels[control]);
+        if (s_climate_value_labels[control]) {
+            lv_label_set_text(s_climate_value_labels[control], text);
+            lv_obj_set_style_text_color(s_climate_value_labels[control],
+                                        control == CLIMATE_TEMP ? accent : C_PHONE_TEXT,
+                                        LV_PART_MAIN);
+        }
+        if (s_climate_overlay_values[control]) {
+            lv_label_set_text(s_climate_overlay_values[control], text);
+            lv_obj_set_style_text_color(s_climate_overlay_values[control],
+                                        control == CLIMATE_TEMP ? accent : C_PHONE_TEXT,
+                                        LV_PART_MAIN);
+        }
+        for (int index = 0; index < 5; ++index) {
+            if (s_climate_segments[control][index]) {
+                lv_obj_set_style_bg_color(s_climate_segments[control][index],
+                    index <= s_climate_levels[control] ? accent : C_PHONE_STROKE,
+                    LV_PART_MAIN);
+            }
+        }
+        climate_icons_refresh(control);
+    }
+    const char *status = !state.connected ? "HVAC NODE OFFLINE" :
+                         state.fault_flags ? "HVAC FAULT" :
+                         state.moving_mask ? "MOVING" : "READY";
+    lv_color_t color = !state.connected || state.fault_flags ? C_AMBER :
+                       state.moving_mask ? C_RED : C_GREEN;
+    if (s_climate_status_label) {
+        lv_label_set_text(s_climate_status_label, status);
+        lv_obj_set_style_text_color(s_climate_status_label, color, LV_PART_MAIN);
+    }
+}
+
+static void climate_refresh_timer_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    climate_refresh();
+}
+
+static void climate_adjust_cb(lv_event_t *event)
+{
+    intptr_t action = (intptr_t)lv_event_get_user_data(event);
+    int control = (int)(action / 2);
+    int direction = action % 2 ? 1 : -1;
+    if (control < 0 || control >= CLIMATE_CONTROL_COUNT) return;
+    int level = s_climate_levels[control] + direction;
+    if (level < 0) level = 0;
+    if (level > 4) level = 4;
+    s_climate_levels[control] = level;
+    esp_err_t error = rotary_controller_hvac_request(
+        (uint8_t)s_climate_levels[CLIMATE_FAN],
+        (uint8_t)s_climate_levels[CLIMATE_MODE],
+        (uint8_t)s_climate_levels[CLIMATE_TEMP]);
+    if (s_climate_status_label) {
+        lv_label_set_text(s_climate_status_label,
+                          error == ESP_OK ? "COMMAND SENT" : "S3 LINK OFFLINE");
+        lv_obj_set_style_text_color(s_climate_status_label,
+                                    error == ESP_OK ? C_RED : C_AMBER, LV_PART_MAIN);
+    }
+    const char *text = climate_level_label(control, s_climate_levels[control]);
+    lv_color_t accent = climate_level_color(control, s_climate_levels[control]);
+    if (s_climate_value_labels[control]) {
+        lv_label_set_text(s_climate_value_labels[control], text);
+        lv_obj_set_style_text_color(s_climate_value_labels[control],
+                                    control == CLIMATE_TEMP ? accent : C_PHONE_TEXT,
+                                    LV_PART_MAIN);
+    }
+    if (s_climate_overlay_values[control]) {
+        lv_label_set_text(s_climate_overlay_values[control], text);
+        lv_obj_set_style_text_color(s_climate_overlay_values[control],
+                                    control == CLIMATE_TEMP ? accent : C_PHONE_TEXT,
+                                    LV_PART_MAIN);
+    }
+    for (int index = 0; index < 5; ++index) {
+        if (s_climate_segments[control][index]) {
+            lv_obj_set_style_bg_color(s_climate_segments[control][index],
+                index <= s_climate_levels[control] ? accent : C_PHONE_STROKE,
+                LV_PART_MAIN);
+        }
+    }
+    climate_icons_refresh(control);
+}
+
+static void settings_open_climate_cb(lv_event_t *event)
+{
+    (void)event;
+    settings_show_page(s_page_climate);
+    climate_refresh();
 }
 
 static void settings_open_air_presets_cb(lv_event_t *event)
@@ -2229,7 +2510,7 @@ static lv_obj_t *trip_reset_modal_button(lv_obj_t *parent, const char *text,
     lv_obj_set_style_bg_color(button, background, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(button, C_LINE, LV_PART_MAIN);
+    lv_obj_set_style_border_color(button, C_PHONE_STROKE, LV_PART_MAIN);
     lv_obj_set_style_radius(button, 8, LV_PART_MAIN);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, NULL);
@@ -2254,13 +2535,13 @@ static void trip_reset_request(int trip)
     lv_obj_move_foreground(s_trip_reset_modal);
 
     lv_obj_t *panel = lv_obj_create(s_trip_reset_modal);
-    lv_obj_set_size(panel, 430, 210);
-    lv_obj_center(panel);
-    lv_obj_set_style_bg_color(panel, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_size(panel, 620, 220);
+    lv_obj_align(panel, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_set_style_bg_color(panel, C_PHONE_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(panel, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(panel, 10, LV_PART_MAIN);
+    lv_obj_set_style_border_color(panel, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(panel, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(panel, 20, LV_PART_MAIN);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
@@ -2276,7 +2557,7 @@ static void trip_reset_request(int trip)
     lv_obj_set_size(buttons, LV_PCT(100), 48);
     lv_obj_set_flex_flow(buttons, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_column(buttons, 12, LV_PART_MAIN);
-    trip_reset_modal_button(buttons, "Cancel", C_VOID, C_LABEL, trip_reset_cancel_cb);
+    trip_reset_modal_button(buttons, "Cancel", C_PHONE_RAISED, C_PHONE_TEXT, trip_reset_cancel_cb);
     trip_reset_modal_button(buttons, "Reset", C_RED, C_WHITE, trip_reset_confirm_cb);
 }
 
@@ -2452,13 +2733,13 @@ static void cfg_factory_reset_request_cb(lv_event_t *e)
     ui_fade(s_factory_reset_modal, LV_OPA_TRANSP, LV_OPA_COVER, 140, NULL);
 
     lv_obj_t *panel = lv_obj_create(s_factory_reset_modal);
-    lv_obj_set_size(panel, 560, 300);
-    lv_obj_center(panel);
-    lv_obj_set_style_bg_color(panel, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_size(panel, 720, 300);
+    lv_obj_align(panel, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_set_style_bg_color(panel, C_PHONE_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(panel, C_RED, LV_PART_MAIN);
-    lv_obj_set_style_radius(panel, 16, LV_PART_MAIN);
+    lv_obj_set_style_radius(panel, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(panel, 24, LV_PART_MAIN);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
@@ -2481,10 +2762,9 @@ static void cfg_factory_reset_request_cb(lv_event_t *e)
 
     lv_obj_t *cancel = lv_obj_create(buttons);
     lv_obj_set_size(cancel, 220, 58);
-    lv_obj_set_style_bg_color(cancel, C_PANEL, LV_PART_MAIN);
-    lv_obj_set_style_border_color(cancel, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_border_width(cancel, 1, LV_PART_MAIN);
-    lv_obj_set_style_radius(cancel, 10, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(cancel, C_PHONE_RAISED, LV_PART_MAIN);
+    lv_obj_set_style_border_width(cancel, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(cancel, 8, LV_PART_MAIN);
     lv_obj_clear_flag(cancel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(cancel, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(cancel, cfg_factory_reset_cancel_cb, LV_EVENT_CLICKED, NULL);
@@ -2495,7 +2775,7 @@ static void cfg_factory_reset_request_cb(lv_event_t *e)
     lv_obj_set_size(confirm, 220, 58);
     lv_obj_set_style_bg_color(confirm, C_RED, LV_PART_MAIN);
     lv_obj_set_style_border_width(confirm, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(confirm, 10, LV_PART_MAIN);
+    lv_obj_set_style_radius(confirm, 8, LV_PART_MAIN);
     lv_obj_clear_flag(confirm, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(confirm, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(confirm, cfg_factory_reset_confirm_cb, LV_EVENT_CLICKED, NULL);
@@ -3106,13 +3386,13 @@ static void theme_delete_request_cb(lv_event_t *e)
     lv_obj_clear_flag(s_theme_delete_modal, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *panel = lv_obj_create(s_theme_delete_modal);
-    lv_obj_set_size(panel, 520, 280);
-    lv_obj_center(panel);
-    lv_obj_set_style_bg_color(panel, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_size(panel, 680, 280);
+    lv_obj_align(panel, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_set_style_bg_color(panel, C_PHONE_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(panel, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(panel, 16, LV_PART_MAIN);
+    lv_obj_set_style_border_color(panel, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(panel, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(panel, 24, LV_PART_MAIN);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
@@ -3135,10 +3415,9 @@ static void theme_delete_request_cb(lv_event_t *e)
 
     lv_obj_t *cancel = lv_obj_create(buttons);
     lv_obj_set_size(cancel, 200, 56);
-    lv_obj_set_style_bg_color(cancel, C_PANEL, LV_PART_MAIN);
-    lv_obj_set_style_border_color(cancel, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_border_width(cancel, 1, LV_PART_MAIN);
-    lv_obj_set_style_radius(cancel, 10, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(cancel, C_PHONE_RAISED, LV_PART_MAIN);
+    lv_obj_set_style_border_width(cancel, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(cancel, 8, LV_PART_MAIN);
     lv_obj_clear_flag(cancel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(cancel, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(cancel, theme_delete_cancel_cb, LV_EVENT_CLICKED, NULL);
@@ -3149,7 +3428,7 @@ static void theme_delete_request_cb(lv_event_t *e)
     lv_obj_set_size(confirm, 200, 56);
     lv_obj_set_style_bg_color(confirm, C_RED, LV_PART_MAIN);
     lv_obj_set_style_border_width(confirm, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(confirm, 10, LV_PART_MAIN);
+    lv_obj_set_style_radius(confirm, 8, LV_PART_MAIN);
     lv_obj_clear_flag(confirm, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(confirm, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(confirm, theme_delete_confirm_cb, LV_EVENT_CLICKED, NULL);
@@ -3311,11 +3590,11 @@ static lv_obj_t *build_theme_grid_card(lv_obj_t *parent, const char *name, const
 {
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_grid_cell(card, LV_GRID_ALIGN_STRETCH, col, 1, LV_GRID_ALIGN_STRETCH, row, 1);
-    lv_obj_set_style_bg_color(card, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(card, C_PHONE_SURFACE, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(card, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(card, 12, LV_PART_MAIN);
+    lv_obj_set_style_border_color(card, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(card, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(card, 10, LV_PART_MAIN);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     if (selectable) {
@@ -3380,6 +3659,23 @@ static void brightness_slider_released_cb(lv_event_t *e)
     dash_config_set_brightness(lv_slider_get_value(slider));
 }
 
+static void display_timing_restart_cb(lv_timer_t *timer)
+{
+    (void)timer;
+    bsp_display_backlight_off();
+    esp_restart();
+}
+
+static void display_timing_dropdown_cb(lv_event_t *event)
+{
+    dash_config_display_timing_t timing = (dash_config_display_timing_t)
+        lv_dropdown_get_selected(lv_event_get_target(event));
+    if (timing == dash_config_get_display_timing()) return;
+    dash_config_set_display_timing(timing);
+    lv_timer_t *restart_timer = lv_timer_create(display_timing_restart_cb, 500, NULL);
+    lv_timer_set_repeat_count(restart_timer, 1);
+}
+
 static void configure_menu_slider(lv_obj_t *slider)
 {
     lv_obj_add_flag(slider, LV_OBJ_FLAG_ADV_HITTEST);
@@ -3387,41 +3683,223 @@ static void configure_menu_slider(lv_obj_t *slider)
 }
 
 /* large icon+label tile used on the main settings page */
-static lv_obj_t *build_settings_tile(lv_obj_t *parent, const char *icon_sym, const char *title, lv_event_cb_t cb)
+static lv_obj_t *build_settings_tile(lv_obj_t *parent, const char *icon_sym, const char *title,
+                                     lv_color_t accent, lv_event_cb_t cb)
 {
     lv_obj_t *btn = lv_obj_create(parent);
-    lv_obj_set_size(btn, 270, 150);
-    lv_obj_set_style_bg_color(btn, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_size(btn, 410, 78);
+    lv_obj_set_style_bg_color(btn, C_PHONE_GLASS, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(btn, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(btn, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(btn, 10, LV_PART_MAIN);
+    lv_obj_set_style_border_color(btn, C_PHONE_GLASS_EDGE, LV_PART_MAIN);
+    lv_obj_set_style_radius(btn, PHONE_RADIUS_CARD, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(btn, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_hor(btn, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(btn, 12, LV_PART_MAIN);
     lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
     add_press_feedback(btn);
-    lv_obj_set_flex_flow(btn, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(btn, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(btn, 10, LV_PART_MAIN);
+    lv_obj_set_flex_flow(btn, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(btn, 12, LV_PART_MAIN);
 
-    lv_obj_t *icon = lv_label_create(btn);
+    lv_obj_t *icon_box = lv_obj_create(btn);
+    lv_obj_set_size(icon_box, 52, 52);
+    lv_obj_set_style_bg_color(icon_box, C_PHONE_RAISED, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(icon_box, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(icon_box, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(icon_box, 14, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(icon_box, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(icon_box, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(icon_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t *icon = lv_label_create(icon_box);
     lv_label_set_text(icon, icon_sym);
     lv_obj_set_style_text_font(icon, DASH_FONT_TILEVAL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(icon, C_WHITE, LV_PART_MAIN);
+    lv_obj_set_style_text_color(icon, accent, LV_PART_MAIN);
+    lv_obj_center(icon);
 
-    make_label(btn, title, DASH_FONT_LABEL14, C_WHITE);
+    lv_obj_t *title_label = make_label(btn, title, DASH_FONT_LABEL14, C_PHONE_TEXT);
+    lv_obj_set_flex_grow(title_label, 1);
+    make_label(btn, LV_SYMBOL_RIGHT, DASH_FONT_LABEL14, C_PHONE_SECONDARY);
     return btn;
+}
+
+static void climate_icon_draw(lv_obj_t *icon, int control, int size,
+                              lv_color_t color, int level)
+{
+    lv_obj_clean(icon);
+    if (control == CLIMATE_FAN) {
+        lv_obj_t *ring = lv_obj_create(icon);
+        lv_obj_add_flag(ring, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_set_size(ring, size - 4, size - 4);
+        lv_obj_center(ring);
+        lv_obj_set_style_radius(ring, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(ring, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(ring, 2, LV_PART_MAIN);
+        lv_obj_set_style_border_color(ring, C_PHONE_STROKE, LV_PART_MAIN);
+        lv_obj_clear_flag(ring, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t *hub = lv_obj_create(icon);
+        lv_obj_add_flag(hub, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_set_size(hub, size / 4, size / 4);
+        lv_obj_center(hub);
+        lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(hub, color, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(hub, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(hub, 0, LV_PART_MAIN);
+        for (int blade = 0; blade < 3; ++blade) {
+            lv_obj_t *arc = lv_arc_create(icon);
+            lv_obj_add_flag(arc, LV_OBJ_FLAG_IGNORE_LAYOUT);
+            lv_obj_set_size(arc, size - 12, size - 12);
+            lv_obj_center(arc);
+            lv_arc_set_bg_angles(arc, blade * 120 + 12, blade * 120 + 78);
+            lv_arc_set_range(arc, 0, 100);
+            lv_arc_set_value(arc, 100);
+            lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
+            lv_obj_set_style_arc_opa(arc, LV_OPA_TRANSP, LV_PART_MAIN);
+            lv_obj_set_style_arc_color(arc, color, LV_PART_INDICATOR);
+            lv_obj_set_style_arc_width(arc, 6, LV_PART_INDICATOR);
+            lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+        }
+    } else if (control == CLIMATE_MODE) {
+        lv_obj_t *glass = lv_obj_create(icon);
+        lv_obj_add_flag(glass, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_set_size(glass, size - 10, size / 3);
+        lv_obj_align(glass, LV_ALIGN_TOP_MID, 0, 2);
+        lv_obj_set_style_bg_opa(glass, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(glass, 2, LV_PART_MAIN);
+        lv_obj_set_style_border_color(glass, color, LV_PART_MAIN);
+        lv_obj_set_style_radius(glass, 8, LV_PART_MAIN);
+        lv_obj_clear_flag(glass, LV_OBJ_FLAG_SCROLLABLE);
+        static const char *const vent_symbols[] = {
+            LV_SYMBOL_RIGHT "  " LV_SYMBOL_RIGHT,
+            LV_SYMBOL_RIGHT "  " LV_SYMBOL_DOWN,
+            LV_SYMBOL_DOWN "  " LV_SYMBOL_DOWN,
+            LV_SYMBOL_UP "  " LV_SYMBOL_DOWN,
+            LV_SYMBOL_UP "  " LV_SYMBOL_UP,
+        };
+        lv_obj_t *flow = make_label(icon, vent_symbols[level], DASH_FONT_LABEL14, color);
+        lv_obj_add_flag(flow, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_align(flow, level == 4 ? LV_ALIGN_TOP_MID : LV_ALIGN_BOTTOM_MID,
+                     0, level == 4 ? 8 : -5);
+    } else {
+        lv_obj_t *stem = lv_obj_create(icon);
+        lv_obj_add_flag(stem, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_set_size(stem, size / 5, size * 2 / 3);
+        lv_obj_align(stem, LV_ALIGN_TOP_MID, 0, 1);
+        lv_obj_set_style_bg_opa(stem, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(stem, 3, LV_PART_MAIN);
+        lv_obj_set_style_border_color(stem, color, LV_PART_MAIN);
+        lv_obj_set_style_radius(stem, 5, LV_PART_MAIN);
+        lv_obj_clear_flag(stem, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t *bulb = lv_obj_create(icon);
+        lv_obj_add_flag(bulb, LV_OBJ_FLAG_IGNORE_LAYOUT);
+        lv_obj_set_size(bulb, size / 2, size / 2);
+        lv_obj_align(bulb, LV_ALIGN_BOTTOM_MID, 0, 0);
+        lv_obj_set_style_radius(bulb, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(bulb, color, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(bulb, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(bulb, 3, LV_PART_MAIN);
+        lv_obj_set_style_border_color(bulb, color, LV_PART_MAIN);
+        lv_obj_clear_flag(bulb, LV_OBJ_FLAG_SCROLLABLE);
+    }
+}
+
+static lv_obj_t *build_climate_icon(lv_obj_t *parent, int control, int size)
+{
+    lv_obj_t *icon = make_plain_container(parent);
+    lv_obj_set_size(icon, size, size);
+    climate_icon_draw(icon, control, size,
+                      climate_level_color(control, s_climate_levels[control]),
+                      s_climate_levels[control]);
+    return icon;
+}
+
+static void climate_icons_refresh(int control)
+{
+    lv_obj_t *icons[] = {s_climate_icons[control], s_climate_overlay_icons[control]};
+    for (int location = 0; location < 2; ++location) {
+        if (!icons[location] || s_climate_icon_levels[location][control] ==
+                                s_climate_levels[control]) continue;
+        climate_icon_draw(icons[location], control, lv_obj_get_width(icons[location]),
+                          climate_level_color(control, s_climate_levels[control]),
+                          s_climate_levels[control]);
+        s_climate_icon_levels[location][control] = s_climate_levels[control];
+    }
+}
+
+static lv_obj_t *build_climate_control_card(lv_obj_t *parent, int control)
+{
+    lv_color_t accent = climate_accent(control);
+    lv_obj_t *card = lv_obj_create(parent);
+    lv_obj_set_size(card, 270, 320);
+    lv_obj_set_style_bg_color(card, C_PHONE_SURFACE, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(card, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(card, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(card, 16, LV_PART_MAIN);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    s_climate_icons[control] = build_climate_icon(card, control, 60);
+    make_label(card, s_climate_names[control], DASH_FONT_LABEL, C_PHONE_SECONDARY);
+    s_climate_value_labels[control] = make_label(
+        card, climate_level_label(control, s_climate_levels[control]),
+        DASH_FONT_TILEVAL, C_PHONE_TEXT);
+
+    lv_obj_t *track = make_plain_container(card);
+    lv_obj_set_size(track, 176, 16);
+    lv_obj_set_flex_flow(track, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(track, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(track, 6, LV_PART_MAIN);
+    for (int index = 0; index < 5; ++index) {
+        lv_obj_t *segment = lv_obj_create(track);
+        s_climate_segments[control][index] = segment;
+        lv_obj_set_size(segment, 12, 12);
+        lv_obj_set_style_bg_color(segment,
+                      index <= s_climate_levels[control] ? accent : C_PHONE_STROKE,
+                                  LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(segment, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(segment, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(segment, LV_RADIUS_CIRCLE, LV_PART_MAIN);
+        lv_obj_clear_flag(segment, LV_OBJ_FLAG_SCROLLABLE);
+    }
+
+    lv_obj_t *controls = make_plain_container(card);
+    lv_obj_set_size(controls, 204, 54);
+    lv_obj_set_flex_flow(controls, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(controls, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    for (int direction = 0; direction < 2; ++direction) {
+        lv_obj_t *button = lv_obj_create(controls);
+        lv_obj_set_size(button, 92, 52);
+        lv_obj_set_style_bg_color(button, C_PHONE_RAISED, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(button, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(button, 8, LV_PART_MAIN);
+        lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(button, climate_adjust_cb, LV_EVENT_CLICKED,
+                            (void *)(intptr_t)(control * 2 + direction));
+        add_press_feedback(button);
+        lv_obj_center(make_label(button, direction ? LV_SYMBOL_PLUS : LV_SYMBOL_MINUS,
+                                 DASH_FONT_TILEVAL, C_WHITE));
+    }
+    return card;
 }
 
 static lv_obj_t *build_air_pressure_card(lv_obj_t *parent, const char *title,
                                          lv_obj_t **value_label, int width)
 {
     lv_obj_t *card = lv_obj_create(parent);
-    lv_obj_set_size(card, width, 116);
-    lv_obj_set_style_bg_color(card, C_VOID, LV_PART_MAIN);
+    lv_obj_set_size(card, width, 90);
+    lv_obj_set_style_bg_color(card, C_PHONE_SURFACE, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
+    lv_obj_set_style_border_width(card, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(card, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(card, 10, LV_PART_MAIN);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
@@ -3448,10 +3926,10 @@ static lv_obj_t *build_air_wheel_card(lv_obj_t *parent, const char *title,
     lv_obj_add_flag(card, LV_OBJ_FLAG_IGNORE_LAYOUT);
     lv_obj_set_pos(card, x, y);
     lv_obj_set_size(card, 180, 82);
-    lv_obj_set_style_bg_color(card, C_VOID, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(card, C_PHONE_SURFACE, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
+    lv_obj_set_style_border_color(card, C_PHONE_STROKE, LV_PART_MAIN);
     lv_obj_set_style_radius(card, 6, LV_PART_MAIN);
     lv_obj_set_style_pad_all(card, 8, LV_PART_MAIN);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
@@ -3468,17 +3946,30 @@ static lv_obj_t *build_air_action_button(lv_obj_t *parent, const char *text,
 {
     lv_obj_t *button = lv_obj_create(parent);
     lv_obj_set_size(button, width, height);
-    lv_obj_set_style_bg_color(button, command == AIR_RIDE_PRESET_4 ? C_RED_DEEP : C_VOID,
+    lv_obj_set_style_bg_color(button,
+                              command == AIR_RIDE_PRESET_4 ? C_RED : C_PHONE_SURFACE,
                               LV_PART_MAIN);
     lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(button, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(button, command == AIR_RIDE_PRESET_4 ? C_RED : C_LINE,
+    lv_obj_set_style_border_color(button,
+                                  command == AIR_RIDE_PRESET_4 ? C_RED : C_PHONE_STROKE,
                                   LV_PART_MAIN);
     lv_obj_set_style_radius(button, 8, LV_PART_MAIN);
     lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(button, air_ride_action_cb, LV_EVENT_CLICKED,
-                        (void *)(intptr_t)command);
+    bool manual = command <= AIR_RIDE_ALL_DOWN ||
+                  (command >= AIR_RIDE_FRONT_UP && command <= AIR_RIDE_REAR_DOWN);
+    if (manual) {
+        lv_obj_add_event_cb(button, air_ride_manual_cb, LV_EVENT_PRESSED,
+                            (void *)(intptr_t)command);
+        lv_obj_add_event_cb(button, air_ride_manual_cb, LV_EVENT_RELEASED,
+                            (void *)(intptr_t)command);
+        lv_obj_add_event_cb(button, air_ride_manual_cb, LV_EVENT_PRESS_LOST,
+                            (void *)(intptr_t)command);
+    } else {
+        lv_obj_add_event_cb(button, air_ride_action_cb, LV_EVENT_CLICKED,
+                            (void *)(intptr_t)command);
+    }
     add_press_feedback(button);
     lv_obj_center(make_label(button, text, DASH_FONT_LABEL14, C_WHITE));
     return button;
@@ -3490,10 +3981,10 @@ static void build_air_controller_overlay(lv_obj_t *cluster)
     lv_obj_add_flag(s_air_controller_overlay, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_size(s_air_controller_overlay, 920, 500);
     lv_obj_align(s_air_controller_overlay, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(s_air_controller_overlay, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_air_controller_overlay, C_PHONE_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(s_air_controller_overlay, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(s_air_controller_overlay, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(s_air_controller_overlay, C_RED, LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_air_controller_overlay, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(s_air_controller_overlay, C_PHONE_STROKE, LV_PART_MAIN);
     lv_obj_set_style_radius(s_air_controller_overlay, 10, LV_PART_MAIN);
     lv_obj_set_style_pad_all(s_air_controller_overlay, 18, LV_PART_MAIN);
     lv_obj_clear_flag(s_air_controller_overlay, LV_OBJ_FLAG_SCROLLABLE);
@@ -3505,7 +3996,7 @@ static void build_air_controller_overlay(lv_obj_t *cluster)
     lv_obj_set_flex_flow(header, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(header, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    make_label(header, "AIR RIDE CONTROL", DASH_FONT_LABEL14, C_RED);
+    make_label(header, "Air Ride", DASH_FONT_TILEVAL, C_PHONE_TEXT);
     lv_obj_t *header_status = make_plain_container(header);
     lv_obj_set_size(header_status, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(header_status, LV_FLEX_FLOW_ROW);
@@ -3528,10 +4019,10 @@ static void build_air_controller_overlay(lv_obj_t *cluster)
     lv_obj_add_flag(chassis, LV_OBJ_FLAG_IGNORE_LAYOUT);
     lv_obj_set_size(chassis, 190, 225);
     lv_obj_align(chassis, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_bg_color(chassis, lv_color_hex(0x101215), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(chassis, C_PHONE_RAISED, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(chassis, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(chassis, 2, LV_PART_MAIN);
-    lv_obj_set_style_border_color(chassis, C_LINE, LV_PART_MAIN);
+    lv_obj_set_style_border_color(chassis, C_PHONE_STROKE, LV_PART_MAIN);
     lv_obj_set_style_radius(chassis, 42, LV_PART_MAIN);
     lv_obj_clear_flag(chassis, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *front = make_label(chassis, LV_SYMBOL_UP "  FRONT", DASH_FONT_LABEL14, C_LABEL);
@@ -3560,6 +4051,66 @@ static void build_air_controller_overlay(lv_obj_t *cluster)
     lv_obj_set_style_text_align(s_air_overlay_help_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 }
 
+static void build_climate_controller_overlay(lv_obj_t *cluster)
+{
+    s_climate_controller_overlay = lv_obj_create(cluster);
+    lv_obj_add_flag(s_climate_controller_overlay,
+                    LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_size(s_climate_controller_overlay, 840, 320);
+    lv_obj_align(s_climate_controller_overlay, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_set_style_bg_color(s_climate_controller_overlay, C_PHONE_BG, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_climate_controller_overlay, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_climate_controller_overlay, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(s_climate_controller_overlay, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(s_climate_controller_overlay, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(s_climate_controller_overlay, 18, LV_PART_MAIN);
+    lv_obj_clear_flag(s_climate_controller_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(s_climate_controller_overlay, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_climate_controller_overlay, 12, LV_PART_MAIN);
+
+    lv_obj_t *grabber = lv_obj_create(s_climate_controller_overlay);
+    lv_obj_set_size(grabber, 54, 4);
+    lv_obj_set_style_bg_color(grabber, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(grabber, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(grabber, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(grabber, 2, LV_PART_MAIN);
+    lv_obj_clear_flag(grabber, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(grabber, LV_ALIGN_TOP_MID, 0, 0);
+    make_label(s_climate_controller_overlay, "Climate", DASH_FONT_LABEL14, C_PHONE_TEXT);
+    lv_obj_t *cards = make_plain_container(s_climate_controller_overlay);
+    lv_obj_set_size(cards, LV_PCT(100), 190);
+    lv_obj_set_flex_flow(cards, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(cards, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    for (int control = 0; control < CLIMATE_CONTROL_COUNT; ++control) {
+        lv_obj_t *card = lv_obj_create(cards);
+        s_climate_overlay_cards[control] = card;
+        lv_obj_set_size(card, 250, 170);
+        lv_obj_set_style_bg_color(card, C_PHONE_SURFACE, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(card, C_PHONE_STROKE, LV_PART_MAIN);
+        lv_obj_set_style_radius(card, 7, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(card, 12, LV_PART_MAIN);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        s_climate_overlay_icons[control] = build_climate_icon(card, control, 48);
+        make_label(card, s_climate_names[control], DASH_FONT_LABEL, C_PHONE_SECONDARY);
+        s_climate_overlay_values[control] = make_label(
+            card, climate_level_label(control, s_climate_levels[control]),
+            DASH_FONT_TILEVAL, C_PHONE_TEXT);
+    }
+    s_climate_overlay_help_label = make_label(
+        s_climate_controller_overlay,
+        "ROTATE: SELECT  |  PRESS: ADJUST  |  HOLD DIAL: HOME",
+        DASH_FONT_LABEL14, C_LABEL);
+    lv_obj_set_width(s_climate_overlay_help_label, LV_PCT(100));
+    lv_obj_set_style_text_align(s_climate_overlay_help_label,
+                                LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+}
+
 static lv_obj_t *build_config_subpage(lv_obj_t *panel, lv_obj_t **page_out, const char *title)
 {
     lv_obj_t *page = make_plain_container(panel);
@@ -3569,7 +4120,9 @@ static lv_obj_t *build_config_subpage(lv_obj_t *panel, lv_obj_t **page_out, cons
     lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(page, 14, LV_PART_MAIN);
     lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
-    make_label(page, title, DASH_FONT_LABEL14, C_LABEL);
+    lv_obj_t *heading = make_label(page, title, DASH_FONT_TILEVAL, C_PHONE_TEXT);
+    lv_obj_set_width(heading, LV_PCT(100));
+    lv_obj_set_style_text_align(heading, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 
     lv_obj_t *content = make_plain_container(page);
     lv_obj_set_size(content, LV_PCT(100), LV_PCT(100));
@@ -3589,11 +4142,11 @@ static lv_obj_t *build_shift_rpm_card(lv_obj_t *parent, const char *title, lv_co
 {
     lv_obj_t *card = lv_obj_create(parent);
     lv_obj_set_size(card, width, 96);
-    lv_obj_set_style_bg_color(card, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(card, C_PHONE_SURFACE, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(card, 10, LV_PART_MAIN);
+    lv_obj_set_style_border_color(card, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(card, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(card, 12, LV_PART_MAIN);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
@@ -3628,21 +4181,35 @@ static lv_obj_t *build_shift_rpm_card(lv_obj_t *parent, const char *title, lv_co
 static lv_obj_t *build_config_menu_row(lv_obj_t *parent, const char *title, lv_event_cb_t cb)
 {
     lv_obj_t *row = lv_obj_create(parent);
-    lv_obj_set_size(row, LV_PCT(100), 64);
-    lv_obj_set_style_bg_color(row, C_PANEL, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(row, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_size(row, LV_PCT(100), 72);
+    lv_obj_set_style_bg_color(row, C_PHONE_GLASS, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(row, LV_OPA_90, LV_PART_MAIN);
     lv_obj_set_style_border_width(row, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(row, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(row, 12, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(row, 14, LV_PART_MAIN);
+    lv_obj_set_style_border_color(row, C_PHONE_GLASS_EDGE, LV_PART_MAIN);
+    lv_obj_set_style_radius(row, PHONE_RADIUS_CARD, LV_PART_MAIN);
+    lv_obj_set_style_pad_hor(row, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_ver(row, 10, LV_PART_MAIN);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(row, cb, LV_EVENT_CLICKED, NULL);
     add_press_feedback(row);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    make_label(row, title, DASH_FONT_LABEL14, C_WHITE);
-    make_label(row, LV_SYMBOL_RIGHT, DASH_FONT_LABEL14, C_LABEL);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(row, 12, LV_PART_MAIN);
+    lv_obj_t *icon_box = lv_obj_create(row);
+    lv_obj_set_size(icon_box, 44, 44);
+    lv_obj_set_style_bg_color(icon_box, C_PHONE_BLUE, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(icon_box, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(icon_box, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(icon_box, 13, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(icon_box, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(icon_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *menu_icon = make_label(icon_box, LV_SYMBOL_SETTINGS,
+                                      DASH_FONT_LABEL14, C_PHONE_TEXT);
+    lv_obj_center(menu_icon);
+    lv_obj_t *title_label = make_label(row, title, DASH_FONT_LABEL14, C_PHONE_TEXT);
+    lv_obj_set_flex_grow(title_label, 1);
+    make_label(row, LV_SYMBOL_RIGHT, DASH_FONT_LABEL14, C_PHONE_SECONDARY);
     return row;
 }
 
@@ -3672,11 +4239,11 @@ static lv_obj_t *build_diagnostics_tile(lv_obj_t *parent, const char *title)
 {
     lv_obj_t *tile = lv_obj_create(parent);
     lv_obj_set_size(tile, 405, 104);
-    lv_obj_set_style_bg_color(tile, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(tile, C_PHONE_SURFACE, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(tile, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(tile, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(tile, 10, LV_PART_MAIN);
+    lv_obj_set_style_border_color(tile, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(tile, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(tile, 13, LV_PART_MAIN);
     lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(tile, LV_FLEX_FLOW_COLUMN);
@@ -4189,11 +4756,11 @@ static void sim_btn_long_press_cb(lv_event_t *e)
     lv_obj_t *panel = lv_obj_create(s_sim_mode_modal);
     lv_obj_set_size(panel, 860, 420);
     lv_obj_center(panel);
-    lv_obj_set_style_bg_color(panel, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(panel, C_PHONE_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(panel, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(panel, 16, LV_PART_MAIN);
+    lv_obj_set_style_border_color(panel, C_PHONE_STROKE, LV_PART_MAIN);
+    lv_obj_set_style_radius(panel, 8, LV_PART_MAIN);
     lv_obj_set_style_pad_all(panel, 24, LV_PART_MAIN);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
@@ -4210,11 +4777,11 @@ static void sim_btn_long_press_cb(lv_event_t *e)
         bool active = index == selected;
         lv_obj_t *tile = lv_obj_create(modes);
         lv_obj_set_size(tile, 190, 220);
-        lv_obj_set_style_bg_color(tile, active ? C_RED : C_VOID, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(tile, active ? C_PHONE_BLUE : C_PHONE_SURFACE, LV_PART_MAIN);
         lv_obj_set_style_bg_opa(tile, active ? LV_OPA_30 : LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_border_width(tile, active ? 3 : 1, LV_PART_MAIN);
-        lv_obj_set_style_border_color(tile, active ? C_RED : C_LINE, LV_PART_MAIN);
-        lv_obj_set_style_radius(tile, 10, LV_PART_MAIN);
+        lv_obj_set_style_border_color(tile, active ? C_PHONE_BLUE : C_PHONE_STROKE, LV_PART_MAIN);
+        lv_obj_set_style_radius(tile, 8, LV_PART_MAIN);
         lv_obj_clear_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_add_flag(tile, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(tile, sim_mode_select_cb, LV_EVENT_CLICKED,
@@ -4223,7 +4790,7 @@ static void sim_btn_long_press_cb(lv_event_t *e)
         lv_obj_set_flex_flow(tile, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(tile, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_row(tile, 12, LV_PART_MAIN);
-        make_label(tile, LV_SYMBOL_CHARGE, DASH_FONT_TILEVAL, active ? C_RED : C_WHITE);
+        make_label(tile, LV_SYMBOL_CHARGE, DASH_FONT_TILEVAL, C_PHONE_TEXT);
         make_label(tile, mode_names[index], DASH_FONT_LABEL14, C_WHITE);
         lv_obj_t *detail = make_label(tile, mode_details[index], DASH_FONT_LABEL, C_LABEL);
         lv_obj_set_width(detail, 164);
@@ -4804,21 +5371,24 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_set_size(s_settings_overlay, SCR_W, SCR_H);
     lv_obj_set_pos(s_settings_overlay, 0, 0);
     lv_obj_set_style_bg_color(s_settings_overlay, lv_color_hex(0x040405), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(s_settings_overlay, LV_OPA_80, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(s_settings_overlay, LV_OPA_60, LV_PART_MAIN);
     lv_obj_set_style_border_width(s_settings_overlay, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(s_settings_overlay, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(s_settings_overlay, 0, LV_PART_MAIN);
     lv_obj_clear_flag(s_settings_overlay, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *panel = lv_obj_create(s_settings_overlay);
-    lv_obj_set_size(panel, 920, 540);
-    lv_obj_align(panel, LV_ALIGN_CENTER, 0, 20);
-    lv_obj_set_style_bg_color(panel, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_size(panel, 940, 520);
+    lv_obj_align(panel, LV_ALIGN_CENTER, 0, 24);
+    lv_obj_set_style_bg_color(panel, C_PHONE_BG, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(panel, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(panel, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(panel, 20, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(panel, 24, LV_PART_MAIN);
+    lv_obj_set_style_border_color(panel, C_PHONE_GLASS_EDGE, LV_PART_MAIN);
+    lv_obj_set_style_radius(panel, PHONE_RADIUS_SHEET, LV_PART_MAIN);
+    lv_obj_set_style_shadow_color(panel, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(panel, LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(panel, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(panel, 20, LV_PART_MAIN);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 
     /* ---- page: main ---- */
@@ -4827,35 +5397,65 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_set_flex_flow(s_page_main, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(s_page_main, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(s_page_main, 12, LV_PART_MAIN);
-    make_label(s_page_main, "SETTINGS", DASH_FONT_LABEL14, C_LABEL);
+    lv_obj_t *settings_title = make_label(s_page_main, "Settings", DASH_FONT_TILEVAL,
+                                           C_PHONE_TEXT);
+    lv_obj_set_width(settings_title, 842);
+    lv_obj_set_style_text_align(settings_title, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_t *settings_subtitle = make_label(s_page_main, "MACKODASH CONTROL CENTER",
+                                              DASH_FONT_LABEL, C_PHONE_SECONDARY);
+    lv_obj_set_style_text_letter_space(settings_subtitle, 2, LV_PART_MAIN);
 
     lv_obj_t *tiles = make_plain_container(s_page_main);
-    lv_obj_set_size(tiles, 842, 316);
+    lv_obj_set_size(tiles, 836, 348);
     lv_obj_set_flex_flow(tiles, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(tiles, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(tiles, 16, LV_PART_MAIN);
-    lv_obj_set_style_pad_row(tiles, 16, LV_PART_MAIN);
-    lv_obj_t *main_tiles[] = {
-        build_settings_tile(tiles, LV_SYMBOL_IMAGE, "Theme", settings_open_theme_cb),
-        build_settings_tile(tiles, LV_SYMBOL_EYE_OPEN, "Display", settings_open_display_cb),
-        build_settings_tile(tiles, LV_SYMBOL_LIST, "Logs", settings_open_logs_menu_cb),
-        build_settings_tile(tiles, LV_SYMBOL_CHARGE, "ECU", settings_open_ecu_cb),
-        build_settings_tile(tiles, LV_SYMBOL_UP, "Air Ride", settings_open_air_ride_cb),
-        build_settings_tile(tiles, LV_SYMBOL_CHARGE, "Engine Limits", settings_open_engine_limits_cb),
-        build_settings_tile(tiles, LV_SYMBOL_SETTINGS, "System", settings_open_config_cb),
-    };
-    for (size_t index = 0; index < sizeof(main_tiles) / sizeof(main_tiles[0]); ++index) {
-        lv_obj_set_size(main_tiles[index], 198, 150);
+    lv_obj_set_style_pad_row(tiles, 12, LV_PART_MAIN);
+    build_settings_tile(tiles, LV_SYMBOL_IMAGE, "Appearance", C_PHONE_INDIGO, settings_open_theme_cb);
+    build_settings_tile(tiles, LV_SYMBOL_EYE_OPEN, "Display", C_PHONE_BLUE, settings_open_display_cb);
+    build_settings_tile(tiles, LV_SYMBOL_LIST, "Drive Logs", C_PHONE_GREEN, settings_open_logs_menu_cb);
+    build_settings_tile(tiles, LV_SYMBOL_CHARGE, "ECU Connection", C_PHONE_ORANGE, settings_open_ecu_cb);
+    build_settings_tile(tiles, LV_SYMBOL_REFRESH, "Climate", C_PHONE_CYAN, settings_open_climate_cb);
+    s_air_main_tile = build_settings_tile(tiles, LV_SYMBOL_UP, "Air Ride", C_PHONE_TEAL,
+                                           settings_open_air_ride_cb);
+    build_settings_tile(tiles, LV_SYMBOL_CHARGE, "Engine Limits", C_RED,
+                        settings_open_engine_limits_cb);
+    build_settings_tile(tiles, LV_SYMBOL_SETTINGS, "System", C_PHONE_SECONDARY,
+                        settings_open_config_cb);
+    if (!dash_config_get_show_air_ride()) {
+        lv_obj_add_flag(s_air_main_tile, LV_OBJ_FLAG_HIDDEN);
     }
+
+    s_page_climate = make_plain_container(panel);
+    lv_obj_set_size(s_page_climate, LV_PCT(100), LV_PCT(100));
+    lv_obj_add_flag(s_page_climate, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_flex_flow(s_page_climate, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(s_page_climate, 14, LV_PART_MAIN);
+    lv_obj_t *climate_header = make_plain_container(s_page_climate);
+    lv_obj_set_size(climate_header, LV_PCT(100), 40);
+    lv_obj_set_flex_flow(climate_header, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(climate_header, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    make_label(climate_header, "Climate", DASH_FONT_TILEVAL, C_PHONE_TEXT);
+    s_climate_status_label = make_label(climate_header, "HVAC NODE OFFLINE",
+                                        DASH_FONT_LABEL14, C_AMBER);
+    lv_obj_t *climate_cards = make_plain_container(s_page_climate);
+    lv_obj_set_size(climate_cards, LV_PCT(100), 338);
+    lv_obj_set_flex_flow(climate_cards, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(climate_cards, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    for (int control = 0; control < CLIMATE_CONTROL_COUNT; ++control) {
+        build_climate_control_card(climate_cards, control);
+    }
+    s_climate_refresh_timer = lv_timer_create(climate_refresh_timer_cb, 250, NULL);
 
     s_page_air_ride = make_plain_container(panel);
     lv_obj_set_size(s_page_air_ride, LV_PCT(100), LV_PCT(100));
     lv_obj_add_flag(s_page_air_ride, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(s_page_air_ride, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_scroll_dir(s_page_air_ride, LV_DIR_VER);
-    lv_obj_set_scrollbar_mode(s_page_air_ride, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_clear_flag(s_page_air_ride, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_scrollbar_mode(s_page_air_ride, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_flex_flow(s_page_air_ride, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(s_page_air_ride, 12, LV_PART_MAIN);
+    lv_obj_set_style_pad_row(s_page_air_ride, 8, LV_PART_MAIN);
     lv_obj_t *air_header = make_plain_container(s_page_air_ride);
     lv_obj_set_size(air_header, LV_PCT(100), 24);
     lv_obj_set_flex_flow(air_header, LV_FLEX_FLOW_ROW);
@@ -4866,7 +5466,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
                                     DASH_FONT_LABEL14, C_AMBER);
 
     lv_obj_t *air_pressures = make_plain_container(s_page_air_ride);
-    lv_obj_set_size(air_pressures, LV_PCT(100), 106);
+    lv_obj_set_size(air_pressures, LV_PCT(100), 94);
     lv_obj_set_flex_flow(air_pressures, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(air_pressures, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -4877,7 +5477,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     build_air_pressure_card(air_pressures, "RR", &s_air_pressure_labels[4], 160);
 
     lv_obj_t *compressor_row = lv_obj_create(s_page_air_ride);
-    lv_obj_set_size(compressor_row, LV_PCT(100), 54);
+    lv_obj_set_size(compressor_row, LV_PCT(100), 50);
     lv_obj_set_style_bg_color(compressor_row, C_VOID, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(compressor_row, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(compressor_row, 1, LV_PART_MAIN);
@@ -4905,34 +5505,34 @@ static void build_settings_overlay(lv_obj_t *cluster)
                         LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t *air_controls = make_plain_container(s_page_air_ride);
-    lv_obj_set_size(air_controls, LV_PCT(100), 122);
+    lv_obj_set_size(air_controls, LV_PCT(100), 100);
     lv_obj_set_flex_flow(air_controls, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(air_controls, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(air_controls, 10, LV_PART_MAIN);
-    build_air_action_button(air_controls, "FL  +", AIR_RIDE_FRONT_LEFT_UP, 198, 54);
-    build_air_action_button(air_controls, "FR  +", AIR_RIDE_FRONT_RIGHT_UP, 198, 54);
-    build_air_action_button(air_controls, "RL  +", AIR_RIDE_REAR_LEFT_UP, 198, 54);
-    build_air_action_button(air_controls, "RR  +", AIR_RIDE_REAR_RIGHT_UP, 198, 54);
-    build_air_action_button(air_controls, "FL  -", AIR_RIDE_FRONT_LEFT_DOWN, 198, 54);
-    build_air_action_button(air_controls, "FR  -", AIR_RIDE_FRONT_RIGHT_DOWN, 198, 54);
-    build_air_action_button(air_controls, "RL  -", AIR_RIDE_REAR_LEFT_DOWN, 198, 54);
-    build_air_action_button(air_controls, "RR  -", AIR_RIDE_REAR_RIGHT_DOWN, 198, 54);
+    lv_obj_set_style_pad_row(air_controls, 8, LV_PART_MAIN);
+    build_air_action_button(air_controls, "FL  +", AIR_RIDE_FRONT_LEFT_UP, 198, 46);
+    build_air_action_button(air_controls, "FR  +", AIR_RIDE_FRONT_RIGHT_UP, 198, 46);
+    build_air_action_button(air_controls, "RL  +", AIR_RIDE_REAR_LEFT_UP, 198, 46);
+    build_air_action_button(air_controls, "RR  +", AIR_RIDE_REAR_RIGHT_UP, 198, 46);
+    build_air_action_button(air_controls, "FL  -", AIR_RIDE_FRONT_LEFT_DOWN, 198, 46);
+    build_air_action_button(air_controls, "FR  -", AIR_RIDE_FRONT_RIGHT_DOWN, 198, 46);
+    build_air_action_button(air_controls, "RL  -", AIR_RIDE_REAR_LEFT_DOWN, 198, 46);
+    build_air_action_button(air_controls, "RR  -", AIR_RIDE_REAR_RIGHT_DOWN, 198, 46);
 
     lv_obj_t *air_axle_actions = make_plain_container(s_page_air_ride);
-    lv_obj_set_size(air_axle_actions, LV_PCT(100), 50);
+    lv_obj_set_size(air_axle_actions, LV_PCT(100), 46);
     lv_obj_set_flex_flow(air_axle_actions, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(air_axle_actions, LV_FLEX_ALIGN_SPACE_BETWEEN,
                           LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    build_air_action_button(air_axle_actions, "ALL UP", AIR_RIDE_ALL_UP, 265, 50);
-    build_air_action_button(air_axle_actions, "ALL DOWN", AIR_RIDE_ALL_DOWN, 265, 50);
+    build_air_action_button(air_axle_actions, "ALL UP", AIR_RIDE_ALL_UP, 265, 46);
+    build_air_action_button(air_axle_actions, "ALL DOWN", AIR_RIDE_ALL_DOWN, 265, 46);
     lv_obj_t *presets_nav = build_air_action_button(air_axle_actions, "PRESETS",
-                                                     AIR_RIDE_PRESET_1, 265, 50);
+                                                     AIR_RIDE_PRESET_1, 265, 46);
     lv_obj_remove_event_cb(presets_nav, air_ride_action_cb);
     lv_obj_add_event_cb(presets_nav, settings_open_air_presets_cb, LV_EVENT_CLICKED, NULL);
 
     lv_obj_t *presets_button = lv_obj_create(s_page_air_ride);
-    lv_obj_set_size(presets_button, LV_PCT(100), 76);
+    lv_obj_set_size(presets_button, LV_PCT(100), 54);
     lv_obj_set_style_bg_color(presets_button, C_RED_DEEP, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(presets_button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(presets_button, 1, LV_PART_MAIN);
@@ -5294,6 +5894,34 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_t *engine_limits_content = build_config_subpage(panel, &s_page_engine_limits, "ENGINE LIMITS");
     lv_obj_t *achievements_content = build_config_subpage(panel, &s_page_achievements, "ACHIEVEMENTS");
 
+    lv_obj_t *show_air_row = lv_obj_create(air_setup_content);
+    lv_obj_set_size(show_air_row, LV_PCT(100), 76);
+    lv_obj_set_style_bg_color(show_air_row, C_PANEL, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(show_air_row, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(show_air_row, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(show_air_row, C_LINE, LV_PART_MAIN);
+    lv_obj_set_style_radius(show_air_row, 8, LV_PART_MAIN);
+    lv_obj_set_style_pad_hor(show_air_row, 14, LV_PART_MAIN);
+    lv_obj_clear_flag(show_air_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(show_air_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(show_air_row, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_t *show_air_text = make_plain_container(show_air_row);
+    lv_obj_set_size(show_air_text, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(show_air_text, LV_FLEX_FLOW_COLUMN);
+    make_label(show_air_text, "SHOW AIR RIDE TILE", DASH_FONT_LABEL14, C_WHITE);
+    make_label(show_air_text, "Adds Air Ride to the main Settings page",
+               DASH_FONT_LABEL, C_LABEL);
+    s_air_setup_show_switch = lv_switch_create(show_air_row);
+    lv_obj_set_size(s_air_setup_show_switch, 52, 28);
+    lv_obj_set_style_bg_color(s_air_setup_show_switch, C_RED,
+                              LV_PART_INDICATOR | LV_STATE_CHECKED);
+    if (dash_config_get_show_air_ride()) {
+        lv_obj_add_state(s_air_setup_show_switch, LV_STATE_CHECKED);
+    }
+    lv_obj_add_event_cb(s_air_setup_show_switch, air_setup_show_toggle_cb,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+
     lv_obj_t *threshold_card = lv_obj_create(air_setup_content);
     lv_obj_set_size(threshold_card, LV_PCT(100), 178);
     lv_obj_set_style_bg_color(threshold_card, C_PANEL, LV_PART_MAIN);
@@ -5559,6 +6187,30 @@ static void build_settings_overlay(lv_obj_t *cluster)
         lv_obj_set_style_bg_color(s_brightness_slider, C_WHITE, LV_PART_KNOB);
         lv_obj_add_event_cb(s_brightness_slider, brightness_slider_cb, LV_EVENT_VALUE_CHANGED, NULL);
         lv_obj_add_event_cb(s_brightness_slider, brightness_slider_released_cb, LV_EVENT_RELEASED, NULL);
+
+        card = lv_obj_create(display_content);
+        lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(card, C_PANEL, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(card, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(card, 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(card, C_LINE, LV_PART_MAIN);
+        lv_obj_set_style_radius(card, 12, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(card, 14, LV_PART_MAIN);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
+                      LV_FLEX_ALIGN_CENTER);
+        lv_obj_t *timing_text = make_plain_container(card);
+        lv_obj_set_flex_flow(timing_text, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(timing_text, 3, LV_PART_MAIN);
+        make_label(timing_text, "Panel refresh", DASH_FONT_LABEL14, C_LABEL);
+        make_label(timing_text, "60 Hz mode may reduce panel flicker", DASH_FONT_LABEL, C_LABEL_DIM);
+        lv_obj_t *timing_dropdown = lv_dropdown_create(card);
+        lv_dropdown_set_options(timing_dropdown, "Standard\n60 Hz Compatibility");
+        lv_dropdown_set_selected(timing_dropdown, dash_config_get_display_timing());
+        lv_obj_set_width(timing_dropdown, 190);
+        lv_obj_add_event_cb(timing_dropdown, display_timing_dropdown_cb,
+                    LV_EVENT_VALUE_CHANGED, NULL);
 
         card = lv_obj_create(display_content);
         lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
@@ -6130,19 +6782,28 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_set_flex_flow(system_tiles, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(system_tiles, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(system_tiles, 12, LV_PART_MAIN);
-    build_settings_tile(system_tiles, LV_SYMBOL_REFRESH, "Reboot", cfg_reboot_cb);
-    build_settings_tile(system_tiles, LV_SYMBOL_WARNING, "Factory Reset", cfg_factory_reset_request_cb);
-    build_settings_tile(system_tiles, LV_SYMBOL_REFRESH, "Theme Resets", settings_open_theme_resets_cb);
+    lv_obj_t *reboot_tile = build_settings_tile(system_tiles, LV_SYMBOL_REFRESH, "Reboot",
+                                                 C_PHONE_BLUE, cfg_reboot_cb);
+    lv_obj_t *reset_tile = build_settings_tile(system_tiles, LV_SYMBOL_WARNING, "Factory Reset",
+                                                C_RED, cfg_factory_reset_request_cb);
+    lv_obj_t *theme_reset_tile = build_settings_tile(system_tiles, LV_SYMBOL_REFRESH, "Theme Resets",
+                                                      C_PHONE_ORANGE, settings_open_theme_resets_cb);
+    lv_obj_set_size(reboot_tile, 260, 78);
+    lv_obj_set_size(reset_tile, 260, 78);
+    lv_obj_set_size(theme_reset_tile, 260, 78);
 
     s_settings_nav_button = lv_obj_create(s_settings_overlay);
     lv_obj_add_flag(s_settings_nav_button, LV_OBJ_FLAG_IGNORE_LAYOUT | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(s_settings_nav_button, 42, 64);
-    lv_obj_align(s_settings_nav_button, LV_ALIGN_LEFT_MID, 5, 20);
+    lv_obj_align(s_settings_nav_button, LV_ALIGN_LEFT_MID, 8, 24);
     lv_obj_set_style_bg_color(s_settings_nav_button, C_RED_DEEP, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(s_settings_nav_button, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(s_settings_nav_button, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(s_settings_nav_button, C_RED, LV_PART_MAIN);
-    lv_obj_set_style_radius(s_settings_nav_button, 8, LV_PART_MAIN);
+    lv_obj_set_style_radius(s_settings_nav_button, 21, LV_PART_MAIN);
+    lv_obj_set_style_shadow_color(s_settings_nav_button, C_RED, LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(s_settings_nav_button, LV_OPA_30, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(s_settings_nav_button, 10, LV_PART_MAIN);
     lv_obj_clear_flag(s_settings_nav_button, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(s_settings_nav_button, settings_nav_cb, LV_EVENT_CLICKED, NULL);
     add_press_feedback(s_settings_nav_button);
@@ -8790,6 +9451,7 @@ lv_obj_t *honda_dash_ui_create(lv_obj_t *parent)
     build_settings_button(telltale_strip, true);
     build_settings_overlay(cluster);
     build_air_controller_overlay(cluster);
+    build_climate_controller_overlay(cluster);
     lv_timer_create(air_ride_refresh_timer_cb, 250, NULL);
 
     /* restore whichever theme was active last time -- persist=false since
@@ -9224,6 +9886,7 @@ enum {
 };
 
 static air_controller_mode_t s_controller_air_mode;
+static bool s_controller_climate_adjusting;
 static const char *const s_air_target_labels[AIR_TARGET_COUNT] = {
     "ALL UP", "ALL DOWN", "FRONT LEFT", "FRONT RIGHT",
     "REAR LEFT", "REAR RIGHT",
@@ -9241,7 +9904,8 @@ static void controller_air_update_overlay(void)
         lv_obj_set_style_border_width(s_air_overlay_pressure_cards[index], selected ? 3 : 1,
                                       LV_PART_MAIN);
         lv_obj_set_style_border_color(s_air_overlay_pressure_cards[index],
-                                      selected ? C_RED : C_LINE, LV_PART_MAIN);
+                          selected ? C_PHONE_BLUE : C_PHONE_STROKE,
+                          LV_PART_MAIN);
     }
 
     if (s_controller_air_mode == AIR_CONTROLLER_BROWSE) {
@@ -9256,6 +9920,24 @@ static void controller_air_update_overlay(void)
         lv_label_set_text(s_air_overlay_help_label,
                           "ROTATE LEFT: DOWN  |  ROTATE RIGHT: UP  |  PRESS WHEN DONE");
     }
+}
+
+static void controller_climate_update_overlay(void)
+{
+    if (!s_climate_controller_overlay || !s_climate_overlay_help_label) return;
+    for (int control = 0; control < CLIMATE_CONTROL_COUNT; ++control) {
+        bool selected = control == s_controller_selection;
+        lv_obj_set_style_border_width(s_climate_overlay_cards[control],
+                                      selected ? 3 : 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(s_climate_overlay_cards[control],
+                          selected ? climate_accent(control) : C_PHONE_STROKE,
+                          LV_PART_MAIN);
+    }
+    lv_label_set_text(s_climate_overlay_help_label,
+                      s_controller_climate_adjusting ?
+                      "ROTATE: ADJUST  |  PRESS: DONE  |  HOLD DIAL: HOME" :
+                      "ROTATE: SELECT  |  PRESS: ADJUST  |  HOLD DIAL: HOME");
+    climate_refresh();
 }
 
 static int controller_wrap(int value, int count)
@@ -9282,6 +9964,10 @@ static void controller_prepare_open(void)
         s_quick_brightness_overlay = NULL;
     }
     controller_hide_settings();
+    if (s_air_controller_overlay) lv_obj_add_flag(s_air_controller_overlay, LV_OBJ_FLAG_HIDDEN);
+    if (s_climate_controller_overlay) {
+        lv_obj_add_flag(s_climate_controller_overlay, LV_OBJ_FLAG_HIDDEN);
+    }
     s_controller_selection = 0;
     s_controller_log_focus = 0;
 }
@@ -9312,7 +9998,6 @@ static int controller_theme_id(int selection)
     if (selection < 5) return built_in_ids[selection];
     return 100 + selection - 5;
 }
-
 static int controller_theme_selection(int theme_id)
 {
     for (int selection = 0; selection < controller_theme_count(); ++selection) {
@@ -9412,6 +10097,9 @@ static void controller_close_to_home(void)
 {
     if (s_trip_reset_modal) trip_reset_modal_close();
     if (s_air_controller_overlay) lv_obj_add_flag(s_air_controller_overlay, LV_OBJ_FLAG_HIDDEN);
+    if (s_climate_controller_overlay) {
+        lv_obj_add_flag(s_climate_controller_overlay, LV_OBJ_FLAG_HIDDEN);
+    }
     controller_hide_settings();
     s_controller_page = HONDA_DASH_CONTROLLER_HOME;
     s_controller_selection = 0;
@@ -9500,6 +10188,14 @@ static void controller_fill_state(honda_dash_controller_state_t *state)
              s_air_target_labels[s_controller_selection]);
         break;
     }
+    case HONDA_DASH_CONTROLLER_CLIMATE:
+        state->count = CLIMATE_CONTROL_COUNT;
+        state->value = s_controller_climate_adjusting ? 1 : 0;
+        snprintf(state->label, sizeof(state->label), "%s %s",
+                 s_climate_names[s_controller_selection],
+                 climate_level_label(s_controller_selection,
+                                     s_climate_levels[s_controller_selection]));
+        break;
     case HONDA_DASH_CONTROLLER_HOME:
     default:
         state->count = 7;
@@ -9516,6 +10212,9 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
 
     if (critical_warning_needs_attention()) {
         if (s_air_controller_overlay) lv_obj_add_flag(s_air_controller_overlay, LV_OBJ_FLAG_HIDDEN);
+        if (s_climate_controller_overlay) {
+            lv_obj_add_flag(s_climate_controller_overlay, LV_OBJ_FLAG_HIDDEN);
+        }
         if (event == HONDA_DASH_CONTROLLER_PRESS || event == HONDA_DASH_CONTROLLER_BACK) {
             critical_warning_dismiss();
         }
@@ -9528,6 +10227,13 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
             s_controller_air_mode != AIR_CONTROLLER_BROWSE) {
             s_controller_air_mode = AIR_CONTROLLER_BROWSE;
             controller_air_update_overlay();
+            controller_fill_state(state);
+            return true;
+        }
+        if (s_controller_page == HONDA_DASH_CONTROLLER_CLIMATE &&
+            s_controller_climate_adjusting) {
+            s_controller_climate_adjusting = false;
+            controller_climate_update_overlay();
             controller_fill_state(state);
             return true;
         }
@@ -9579,6 +10285,13 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
             lv_obj_move_foreground(s_air_controller_overlay);
             air_ride_refresh();
             controller_air_update_overlay();
+            break;
+        case HONDA_DASH_CONTROLLER_CLIMATE:
+            s_controller_selection = 0;
+            s_controller_climate_adjusting = false;
+            lv_obj_clear_flag(s_climate_controller_overlay, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_foreground(s_climate_controller_overlay);
+            controller_climate_update_overlay();
             break;
         default:
             controller_close_to_home();
@@ -9646,6 +10359,13 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
                 controller_air_update_overlay();
             }
             break;
+        case HONDA_DASH_CONTROLLER_CLIMATE:
+            if (!s_controller_climate_adjusting) {
+                s_controller_selection = controller_wrap(
+                    s_controller_selection + step, CLIMATE_CONTROL_COUNT);
+                controller_climate_update_overlay();
+            }
+            break;
         default:
             break;
         }
@@ -9684,11 +10404,16 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
             }
             controller_air_update_overlay();
             break;
+        case HONDA_DASH_CONTROLLER_CLIMATE:
+            s_controller_climate_adjusting = !s_controller_climate_adjusting;
+            controller_climate_update_overlay();
+            break;
         default:
             break;
         }
     } else if (event == HONDA_DASH_CONTROLLER_LONG_PRESS) {
-        if (s_controller_page == HONDA_DASH_CONTROLLER_AIR_RIDE) {
+        if (s_controller_page == HONDA_DASH_CONTROLLER_AIR_RIDE ||
+            s_controller_page == HONDA_DASH_CONTROLLER_CLIMATE) {
             controller_close_to_home();
         } else if (s_controller_page == HONDA_DASH_CONTROLLER_TRIP && s_controller_selection > 0) {
             trip_reset_request(s_controller_selection);
