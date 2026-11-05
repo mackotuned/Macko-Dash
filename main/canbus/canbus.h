@@ -26,6 +26,8 @@ typedef struct{
     float tps;
     float ign_angle;
     float fuel_level;
+    float inj_duty;
+    float cel;
     float analog_inputs[8];
 } can_dash_data_t;
 
@@ -66,7 +68,7 @@ extern volatile can_dash_data_t can_data;
 void canbus_init(void);
 void canbus_shutdown(void);
 void canbus_task(void *arg);
-void process_can_frame(uint32_t id, uint8_t *data);
+void process_can_frame(uint32_t id, uint8_t *data, uint8_t dlc);
 bool canbus_has_live_data(void);
 bool canbus_has_live_gear(void);
 bool canbus_has_live_drivetrain(void);

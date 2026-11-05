@@ -105,17 +105,22 @@ static esp_err_t gt911_reset_to_primary_address(void)
     };
     ESP_RETURN_ON_ERROR(gpio_config(&io_conf), TAG, "GT911 reset GPIO config failed");
 
-    /* GT911 samples INT while reset is asserted: low selects address 0x5D. */
-    ESP_RETURN_ON_ERROR(gpio_set_level(BSP_LCD_TOUCH_RST, 0), TAG, "GT911 reset assert failed");
+    /* GT911 power-on timing (datasheet): INT is latched as the I2C address
+       strap when RST rises -- low selects 0x5D. INT must then be held low
+       for >50 ms while the controller boots, and I2C must not start until
+       the firmware is running. Skipping either step makes the controller
+       come up at a random address or NACK reads, which is the intermittent
+       "GT911 read error" seen on some boots. */
     ESP_RETURN_ON_ERROR(gpio_set_level(BSP_LCD_TOUCH_INT, 0), TAG, "GT911 address strap failed");
-    vTaskDelay(pdMS_TO_TICKS(12));
+    ESP_RETURN_ON_ERROR(gpio_set_level(BSP_LCD_TOUCH_RST, 0), TAG, "GT911 reset assert failed");
+    vTaskDelay(pdMS_TO_TICKS(20));
     ESP_RETURN_ON_ERROR(gpio_set_level(BSP_LCD_TOUCH_RST, 1), TAG, "GT911 reset release failed");
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(60));
 
     io_conf.pin_bit_mask = (1ULL << BSP_LCD_TOUCH_INT);
     io_conf.mode = GPIO_MODE_INPUT;
     ESP_RETURN_ON_ERROR(gpio_config(&io_conf), TAG, "GT911 interrupt GPIO release failed");
-    vTaskDelay(pdMS_TO_TICKS(80));
+    vTaskDelay(pdMS_TO_TICKS(100));
     return ESP_OK;
 }
 
@@ -869,7 +874,10 @@ esp_err_t bsp_touch_new(const bsp_display_cfg_t *cfg, esp_lcd_touch_handle_t *re
     esp_lcd_touch_config_t tp_cfg = {
         .x_max = BSP_LCD_H_RES,
         .y_max = BSP_LCD_V_RES,
-        .rst_gpio_num = BSP_LCD_TOUCH_RST, // Shared with LCD reset
+        /* The reset/strap sequence is done here (gt911_reset_to_primary_address).
+           Handing RST to the driver without INT makes it reset again with INT
+           floating and read after only 10 ms, which randomly fails. */
+        .rst_gpio_num = GPIO_NUM_NC,
         .int_gpio_num = GPIO_NUM_NC,
         .levels = {
             .reset = 0,
@@ -887,40 +895,23 @@ esp_err_t bsp_touch_new(const bsp_display_cfg_t *cfg, esp_lcd_touch_handle_t *re
     bool found = false;
     esp_lcd_panel_io_i2c_config_t config = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
 
-    /* Probe both known addresses first with no forced strap sequence. */
-    if (ESP_OK == bsp_i2c_device_probe(ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS))
-    {
-        ESP_LOGI(TAG, "Touch 0x5d found");
-        memcpy(&tp_io_config, &config, sizeof(config));
-        gt911_io_config.dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS;
-        found = true;
-    }
-    else if (ESP_OK == bsp_i2c_device_probe(ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP))
-    {
-        ESP_LOGI(TAG, "Touch 0x14 found");
-        config.dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP;
-        memcpy(&tp_io_config, &config, sizeof(config));
-        gt911_io_config.dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP;
-        found = true;
-    }
+    /* Always start from a known state: reset with the 0x5D strap, then probe.
+       0x14 is still accepted for panels that strap INT high in hardware. */
+    ESP_RETURN_ON_ERROR(gt911_reset_to_primary_address(), TAG, "GT911 reset failed");
 
-    /* If not found, repeat the deterministic strap/reset and probe again. */
-    if (!found)
+    for (int probe = 0; probe < 3 && !found; ++probe)
     {
-        ESP_RETURN_ON_ERROR(gt911_reset_to_primary_address(), TAG, "GT911 retry reset failed");
-        esp_lcd_panel_io_i2c_config_t config_after_reset = ESP_LCD_TOUCH_IO_I2C_GT911_CONFIG();
-        memcpy(&config, &config_after_reset, sizeof(config));
-
+        if (probe > 0) vTaskDelay(pdMS_TO_TICKS(50));
         if (ESP_OK == bsp_i2c_device_probe(ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS))
         {
-            ESP_LOGI(TAG, "Touch 0x5d found after reset");
+            ESP_LOGI(TAG, "Touch 0x5d found");
             memcpy(&tp_io_config, &config, sizeof(config));
             gt911_io_config.dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS;
             found = true;
         }
         else if (ESP_OK == bsp_i2c_device_probe(ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP))
         {
-            ESP_LOGI(TAG, "Touch 0x14 found after reset");
+            ESP_LOGI(TAG, "Touch 0x14 found");
             config.dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP;
             memcpy(&tp_io_config, &config, sizeof(config));
             gt911_io_config.dev_addr = ESP_LCD_TOUCH_IO_I2C_GT911_ADDRESS_BACKUP;
@@ -937,7 +928,13 @@ esp_err_t bsp_touch_new(const bsp_display_cfg_t *cfg, esp_lcd_touch_handle_t *re
     tp_io_config.scl_speed_hz = (CONFIG_BSP_I2C_CLK_SPEED_HZ > 100000) ? 100000 : CONFIG_BSP_I2C_CLK_SPEED_HZ;
     tp_cfg.driver_data = &gt911_io_config;
     ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_i2c(i2c_handle, &tp_io_config, &tp_io_handle), TAG, "");
-    return esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, ret_touch);
+    esp_err_t err = esp_lcd_touch_new_i2c_gt911(tp_io_handle, &tp_cfg, ret_touch);
+    if (err != ESP_OK)
+    {
+        /* don't leak an I2C device handle per failed attempt */
+        esp_lcd_panel_io_del(tp_io_handle);
+    }
+    return err;
 }
 
 static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
@@ -1019,17 +1016,9 @@ static lv_indev_t *bsp_display_indev_init(const bsp_display_cfg_t *cfg, lv_displ
     vTaskDelay(pdMS_TO_TICKS(250));
 
     esp_err_t touch_err = ESP_FAIL;
-    for (int attempt = 1; attempt <= 3; ++attempt)
+    for (int attempt = 1; attempt <= 5; ++attempt)
     {
-        if (attempt > 1)
-        {
-            esp_err_t reset_err = gt911_reset_to_primary_address();
-            if (reset_err != ESP_OK)
-            {
-                ESP_LOGW(TAG, "Touch retry reset failed: %s", esp_err_to_name(reset_err));
-            }
-        }
-
+        /* bsp_touch_new() performs the full reset/strap sequence itself */
         touch_err = bsp_touch_new(cfg, &tp);
         if (touch_err == ESP_OK && tp)
         {
@@ -1038,11 +1027,13 @@ static lv_indev_t *bsp_display_indev_init(const bsp_display_cfg_t *cfg, lv_displ
                 break;
             }
 
+            esp_lcd_panel_io_handle_t io = tp->io;
             esp_lcd_touch_del(tp);
+            if (io) esp_lcd_panel_io_del(io);
             tp = NULL;
             touch_err = ESP_ERR_INVALID_STATE;
         }
-        ESP_LOGW(TAG, "Touch init attempt %d/3 failed: %s", attempt, esp_err_to_name(touch_err));
+        ESP_LOGW(TAG, "Touch init attempt %d/5 failed: %s", attempt, esp_err_to_name(touch_err));
         vTaskDelay(pdMS_TO_TICKS(100 * attempt));
         tp = NULL;
     }

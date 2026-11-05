@@ -99,6 +99,7 @@ idf_component_register(
         "odometer/odometer.c"
         "canbus/canbus.c"
         "canbus/protocol_loader.c"
+        "canbus/ecu_channels.c"
         ${PROTOCOL_LIST_FILE}
 
     INCLUDE_DIRS 
@@ -157,6 +158,7 @@ idf_component_register(
         "odometer/odometer.c"
         "canbus/canbus.c"
         "canbus/protocol_loader.c"
+        "canbus/ecu_channels.c"
         ${PROTOCOL_LIST_FILE}
 
     INCLUDE_DIRS 

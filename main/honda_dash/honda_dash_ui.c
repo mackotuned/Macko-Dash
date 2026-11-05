@@ -419,6 +419,11 @@ static lv_color_t system_field_value_color(int channel, float value, bool availa
 static float system_field_display_value(int channel, float value);
 static void system_field_refresh_live_unit(system_field_theme_t theme, int slot,
                                            int channel, float value);
+static const char *system_field_name(int channel);
+static void system_field_sample(int channel, const float *base_values, const bool *base_available,
+                                float *value, bool *available);
+static void system_field_format_text(int channel, float value, bool available,
+                                     char *text, size_t size);
 static void update_theme_haldash(const honda_dash_data_t *data, int rpm, bool limiter_hit, float fuel);
 
 /* ---- HunterDash theme widget handles (retains Endurance's persisted slot) ---- */
@@ -2286,6 +2291,26 @@ static void cfg_fuel_voltage_released_cb(lv_event_t *e)
     if (endpoint == 0) dash_config_set_fuel_empty_mv(millivolts);
     else dash_config_set_fuel_full_mv(millivolts);
     cfg_fuel_live_refresh();
+}
+
+static lv_obj_t *s_cfg_fuel_tank_label;
+
+static void cfg_fuel_tank_label_refresh(int liters)
+{
+    if (!s_cfg_fuel_tank_label) return;
+    char text[32];
+    snprintf(text, sizeof(text), "%d L  (%.1f gal)", liters, (double)liters * 0.264172);
+    lv_label_set_text(s_cfg_fuel_tank_label, text);
+}
+
+static void cfg_fuel_tank_changed_cb(lv_event_t *e)
+{
+    cfg_fuel_tank_label_refresh(lv_slider_get_value(lv_event_get_target(e)));
+}
+
+static void cfg_fuel_tank_released_cb(lv_event_t *e)
+{
+    dash_config_set_fuel_tank_liters(lv_slider_get_value(lv_event_get_target(e)));
 }
 
 static void cfg_fuel_live_timer_cb(lv_timer_t *timer)
@@ -6322,6 +6347,28 @@ static void build_settings_overlay(lv_obj_t *cluster)
         make_label(card, "Hondata analog inputs must not exceed 5 V.",
                    DASH_FONT_LABEL, C_RED);
 
+        lv_obj_t *tank_top = make_plain_container(card);
+        lv_obj_set_size(tank_top, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_flex_flow(tank_top, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(tank_top, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                              LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        make_label(tank_top, "Haltech tank size", DASH_FONT_LABEL, C_LABEL);
+        s_cfg_fuel_tank_label = make_label(tank_top, "", DASH_FONT_LABEL14, C_WHITE);
+        cfg_fuel_tank_label_refresh(dash_config_get_fuel_tank_liters());
+        lv_obj_t *tank_slider = lv_slider_create(card);
+        configure_menu_slider(tank_slider);
+        lv_obj_set_size(tank_slider, LV_PCT(100), 16);
+        lv_slider_set_range(tank_slider, DASH_CONFIG_FUEL_TANK_LITERS_MIN, DASH_CONFIG_FUEL_TANK_LITERS_MAX);
+        lv_slider_set_value(tank_slider, dash_config_get_fuel_tank_liters(), LV_ANIM_OFF);
+        lv_obj_set_style_bg_color(tank_slider, C_RED, LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(tank_slider, C_WHITE, LV_PART_KNOB);
+        lv_obj_add_event_cb(tank_slider, cfg_fuel_tank_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+        lv_obj_add_event_cb(tank_slider, cfg_fuel_tank_released_cb, LV_EVENT_RELEASED, NULL);
+        lv_obj_t *tank_note = make_label(card,
+            "Haltech sends fuel level in litres; the gauge shows it as a percent of this tank size.",
+            DASH_FONT_LABEL, C_LABEL_DIM);
+        lv_obj_set_width(tank_note, LV_PCT(100));
+
         lv_obj_t *wiring_card = lv_obj_create(fuel_content);
         lv_obj_set_size(wiring_card, LV_PCT(100), LV_SIZE_CONTENT);
         lv_obj_set_style_bg_color(wiring_card, C_PANEL, LV_PART_MAIN);
@@ -8262,22 +8309,18 @@ static void update_theme_race_lcd(const honda_dash_data_t *data, int rpm, bool l
     };
     for (int slot = 0; slot < DASH_CONFIG_RACE_FIELD_COUNT; ++slot) {
         int channel = dash_config_get_race_field_channel(slot);
-        float displayed_value = system_field_display_value(channel, values[channel]);
-        system_field_refresh_live_unit(SYSTEM_FIELD_RACE, slot, channel, values[channel]);
+        float value;
+        bool ok;
+        system_field_sample(channel, values, available, &value, &ok);
+        system_field_refresh_live_unit(SYSTEM_FIELD_RACE, slot, channel, value);
         char text[16];
-        if (!available[channel]) snprintf(text, sizeof(text), "N/A");
-        else if (channel == TILE_AFR || channel == TILE_MAP || channel == TILE_BATT || channel == TILE_KNOCK) {
-            snprintf(text, sizeof(text), "%.1f", displayed_value);
-        } else {
-            float value = displayed_value;
-            snprintf(text, sizeof(text), "%d", (int)(value + (value >= 0 ? 0.5f : -0.5f)));
-        }
+        system_field_format_text(channel, value, ok, text, sizeof(text));
         if (strcmp(text, s_rpk_last_field_text[slot]) != 0) {
             snprintf(s_rpk_last_field_text[slot], sizeof(s_rpk_last_field_text[slot]), "%s", text);
             lv_label_set_text(s_rpk_field_val[slot], text);
         }
         lv_obj_set_style_text_color(s_rpk_field_val[slot],
-            system_field_value_color(channel, values[channel], available[channel]), LV_PART_MAIN);
+            system_field_value_color(channel, value, ok), LV_PART_MAIN);
     }
 }
 
@@ -8286,8 +8329,70 @@ static const char *const HAL_CHANNEL_NAMES[DASH_CONFIG_HAL_CHANNEL_COUNT] = {
     "Battery", "Throttle", "Oil Pressure", "Injector Duty", "Knock", "Fuel",
 };
 
+static bool system_field_is_ecu(int channel)
+{
+    return channel >= DASH_CONFIG_HAL_CHANNEL_COUNT && channel < DASH_CONFIG_FIELD_CHANNEL_COUNT;
+}
+
+static const char *system_field_name(int channel)
+{
+    if (system_field_is_ecu(channel)) return ecu_channel_label(channel - DASH_CONFIG_HAL_CHANNEL_COUNT);
+    if (channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) channel = 0;
+    return HAL_CHANNEL_NAMES[channel];
+}
+
+/* Core channels read from the per-frame value/availability arrays (already in
+   display units); extended ECU channels read their latest canonical value. */
+static void system_field_sample(int channel, const float *base_values, const bool *base_available,
+                                float *value, bool *available)
+{
+    if (system_field_is_ecu(channel)) {
+        *available = ecu_channel_get(channel - DASH_CONFIG_HAL_CHANNEL_COUNT, value);
+        return;
+    }
+    if (channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) channel = 0;
+    *value = base_values[channel];
+    *available = base_available[channel];
+}
+
+static void system_field_format_text(int channel, float value, bool available,
+                                     char *text, size_t size)
+{
+    if (!available) {
+        snprintf(text, size, "N/A");
+    } else if (system_field_is_ecu(channel)) {
+        ecu_channel_format(channel - DASH_CONFIG_HAL_CHANNEL_COUNT, value, text, size);
+    } else if (channel == TILE_AFR || channel == TILE_MAP || channel == TILE_BATT || channel == TILE_KNOCK) {
+        snprintf(text, size, "%.1f", system_field_display_value(channel, value));
+    } else {
+        float shown = system_field_display_value(channel, value);
+        snprintf(text, size, "%d", (int)(shown + (shown >= 0 ? 0.5f : -0.5f)));
+    }
+}
+
+/* "\n"-joined list of every channel name for the gauge channel picker. */
+static const char *system_field_channel_options(void)
+{
+    static char *options = NULL;
+    if (options) return options;
+    size_t length = 1;
+    for (int channel = 0; channel < DASH_CONFIG_FIELD_CHANNEL_COUNT; ++channel) {
+        length += strlen(system_field_name(channel)) + 1;
+    }
+    options = malloc(length);
+    if (!options) return "Coolant\nIntake Air\nAFR\nIgnition Timing\nBoost\nBattery\nThrottle\n"
+                         "Oil Pressure\nInjector Duty\nKnock\nFuel";
+    options[0] = '\0';
+    for (int channel = 0; channel < DASH_CONFIG_FIELD_CHANNEL_COUNT; ++channel) {
+        if (channel > 0) strcat(options, "\n");
+        strcat(options, system_field_name(channel));
+    }
+    return options;
+}
+
 static const char *hal_channel_unit(int channel)
 {
+    if (system_field_is_ecu(channel)) return ecu_channel_unit(channel - DASH_CONFIG_HAL_CHANNEL_COUNT);
     if (channel == TILE_ECT || channel == TILE_IAT) return dash_config_get_temperature_celsius() ? "DEG C" : "DEG F";
     if (channel == TILE_AFR) return "RATIO";
     if (channel == TILE_TIMING || channel == TILE_KNOCK) return "DEG";
@@ -8320,7 +8425,7 @@ static void system_field_refresh_live_unit(system_field_theme_t theme, int slot,
         set_label_text_if_changed(s_tiles[slot].unit, unit);
     } else if (theme == SYSTEM_FIELD_RACE && slot >= 0 && slot < DASH_CONFIG_RACE_FIELD_COUNT) {
         char caption[32];
-        snprintf(caption, sizeof(caption), "%s  %s", HAL_CHANNEL_NAMES[channel], unit);
+        snprintf(caption, sizeof(caption), "%s  %s", system_field_name(channel), unit);
         set_label_text_if_changed(s_rpk_field_label[slot], caption);
     } else if (theme == SYSTEM_FIELD_ENDURANCE && slot >= 0 && slot < DASH_CONFIG_ENDURANCE_FIELD_COUNT) {
         set_label_text_if_changed(s_end_field_unit[slot], unit);
@@ -8335,8 +8440,8 @@ static void hal_refresh_field_identity(int slot)
 {
     if (slot < 0 || slot >= DASH_CONFIG_HAL_FIELD_COUNT) return;
     int channel = dash_config_get_hal_field_channel(slot);
-    if (channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) channel = 0;
-    if (s_hal_field_label[slot]) lv_label_set_text(s_hal_field_label[slot], HAL_CHANNEL_NAMES[channel]);
+    if (channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) channel = 0;
+    if (s_hal_field_label[slot]) lv_label_set_text(s_hal_field_label[slot], system_field_name(channel));
     if (s_hal_field_unit[slot]) lv_label_set_text(s_hal_field_unit[slot], hal_channel_unit(channel));
 }
 
@@ -8361,28 +8466,28 @@ static void system_field_set_channel(system_field_theme_t theme, int slot, int c
 static void system_field_refresh_identity(system_field_theme_t theme, int slot)
 {
     int channel = system_field_get_channel(theme, slot);
-    if (channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) channel = 0;
+    if (channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) channel = 0;
     if (theme == SYSTEM_FIELD_MODERN) {
         if (slot < 0 || slot >= DASH_CONFIG_MODERN_FIELD_COUNT) return;
-        if (s_tiles[slot].label) lv_label_set_text(s_tiles[slot].label, HAL_CHANNEL_NAMES[channel]);
+        if (s_tiles[slot].label) lv_label_set_text(s_tiles[slot].label, system_field_name(channel));
         if (s_tiles[slot].unit) lv_label_set_text(s_tiles[slot].unit, hal_channel_unit(channel));
         s_tiles[slot].last_text[0] = '\0';
     } else if (theme == SYSTEM_FIELD_RACE) {
         if (slot < 0 || slot >= DASH_CONFIG_RACE_FIELD_COUNT) return;
         if (s_rpk_field_label[slot]) {
             char caption[32];
-            snprintf(caption, sizeof(caption), "%s  %s", HAL_CHANNEL_NAMES[channel], hal_channel_unit(channel));
+            snprintf(caption, sizeof(caption), "%s  %s", system_field_name(channel), hal_channel_unit(channel));
             lv_label_set_text(s_rpk_field_label[slot], caption);
         }
         s_rpk_last_field_text[slot][0] = '\0';
     } else if (theme == SYSTEM_FIELD_ENDURANCE) {
         if (slot < 0 || slot >= DASH_CONFIG_ENDURANCE_FIELD_COUNT) return;
-        if (s_end_field_label[slot]) lv_label_set_text(s_end_field_label[slot], HAL_CHANNEL_NAMES[channel]);
+        if (s_end_field_label[slot]) lv_label_set_text(s_end_field_label[slot], system_field_name(channel));
         if (s_end_field_unit[slot]) lv_label_set_text(s_end_field_unit[slot], hal_channel_unit(channel));
         s_end_last_field_text[slot][0] = '\0';
     } else if (theme == SYSTEM_FIELD_TOURING) {
         if (slot < 0 || slot >= DASH_CONFIG_TOURING_FIELD_COUNT) return;
-        if (s_tour_field_label[slot]) lv_label_set_text(s_tour_field_label[slot], HAL_CHANNEL_NAMES[channel]);
+        if (s_tour_field_label[slot]) lv_label_set_text(s_tour_field_label[slot], system_field_name(channel));
         if (s_tour_field_unit[slot]) lv_label_set_text(s_tour_field_unit[slot], hal_channel_unit(channel));
         s_tour_last_field_text[slot][0] = '\0';
     } else {
@@ -8552,8 +8657,7 @@ static void system_field_long_press_cb(lv_event_t *e)
     make_label(panel, "SELECT GAUGE CHANNEL", DASH_FONT_LABEL14, C_WHITE);
     s_hal_channel_dropdown = lv_dropdown_create(panel);
     lv_obj_set_width(s_hal_channel_dropdown, LV_PCT(100));
-    lv_dropdown_set_options(s_hal_channel_dropdown,
-        "Coolant\nIntake Air\nAFR\nIgnition Timing\nBoost\nBattery\nThrottle\nOil Pressure\nInjector Duty\nKnock\nFuel");
+    lv_dropdown_set_options(s_hal_channel_dropdown, system_field_channel_options());
     lv_dropdown_set_selected(s_hal_channel_dropdown,
                              (uint16_t)system_field_get_channel(theme, slot));
     lv_obj_set_style_bg_color(s_hal_channel_dropdown, C_VOID, LV_PART_MAIN);
@@ -8907,23 +9011,18 @@ static void update_theme_haldash(const honda_dash_data_t *data, int rpm, bool li
     }
     for (int slot = 0; slot < DASH_CONFIG_HAL_FIELD_COUNT; ++slot) {
         int channel = dash_config_get_hal_field_channel(slot);
-        float displayed_value = system_field_display_value(channel, channel_values[channel]);
-        system_field_refresh_live_unit(SYSTEM_FIELD_HAL, slot, channel, channel_values[channel]);
+        float value;
+        bool ok;
+        system_field_sample(channel, channel_values, channel_available, &value, &ok);
+        system_field_refresh_live_unit(SYSTEM_FIELD_HAL, slot, channel, value);
         char field_text[16];
-        if (!channel_available[channel]) snprintf(field_text, sizeof(field_text), "N/A");
-        else if (channel == TILE_AFR || channel == TILE_MAP || channel == TILE_BATT || channel == TILE_KNOCK) {
-            snprintf(field_text, sizeof(field_text), "%.1f", displayed_value);
-        } else {
-            float value = displayed_value;
-            snprintf(field_text, sizeof(field_text), "%d", (int)(value + (value >= 0 ? 0.5f : -0.5f)));
-        }
+        system_field_format_text(channel, value, ok, field_text, sizeof(field_text));
         if (strcmp(field_text, s_hal_last_field_text[slot]) != 0) {
             snprintf(s_hal_last_field_text[slot], sizeof(s_hal_last_field_text[slot]), "%s", field_text);
             lv_label_set_text(s_hal_field_val[slot], field_text);
         }
         lv_obj_set_style_text_color(s_hal_field_val[slot],
-            system_field_value_color(channel, channel_values[channel], channel_available[channel]),
-            LV_PART_MAIN);
+            system_field_value_color(channel, value, ok), LV_PART_MAIN);
     }
 }
 
@@ -9143,23 +9242,19 @@ static void update_theme_endurance(const honda_dash_data_t *data, int rpm, bool 
     };
     for (int slot = 0; slot < DASH_CONFIG_ENDURANCE_FIELD_COUNT; ++slot) {
         int channel = dash_config_get_endurance_field_channel(slot);
-        if (channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) channel = 0;
-        float displayed_value = system_field_display_value(channel, values[channel]);
-        system_field_refresh_live_unit(SYSTEM_FIELD_ENDURANCE, slot, channel, values[channel]);
+        if (channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) channel = 0;
+        float value;
+        bool ok;
+        system_field_sample(channel, values, available, &value, &ok);
+        system_field_refresh_live_unit(SYSTEM_FIELD_ENDURANCE, slot, channel, value);
         char text[16];
-        if (!available[channel]) snprintf(text, sizeof(text), "N/A");
-        else if (channel == TILE_AFR || channel == TILE_MAP || channel == TILE_BATT || channel == TILE_KNOCK) {
-            snprintf(text, sizeof(text), "%.1f", displayed_value);
-        } else {
-            float value = displayed_value;
-            snprintf(text, sizeof(text), "%d", (int)(value + (value >= 0 ? 0.5f : -0.5f)));
-        }
+        system_field_format_text(channel, value, ok, text, sizeof(text));
         if (strcmp(text, s_end_last_field_text[slot]) != 0) {
             snprintf(s_end_last_field_text[slot], sizeof(s_end_last_field_text[slot]), "%s", text);
             lv_label_set_text(s_end_field_val[slot], text);
         }
         lv_obj_set_style_text_color(s_end_field_val[slot],
-            system_field_value_color(channel, values[channel], available[channel]), LV_PART_MAIN);
+            system_field_value_color(channel, value, ok), LV_PART_MAIN);
     }
 }
 
@@ -9348,23 +9443,19 @@ static void update_theme_touring(const honda_dash_data_t *data, int rpm, bool li
     };
     for (int slot = 0; slot < DASH_CONFIG_TOURING_FIELD_COUNT; ++slot) {
         int channel = dash_config_get_touring_field_channel(slot);
-        if (channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) channel = 0;
-        float displayed_value = system_field_display_value(channel, values[channel]);
-        system_field_refresh_live_unit(SYSTEM_FIELD_TOURING, slot, channel, values[channel]);
+        if (channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) channel = 0;
+        float value;
+        bool ok;
+        system_field_sample(channel, values, available, &value, &ok);
+        system_field_refresh_live_unit(SYSTEM_FIELD_TOURING, slot, channel, value);
         char text[16];
-        if (!available[channel]) snprintf(text, sizeof(text), "N/A");
-        else if (channel == TILE_AFR || channel == TILE_MAP || channel == TILE_BATT || channel == TILE_KNOCK) {
-            snprintf(text, sizeof(text), "%.1f", displayed_value);
-        } else {
-            float value = displayed_value;
-            snprintf(text, sizeof(text), "%d", (int)(value + (value >= 0 ? 0.5f : -0.5f)));
-        }
+        system_field_format_text(channel, value, ok, text, sizeof(text));
         if (strcmp(text, s_tour_last_field_text[slot]) != 0) {
             snprintf(s_tour_last_field_text[slot], sizeof(s_tour_last_field_text[slot]), "%s", text);
             lv_label_set_text(s_tour_field_val[slot], text);
         }
         lv_obj_set_style_text_color(s_tour_field_val[slot],
-            system_field_value_color(channel, values[channel], available[channel]), LV_PART_MAIN);
+            system_field_value_color(channel, value, ok), LV_PART_MAIN);
     }
 }
 
@@ -9550,9 +9641,12 @@ static void set_tile_value(int slot, int channel, float raw, bool available)
     float displayed_value = system_field_display_value(channel, raw);
     system_field_refresh_live_unit(SYSTEM_FIELD_MODERN, slot, channel, raw);
 
+    bool ecu = system_field_is_ecu(channel);
     char buf[24];
     if (!available) {
         snprintf(buf, sizeof(buf), "N/A");
+    } else if (ecu) {
+        ecu_channel_format(channel - DASH_CONFIG_HAL_CHANNEL_COUNT, raw, buf, sizeof(buf));
     } else if (!def || def->dp == 0) {
         snprintf(buf, sizeof(buf), "%d", (int)(displayed_value +
                  (displayed_value >= 0 ? 0.5f : -0.5f)));
@@ -9598,7 +9692,8 @@ static void set_tile_value(int slot, int channel, float raw, bool available)
        range the value actually sits */
     float minimum = def ? def->min : 0.0f;
     float maximum = def ? def->max : 100.0f;
-    float pct = (raw - minimum) / (maximum - minimum);
+    float pct = ecu ? ecu_channel_fraction(channel - DASH_CONFIG_HAL_CHANNEL_COUNT, raw)
+                    : (raw - minimum) / (maximum - minimum);
     if (pct < 0) pct = 0;
     if (pct > 1) pct = 1;
     lv_bar_set_value(w->bar, (int32_t)(pct * 1000), LV_ANIM_OFF);
@@ -9828,7 +9923,10 @@ static void update_theme_modern(const honda_dash_data_t *data, int rpm, bool lim
     };
     for (int slot = 0; slot < DASH_CONFIG_MODERN_FIELD_COUNT; ++slot) {
         int channel = dash_config_get_modern_field_channel(slot);
-        set_tile_value(slot, channel, channel_values[channel], channel_available[channel]);
+        float value;
+        bool ok;
+        system_field_sample(channel, channel_values, channel_available, &value, &ok);
+        set_tile_value(slot, channel, value, ok);
     }
 
     /* ---- telltales ---- */

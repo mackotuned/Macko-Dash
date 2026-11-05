@@ -7,3 +7,4 @@
 /workspace_addons/**/__pycache__/
 /workspace_addons/**/build/
 /workspace_addons/**/dist/
+/workspace_addons/mackodash_updater/

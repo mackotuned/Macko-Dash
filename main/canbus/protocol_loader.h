@@ -4,7 +4,7 @@
 
 #define MAX_PROTOCOLS 8
 #define MAX_FRAMES    64
-#define MAX_SIGNALS   16
+#define MAX_SIGNALS   48
 #define CAN_ID_MAX    2048
 
 typedef enum {
@@ -13,9 +13,13 @@ typedef enum {
 } endian_t;
 
 typedef struct {
-    volatile float *target;
+    volatile float *target;   /* core dashboard value, or NULL */
+    int16_t ecu_channel;      /* extended ECU channel (ecu_channels.h), or -1 */
     uint8_t offset;
-    uint8_t len;
+    uint8_t len;              /* 1, 2 or 4 bytes */
+    uint8_t bit;              /* first (least significant) bit of a bit field */
+    uint8_t bits;             /* bit-field width; 0 = use the whole value */
+    uint8_t is_signed;
     float scale;
     float offset_val;
     endian_t endian;
@@ -24,7 +28,7 @@ typedef struct {
 typedef struct {
     uint32_t id;
     int signal_count;
-    can_signal_t signals[MAX_SIGNALS];
+    can_signal_t *signals;    /* heap array of signal_count entries */
 } can_frame_def_t;
 
 typedef struct {

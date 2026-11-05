@@ -54,6 +54,14 @@ static float current_fuel_percent(void)
         int input = dash_config_get_fuel_analog_input();
         return dash_config_fuel_percent(can_data.analog_inputs[input]);
     }
+    /* ECUs that report litres (Haltech 0x3E2) -> percent of the tank size */
+    float liters = 0.0f;
+    if (ecu_channel_get(ECU_CH_FUEL_LEVEL_L, &liters)) {
+        float percent = liters * 100.0f / (float)dash_config_get_fuel_tank_liters();
+        if (percent < 0.0f) percent = 0.0f;
+        if (percent > 100.0f) percent = 100.0f;
+        return percent;
+    }
     return can_data.fuel_level;
 }
 static bool s_render_paused_active = false;
@@ -187,17 +195,17 @@ void gauge_timer(lv_timer_t * t) {
     d.batt_v     = can_data.battery_voltage;
     d.tps_pct    = display_tps;
     d.oil_psi    = can_data.oil_pressure;
-    /* Not decoded by canbus.c yet -- hondata.json already carries
-       inj_duration / knock_count signals on the wire (frames 0x663/0x665),
-       they're just not wired into can_dash_data_t or protocol_loader's
-       signal_name_to_ptr() yet. Wire those up if you want live duty/knock. */
-    d.duty_pct   = 0.0f;
+    /* Injector duty comes from any protocol signal named inj_duty /
+       inj_stage1_duty (Haltech 0x362). Knock retard is still not decoded:
+       Haltech only broadcasts knock level in dB (see the Knock Level
+       ECU channels), not degrees of retard. */
+    d.duty_pct   = isfinite(can_data.inj_duty) ? can_data.inj_duty : 0.0f;
     d.knock_deg  = 0.0f;
     bool optional_grace = esp_timer_get_time() < 30000000;
     d.oil_valid   = optional_grace || canbus_has_recent_oil_pressure();
     d.duty_valid  = true;
     d.knock_valid = optional_grace;
-    d.cel        = false;
+    d.cel        = can_live && can_data.cel >= 0.5f;
     d.odo_miles  = odometer_get_miles();
     d.fuel_pct   = current_fuel_percent();
     }
@@ -246,27 +254,32 @@ static void can_startup_task(void *arg)
 }
 
 static void odometer_tracking_task(void *arg){
-    int64_t last_odo_ms = 0;
+    int64_t last_us = esp_timer_get_time();
+    /* Fractional metres carried between updates. Dropping them (the old
+       code added only whole m/s each second) under-read ~3% at 60 mph and
+       far more at low speed. */
+    double pending_meters = 0.0;
 
     while (1){
-        int64_t now_ms = esp_timer_get_time() / 1000;
+        vTaskDelay(pdMS_TO_TICKS(250));
+        int64_t now_us = esp_timer_get_time();
+        double dt_s = (double)(now_us - last_us) / 1000000.0;
+        last_us = now_us;
 
-        // ---------- Odometer ----------
-        if (now_ms - last_odo_ms >= 1000){
-            last_odo_ms = now_ms;
-
-            float speed_kph = can_data.speed;
-
-            // meters per second
-            float meters_per_sec = speed_kph / 3.6f;
-
-            uint32_t whole = (uint32_t)meters_per_sec;
-
-            if (whole > 0)
-                odometer_add_meters(whole);
+        /* can_data.speed keeps its last value when CAN drops out; only
+           integrate while speed is actually being received. */
+        float speed_kph = can_data.speed;
+        if (!canbus_has_live_drivetrain() || !isfinite(speed_kph) ||
+                speed_kph < 0.5f || speed_kph > 400.0f || dt_s <= 0.0 || dt_s > 2.0) {
+            continue;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(10));
+        pending_meters += (double)speed_kph / 3.6 * dt_s;
+        if (pending_meters >= 1.0) {
+            uint32_t whole = (uint32_t)pending_meters;
+            pending_meters -= whole;
+            odometer_add_meters(whole);
+        }
     }
 }
 

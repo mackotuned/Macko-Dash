@@ -27,6 +27,7 @@
 #define KEY_FUEL_ANALOG  "cfg_fuel_ain"
 #define KEY_FUEL_EMPTY   "cfg_fuel_emp"
 #define KEY_FUEL_FULL    "cfg_fuel_full"
+#define KEY_FUEL_TANK_L  "cfg_fuel_tank"
 #define KEY_COMP_ON      "air_comp_on"
 #define KEY_COMP_OFF     "air_comp_off"
 #define KEY_SHOW_AIR     "air_show"
@@ -44,6 +45,7 @@
 #define DEFAULT_FUEL_ANALOG 0
 #define DEFAULT_FUEL_EMPTY_MV 3290
 #define DEFAULT_FUEL_FULL_MV 290
+#define DEFAULT_FUEL_TANK_LITERS 50
 #define DEFAULT_COMPRESSOR_ON_PSI 120
 #define DEFAULT_COMPRESSOR_OFF_PSI 150
 #define COMPRESSOR_PSI_MIN 80
@@ -122,6 +124,7 @@ static bool s_show_sim_button = false;
 static int s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
 static int s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
 static int s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
+static int s_fuel_tank_liters = DEFAULT_FUEL_TANK_LITERS;
 static int s_compressor_on_psi = DEFAULT_COMPRESSOR_ON_PSI;
 static int s_compressor_off_psi = DEFAULT_COMPRESSOR_OFF_PSI;
 static bool s_show_air_ride = false;
@@ -204,6 +207,10 @@ void dash_config_init(void)
     if (nvs_get_i32(h, KEY_FUEL_FULL, &val) == ESP_OK && val >= 0 && val <= 5000) {
         s_fuel_full_mv = (int)val;
     }
+    if (nvs_get_i32(h, KEY_FUEL_TANK_L, &val) == ESP_OK &&
+            val >= DASH_CONFIG_FUEL_TANK_LITERS_MIN && val <= DASH_CONFIG_FUEL_TANK_LITERS_MAX) {
+        s_fuel_tank_liters = (int)val;
+    }
     if (nvs_get_i32(h, KEY_COMP_ON, &val) == ESP_OK &&
             val >= COMPRESSOR_PSI_MIN && val <= COMPRESSOR_PSI_MAX) {
         s_compressor_on_psi = (int)val;
@@ -253,31 +260,31 @@ void dash_config_init(void)
     }
     for (int i = 0; i < DASH_CONFIG_HAL_FIELD_COUNT; ++i) {
         if (nvs_get_i32(h, HAL_FIELD_KEYS[i], &val) == ESP_OK &&
-                val >= 0 && val < DASH_CONFIG_HAL_CHANNEL_COUNT) {
+                val >= 0 && val < DASH_CONFIG_FIELD_CHANNEL_COUNT) {
             s_hal_field_channels[i] = (int)val;
         }
     }
     for (int i = 0; i < DASH_CONFIG_MODERN_FIELD_COUNT; ++i) {
         if (nvs_get_i32(h, MODERN_FIELD_KEYS[i], &val) == ESP_OK &&
-                val >= 0 && val < DASH_CONFIG_HAL_CHANNEL_COUNT) {
+                val >= 0 && val < DASH_CONFIG_FIELD_CHANNEL_COUNT) {
             s_modern_field_channels[i] = (int)val;
         }
     }
     for (int i = 0; i < DASH_CONFIG_RACE_FIELD_COUNT; ++i) {
         if (nvs_get_i32(h, RACE_FIELD_KEYS[i], &val) == ESP_OK &&
-                val >= 0 && val < DASH_CONFIG_HAL_CHANNEL_COUNT) {
+                val >= 0 && val < DASH_CONFIG_FIELD_CHANNEL_COUNT) {
             s_race_field_channels[i] = (int)val;
         }
     }
     for (int i = 0; i < DASH_CONFIG_ENDURANCE_FIELD_COUNT; ++i) {
         if (nvs_get_i32(h, ENDURANCE_FIELD_KEYS[i], &val) == ESP_OK &&
-                val >= 0 && val < DASH_CONFIG_HAL_CHANNEL_COUNT) {
+                val >= 0 && val < DASH_CONFIG_FIELD_CHANNEL_COUNT) {
             s_endurance_field_channels[i] = (int)val;
         }
     }
     for (int i = 0; i < DASH_CONFIG_TOURING_FIELD_COUNT; ++i) {
         if (nvs_get_i32(h, TOURING_FIELD_KEYS[i], &val) == ESP_OK &&
-                val >= 0 && val < DASH_CONFIG_HAL_CHANNEL_COUNT) {
+                val >= 0 && val < DASH_CONFIG_FIELD_CHANNEL_COUNT) {
             s_touring_field_channels[i] = (int)val;
         }
     }
@@ -635,6 +642,19 @@ float dash_config_fuel_percent(float voltage)
     return percent;
 }
 
+int dash_config_get_fuel_tank_liters(void)
+{
+    return s_fuel_tank_liters;
+}
+
+void dash_config_set_fuel_tank_liters(int liters)
+{
+    if (liters < DASH_CONFIG_FUEL_TANK_LITERS_MIN) liters = DASH_CONFIG_FUEL_TANK_LITERS_MIN;
+    if (liters > DASH_CONFIG_FUEL_TANK_LITERS_MAX) liters = DASH_CONFIG_FUEL_TANK_LITERS_MAX;
+    s_fuel_tank_liters = liters;
+    persist_i32(KEY_FUEL_TANK_L, liters);
+}
+
 bool dash_config_get_value_smoothing(void)
 {
     return s_smoothing_strength != DASH_CONFIG_SMOOTHING_OFF;
@@ -711,7 +731,7 @@ int dash_config_get_hal_field_channel(int slot)
 void dash_config_set_hal_field_channel(int slot, int channel)
 {
     if (slot < 0 || slot >= DASH_CONFIG_HAL_FIELD_COUNT ||
-            channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) return;
+            channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) return;
     s_hal_field_channels[slot] = channel;
 
     nvs_handle_t h;
@@ -742,7 +762,7 @@ int dash_config_get_modern_field_channel(int slot)
 void dash_config_set_modern_field_channel(int slot, int channel)
 {
     if (slot < 0 || slot >= DASH_CONFIG_MODERN_FIELD_COUNT ||
-            channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) return;
+            channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) return;
     s_modern_field_channels[slot] = channel;
     nvs_handle_t h;
     if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
@@ -772,7 +792,7 @@ int dash_config_get_race_field_channel(int slot)
 void dash_config_set_race_field_channel(int slot, int channel)
 {
     if (slot < 0 || slot >= DASH_CONFIG_RACE_FIELD_COUNT ||
-            channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) return;
+            channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) return;
     s_race_field_channels[slot] = channel;
     nvs_handle_t h;
     if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
@@ -802,7 +822,7 @@ int dash_config_get_endurance_field_channel(int slot)
 void dash_config_set_endurance_field_channel(int slot, int channel)
 {
     if (slot < 0 || slot >= DASH_CONFIG_ENDURANCE_FIELD_COUNT ||
-            channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) return;
+            channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) return;
     s_endurance_field_channels[slot] = channel;
     nvs_handle_t h;
     if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
@@ -832,7 +852,7 @@ int dash_config_get_touring_field_channel(int slot)
 void dash_config_set_touring_field_channel(int slot, int channel)
 {
     if (slot < 0 || slot >= DASH_CONFIG_TOURING_FIELD_COUNT ||
-            channel < 0 || channel >= DASH_CONFIG_HAL_CHANNEL_COUNT) return;
+            channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) return;
     s_touring_field_channels[slot] = channel;
     nvs_handle_t h;
     if (nvs_open(DASH_CONFIG_NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
@@ -929,6 +949,7 @@ void dash_config_factory_reset(void)
     s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
     s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
     s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
+    s_fuel_tank_liters = DEFAULT_FUEL_TANK_LITERS;
     s_compressor_on_psi = DEFAULT_COMPRESSOR_ON_PSI;
     s_compressor_off_psi = DEFAULT_COMPRESSOR_OFF_PSI;
     s_show_air_ride = false;
@@ -967,6 +988,7 @@ void dash_config_factory_reset(void)
     nvs_set_i32(h, KEY_FUEL_ANALOG, s_fuel_analog_input);
     nvs_set_i32(h, KEY_FUEL_EMPTY, s_fuel_empty_mv);
     nvs_set_i32(h, KEY_FUEL_FULL, s_fuel_full_mv);
+    nvs_set_i32(h, KEY_FUEL_TANK_L, s_fuel_tank_liters);
     nvs_set_i32(h, KEY_COMP_ON, s_compressor_on_psi);
     nvs_set_i32(h, KEY_COMP_OFF, s_compressor_off_psi);
     nvs_set_i32(h, KEY_SHOW_AIR, 0);

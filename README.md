@@ -6,7 +6,7 @@
 
 **A configurable digital gauge cluster for the 9-inch Elecrow CrowPanel ESP32-P4/C6**
 
-**Current firmware: 3.0.1**
+**Current firmware: 3.1.0**
 
 [Get Latest Release](https://github.com/mackotuned/MackoDash-Flash-Tools/releases/latest) | [Browse Older Versions](https://github.com/mackotuned/MackoDash-Flash-Tools/releases) | [Firmware Update Guide](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update) | [Custom Theme Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) | [Get Support](#support)
 
@@ -21,6 +21,11 @@ You do not need ESP-IDF, Python, or programming tools to update or customize you
 1. Open the [MackoDash Flash Tools](https://github.com/mackotuned/MackoDash-Flash-Tools) repository.
 2. Select **Code**, then **Download ZIP**, and extract the complete folder on a Windows PC.
 3. Keep all extracted files together and open `MackoDashUtility.exe`.
+
+Just want to update the dash or knob? Download `MackoDashUpdater.exe` from
+[Macko-Flash](https://github.com/mackotuned/Macko-Flash/releases/latest). It finds
+the dashboard and knob on USB automatically, downloads the newest firmware, and
+installs it in one click. Nothing else needs to be installed.
 
 The utility includes five customer tools:
 

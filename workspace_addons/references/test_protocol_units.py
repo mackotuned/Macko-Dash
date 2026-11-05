@@ -8,7 +8,9 @@ PROTOCOL_DIR = Path(__file__).parents[2] / "main" / "canbus" / "protocols"
 EXPECTED = {
     "ecumasters_black": {"speed": (100, 100.0), "coolant_temp": (50, 122.0), "map": (100, -0.1921)},
     "emtron": {"speed": (1000, 100.0), "coolant_temp": (1000, 122.0), "map": (1000, -0.1921)},
-    "haltech": {"speed": (1000, 100.0), "coolant_temp": (500, 122.0), "map": (1000, -0.1921)},
+    # Haltech CAN v2 sends temperatures as Kelvin x10 and lambda x1000.
+    "haltech": {"speed": (1000, 100.0), "coolant_temp": (3731, 211.91), "map": (1000, -0.1921),
+                "wb1": (1000, 14.7)},
     "hondata": {"speed": (100, 100.0), "coolant_temp": (50, 122.0), "map": (1000, -0.1921)},
     "link_g4x": {"speed": (100, 100.0), "coolant_temp": (100, 122.0), "map": (100, 0.0)},
     "maxxecu": {"speed": (1000, 100.0), "coolant_temp": (500, 122.0), "map": (1000, -0.1921)},

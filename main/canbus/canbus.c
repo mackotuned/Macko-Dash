@@ -1,5 +1,6 @@
 #include "canbus.h"
 #include "protocol_loader.h"
+#include "ecu_channels.h"
 
 #include "driver/twai.h"
 #include "freertos/FreeRTOS.h"
@@ -149,7 +150,30 @@ static bool process_obd2_response(uint32_t id, const uint8_t *data)
 // CAN FRAME PROCESSOR
 // =======================================================
 
-void process_can_frame(uint32_t id, uint8_t *data){
+static uint32_t read_signal_raw(const can_signal_t *sig, const uint8_t *data)
+{
+    uint32_t raw = 0;
+    if (sig->endian == ENDIAN_BIG) {
+        for (int i = 0; i < sig->len; ++i) raw = (raw << 8) | data[sig->offset + i];
+    } else {
+        for (int i = sig->len - 1; i >= 0; --i) raw = (raw << 8) | data[sig->offset + i];
+    }
+    if (sig->bits > 0 && sig->bits < 32) {
+        raw = (raw >> sig->bit) & ((1u << sig->bits) - 1u);
+    }
+    return raw;
+}
+
+static float signal_raw_to_float(const can_signal_t *sig, uint32_t raw)
+{
+    if (!sig->is_signed) return (float)raw;
+    int width = sig->bits > 0 ? sig->bits : sig->len * 8;
+    if (width >= 32) return (float)(int32_t)raw;
+    uint32_t sign_bit = 1u << (width - 1);
+    return (float)((int32_t)(raw ^ sign_bit) - (int32_t)sign_bit);
+}
+
+void process_can_frame(uint32_t id, uint8_t *data, uint8_t dlc){
     protocol_detect(id);
 
     if(!active_protocol)
@@ -168,20 +192,18 @@ void process_can_frame(uint32_t id, uint8_t *data){
     for(int s=0;s<frame->signal_count;s++){
         can_signal_t *sig = &frame->signals[s];
 
-        uint32_t raw = 0;
+        /* ECUs may send short frames; never decode bytes that weren't sent */
+        if (sig->offset + sig->len > dlc)
+            continue;
 
-        if(sig->len==2){
-            if(sig->endian==ENDIAN_BIG)
-                raw=(data[sig->offset]<<8)|data[sig->offset+1];
-            else
-                raw=(data[sig->offset+1]<<8)|data[sig->offset];
-        }
-        else{
-            raw=data[sig->offset];
-        }
+        float value = signal_raw_to_float(sig, read_signal_raw(sig, data));
+        float scaled = value * sig->scale + sig->offset_val;
+
+        if (sig->ecu_channel >= 0)
+            ecu_channel_set(sig->ecu_channel, scaled);
 
         if(sig->target) {
-            *sig->target = raw*sig->scale + sig->offset_val;
+            *sig->target = scaled;
             if (sig->target == &can_data.gear) {
                 s_last_gear_rx_us = now_us;
             } else if (sig->target == &can_data.rpm) {
@@ -204,7 +226,14 @@ void mount_fs() {
         .format_if_mount_failed = true
     };
 
-    ESP_ERROR_CHECK(esp_vfs_spiffs_register(&conf));
+    /* canbus_init() runs again whenever CAN restarts (e.g. leaving OTA
+       mode); a second register returns ESP_ERR_INVALID_STATE, which used to
+       abort and reboot the dash. */
+    if (esp_spiffs_mounted(conf.partition_label)) return;
+    esp_err_t err = esp_vfs_spiffs_register(&conf);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "SPIFFS mount failed: %s", esp_err_to_name(err));
+    }
 }
 
 static twai_timing_config_t get_timing(int bitrate){
@@ -285,7 +314,7 @@ static int detect_can_bitrate(bool *driver_running)
                     s_last_can_rx_ms = (uint32_t)(esp_timer_get_time() / 1000);
                     if (!msg.extd) {
                         (void)process_obd2_response(msg.identifier, msg.data);
-                        process_can_frame(msg.identifier, msg.data);
+                        process_can_frame(msg.identifier, msg.data, msg.data_length_code);
                     }
                     frames++;
 
@@ -415,8 +444,14 @@ void canbus_task(void *arg){
                     if (s_auto_bitrate && (traffic_missing || traffic_stale)) {
                         last_stale_restart_ms = now_ms;
                         ESP_LOGW(TAG, "CAN traffic unavailable; rescanning bitrates");
-                        ESP_ERROR_CHECK(twai_stop());
-                        ESP_ERROR_CHECK(twai_driver_uninstall());
+                        /* stop may report INVALID_STATE if the bus just went
+                           bus-off; neither case should reboot the dash */
+                        (void)twai_stop();
+                        esp_err_t uninstall_err = twai_driver_uninstall();
+                        if (uninstall_err != ESP_OK) {
+                            ESP_LOGW(TAG, "CAN rescan uninstall failed: %s", esp_err_to_name(uninstall_err));
+                            continue;
+                        }
                         s_can_driver_ready = false;
                         bool driver_running = false;
                         int bitrate = detect_can_bitrate(&driver_running);
@@ -455,7 +490,7 @@ void canbus_task(void *arg){
                 s_last_can_rx_ms = (uint32_t)(esp_timer_get_time() / 1000);
                 if (!message.extd) {
                     (void)process_obd2_response(message.identifier, message.data);
-                    process_can_frame(message.identifier, message.data);
+                    process_can_frame(message.identifier, message.data, message.data_length_code);
                 }
                 frames_since_yield++;
 

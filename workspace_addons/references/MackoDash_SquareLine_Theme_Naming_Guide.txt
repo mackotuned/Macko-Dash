@@ -265,3 +265,170 @@ DESIGNER CHECKLIST
 [ ] Theme is exported and packaged as .mdtheme.zip.
 [ ] manifest.json is at the ZIP root.
 [ ] Theme is tested on the dashboard before distribution.
+
+
+ECU CHANNELS (HALTECH AND OTHER CAN PROTOCOLS)
+----------------------------------------------
+Every extra value an ECU broadcasts can be shown in a custom theme. Name the
+object dash_<channel>_<kind>, where <kind> is one of:
+
+  _value       label with the formatted value ("--" when not being received)
+  _unit        label with the unit, following the dashboard unit settings
+  _bar / _arc / _path_gauge / _needle   numeric value in display units
+  _indicator   shown while an ON/OFF channel is ON (e.g. dash_launch_active_indicator)
+
+Example: dash_egt1_value, dash_egt1_unit, dash_oil_temp_bar, dash_fan1_indicator.
+Duplicates use _2, _3 and so on, as with the core names.
+
+The same channels can be picked for any built-in theme field by long-pressing
+the field and choosing it from SELECT GAUGE CHANNEL.
+
+  Channel                  Field label          Units
+  fuel_pressure            Fuel Pressure        PSI / kPa
+  oil_temp                 Oil Temp             F / C
+  fuel_temp                Fuel Temp            F / C
+  trans_temp               Gearbox Temp         F / C
+  diff_temp                Diff Temp            F / C
+  fuel_comp                Ethanol              %
+  fuel_level_l             Fuel Level           gal / L
+  coolant_pressure         Coolant Press        PSI / kPa
+  engine_demand            Engine Demand        %
+  wastegate_pressure       Wastegate Press      PSI / kPa
+  inj_stage2_duty          Inj Stage 2 Duty     %
+  inj_stage3_duty          Inj Stage 3 Duty     %
+  inj_stage4_duty          Inj Stage 4 Duty     %
+  wideband1                Wideband 1           lambda
+  wideband2                Wideband 2           lambda
+  wideband3                Wideband 3           lambda
+  wideband4                Wideband 4           lambda
+  wideband5                Wideband 5           lambda
+  wideband6                Wideband 6           lambda
+  wideband7                Wideband 7           lambda
+  wideband8                Wideband 8           lambda
+  wideband9                Wideband 9           lambda
+  wideband10               Wideband 10          lambda
+  wideband11               Wideband 11          lambda
+  wideband12               Wideband 12          lambda
+  wideband_overall         Wideband Overall     lambda
+  wideband_bank1           Wideband Bank 1      lambda
+  wideband_bank2           Wideband Bank 2      lambda
+  target_lambda            Target Lambda        lambda
+  stft_bank1               Short Trim B1        %
+  stft_bank2               Short Trim B2        %
+  ltft_bank1               Long Trim B1         %
+  ltft_bank2               Long Trim B2         %
+  ign_angle_bank1          Timing Bank 1        deg
+  ign_angle_bank2          Timing Bank 2        deg
+  knock_level1             Knock Level 1        dB
+  knock_level2             Knock Level 2        dB
+  in_cam1                  Intake Cam 1         deg
+  in_cam2                  Intake Cam 2         deg
+  ex_cam1                  Exhaust Cam 1        deg
+  ex_cam2                  Exhaust Cam 2        deg
+  egt1                     EGT 1                F / C
+  egt2                     EGT 2                F / C
+  egt3                     EGT 3                F / C
+  egt4                     EGT 4                F / C
+  egt5                     EGT 5                F / C
+  egt6                     EGT 6                F / C
+  egt7                     EGT 7                F / C
+  egt8                     EGT 8                F / C
+  egt9                     EGT 9                F / C
+  egt10                    EGT 10               F / C
+  egt11                    EGT 11               F / C
+  egt12                    EGT 12               F / C
+  target_boost             Target Boost         PSI / kPa
+  baro_pressure            Baro (Abs)           PSI / kPa
+  boost_control_output     Boost Ctrl Duty      %
+  gen_output1_duty         Gen Output 1         %
+  turbo_speed1             Turbo Speed 1        RPM
+  turbo_speed2             Turbo Speed 2        RPM
+  ws_fl                    Wheel Spd FL         MPH / KPH
+  ws_fr                    Wheel Spd FR         MPH / KPH
+  ws_rl                    Wheel Spd RL         MPH / KPH
+  ws_rr                    Wheel Spd RR         MPH / KPH
+  wheel_slip               Wheel Slip           MPH / KPH
+  wheel_diff               Wheel Diff           MPH / KPH
+  lateral_g                Lateral G            G
+  long_g                   Long G               G
+  steering_angle           Steering Angle       deg
+  driveshaft_rpm           Driveshaft RPM       RPM
+  brake_pressure           Brake Pressure       PSI / kPa
+  nos_pressure1            NOS Pressure 1       PSI / kPa
+  nos_pressure2            NOS Pressure 2       PSI / kPa
+  nos_pressure3            NOS Pressure 3       PSI / kPa
+  nos_pressure4            NOS Pressure 4       PSI / kPa
+  gearbox_line_pressure    Trans Line Press     PSI / kPa
+  crankcase_pressure       Crankcase Press      PSI / kPa
+  inj_pressure_diff        Inj Press Diff       PSI / kPa
+  accel_pedal              Accel Pedal          %
+  fuel_flow                Fuel Flow            cc/min
+  fuel_flow_return         Fuel Flow Return     cc/min
+  ambient_temp             Ambient Temp         F / C
+  relative_humidity        Rel Humidity         %
+  specific_humidity        Spec Humidity        ppm
+  absolute_humidity        Abs Humidity         g/m3
+  launch_retard            Launch Retard        deg
+  launch_enrich            Launch Enrich        %
+  engine_limiting          Engine Limiting      ON / OFF
+  trigger_errors           Trigger Errors       raw
+  trigger_counter          Trigger Counter      raw
+  trigger_sync             Trigger Sync         raw
+  generic1                 Generic Sensor 1     %
+  generic2                 Generic Sensor 2     %
+  generic3                 Generic Sensor 3     %
+  generic4                 Generic Sensor 4     %
+  generic5                 Generic Sensor 5     %
+  generic6                 Generic Sensor 6     %
+  generic7                 Generic Sensor 7     %
+  generic8                 Generic Sensor 8     %
+  generic9                 Generic Sensor 9     %
+  generic10                Generic Sensor 10    %
+  gear_selector            Gear Selector        P R N D S M L OD
+  neutral_switch           Neutral Switch       ON / OFF
+  reverse_switch           Reverse Switch       ON / OFF
+  gear_switch              Gear Switch          ON / OFF
+  clutch_switch            Clutch Switch        ON / OFF
+  brake_switch             Brake Switch         ON / OFF
+  decel_cut                Decel Cut            ON / OFF
+  transient_throttle       Transient Thr        ON / OFF
+  oil_light                Oil Press Light      ON / OFF
+  check_engine             Check Engine         ON / OFF
+  battery_light            Battery Light        ON / OFF
+  launch_active            Launch Active        ON / OFF
+  launch_switch            Launch Switch        ON / OFF
+  aux_limiter              Aux Rev Limiter      ON / OFF
+  flat_shift_switch        Flat Shift Sw        ON / OFF
+  torque_reduction         Torque Reduction     ON / OFF
+  tc_active                Traction Active      ON / OFF
+  tc_enabled               Traction Enabled     ON / OFF
+  ac_request               A/C Request          ON / OFF
+  ac_output                A/C Output           ON / OFF
+  fan1                     Thermo Fan 1         ON / OFF
+  fan2                     Thermo Fan 2         ON / OFF
+  fan3                     Thermo Fan 3         ON / OFF
+  fan4                     Thermo Fan 4         ON / OFF
+  ignition_switch          Ignition Switch      ON / OFF
+  trim_pot1                Trim Pot 1           raw
+  trim_pot2                Trim Pot 2           raw
+  trim_pot3                Trim Pot 3           raw
+  torque_knob              Torque Mgmt Knob     raw
+  turbo_timer              Turbo Timer          s
+  turbo_timer_engine       Turbo Timer Eng      s
+  nitrous_stage1           Nitrous Stage 1      ON / OFF
+  nitrous_stage2           Nitrous Stage 2      ON / OFF
+  nitrous_stage3           Nitrous Stage 3      ON / OFF
+  nitrous_stage4           Nitrous Stage 4      ON / OFF
+  nitrous_stage5           Nitrous Stage 5      ON / OFF
+  nitrous_stage6           Nitrous Stage 6      ON / OFF
+  race_timer               Race Timer           s
+  tq_driveshaft_target     TQ Shaft Target      RPM
+  tq_driveshaft_error      TQ Shaft Error       RPM
+  tq_error_ign_corr        TQ Error Ign         deg
+  tq_timed_ign_corr        TQ Timed Ign         deg
+  tq_combined_ign_corr     TQ Combined Ign      deg
+  cruise_target            Cruise Target        MPH / KPH
+  cruise_last_target       Cruise Last Tgt      MPH / KPH
+  cruise_speed_error       Cruise Error         MPH / KPH
+  cruise_state             Cruise State         OFF IDLE CRUISE ACCEL DECEL
+  cruise_input             Cruise Input         raw

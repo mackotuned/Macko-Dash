@@ -8,6 +8,7 @@
 
 #include "cJSON.h"
 #include "dash_config.h"
+#include "ecu_channels.h"
 #include "esp_log.h"
 #include "extra/libs/tiny_ttf/lv_tiny_ttf.h"
 
@@ -56,6 +57,8 @@ typedef enum {
     BIND_SETTINGS_BUTTON,
     BIND_RECORD_BUTTON,
     BIND_SIM_BUTTON,
+    BIND_ECU_VALUE,
+    BIND_ECU_UNIT,
 } binding_id_t;
 
 typedef enum {
@@ -98,6 +101,7 @@ typedef struct {
     lv_meter_indicator_t *meter_indicator;
     lv_obj_t *value_label;
     path_gauge_t *path_gauge;
+    int16_t ecu_channel;
 } runtime_binding_t;
 
 typedef struct {
@@ -261,6 +265,35 @@ static binding_id_t resolve_binding(const char *name)
         match = BINDING_NAMES[i].id;
     }
     return match;
+}
+
+/* Extended ECU channels: dash_<signal>_value / _unit / _bar / _arc /
+   _path_gauge / _needle / _indicator, e.g. dash_egt1_value, dash_oil_temp_bar. */
+static binding_id_t resolve_ecu_binding(const char *name, int *channel)
+{
+    static const struct { const char *suffix; binding_id_t id; } SUFFIXES[] = {
+        {"_path_gauge", BIND_ECU_VALUE}, {"_value", BIND_ECU_VALUE}, {"_bar", BIND_ECU_VALUE},
+        {"_arc", BIND_ECU_VALUE}, {"_needle", BIND_ECU_VALUE}, {"_indicator", BIND_ECU_VALUE},
+        {"_unit", BIND_ECU_UNIT},
+    };
+    char normalized[RUNTIME_NAME_MAX];
+    normalize_name(name, normalized);
+    const char *body = normalized;
+    if (strncmp(body, "dash_", 5) == 0) body += 5;
+    size_t body_len = strlen(body);
+
+    for (size_t i = 0; i < sizeof(SUFFIXES) / sizeof(SUFFIXES[0]); ++i) {
+        size_t suffix_len = strlen(SUFFIXES[i].suffix);
+        if (body_len <= suffix_len || strcmp(body + body_len - suffix_len, SUFFIXES[i].suffix) != 0) continue;
+        char signal[RUNTIME_NAME_MAX];
+        memcpy(signal, body, body_len - suffix_len);
+        signal[body_len - suffix_len] = '\0';
+        int found = ecu_channel_find(signal);
+        if (found < 0) return BIND_NONE;
+        *channel = found;
+        return SUFFIXES[i].id;
+    }
+    return BIND_NONE;
 }
 
 static uint32_t json_color(cJSON *object, const char *key, uint32_t fallback)
@@ -663,7 +696,11 @@ static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
     const char *type = cJSON_IsString(type_item) ? type_item->valuestring : "label";
     const char *name = cJSON_IsString(name_item) ? name_item->valuestring : "";
     widget_kind_t kind = kind_for_type(type);
-    binding_id_t binding = resolve_binding(name);
+    /* exact ECU channel names first, so the core names' one-typo
+       tolerance can't capture them */
+    int ecu_channel = -1;
+    binding_id_t binding = resolve_ecu_binding(name, &ecu_channel);
+    if (binding == BIND_NONE) binding = resolve_binding(name);
     lv_obj_t *object = NULL;
 
     if (kind == WIDGET_IMAGE) {
@@ -801,6 +838,7 @@ static lv_obj_t *build_object(lv_obj_t *parent, cJSON *definition,
     if (kind != WIDGET_BUTTON) lv_obj_clear_flag(object, LV_OBJ_FLAG_CLICKABLE);
     if (kind != WIDGET_LABEL) lv_obj_clear_flag(object, LV_OBJ_FLAG_SCROLLABLE);
     runtime_binding_t *runtime_binding = add_binding(object, binding, kind);
+    if (runtime_binding) runtime_binding->ecu_channel = (int16_t)ecu_channel;
     if (kind == WIDGET_PATH_GAUGE) configure_path_gauge(object, definition, runtime_binding);
     if (kind == WIDGET_NEEDLE || kind == WIDGET_ANALOG_TACH)
         configure_meter(object, definition, kind, runtime_binding);
@@ -952,9 +990,33 @@ static float binding_value(binding_id_t id, const honda_dash_data_t *data)
     }
 }
 
+/* Numeric value in display units for bars, arcs, gauges and needles. */
+static float binding_number(const runtime_binding_t *binding, const honda_dash_data_t *data)
+{
+    if (binding->id == BIND_ECU_VALUE) {
+        float canonical = 0.0f;
+        if (!ecu_channel_get(binding->ecu_channel, &canonical)) return 0.0f;
+        return ecu_channel_display_value(binding->ecu_channel, canonical);
+    }
+    return binding_value(binding->id, data);
+}
+
 static void update_label(runtime_binding_t *binding, const honda_dash_data_t *data)
 {
     char text[24];
+    if (binding->id == BIND_ECU_VALUE) {
+        float canonical = 0.0f;
+        if (ecu_channel_get(binding->ecu_channel, &canonical))
+            ecu_channel_format(binding->ecu_channel, canonical, text, sizeof(text));
+        else
+            snprintf(text, sizeof(text), "--");
+        lv_label_set_text(binding->object, text);
+        return;
+    }
+    if (binding->id == BIND_ECU_UNIT) {
+        lv_label_set_text(binding->object, ecu_channel_unit(binding->ecu_channel));
+        return;
+    }
     float value = binding_value(binding->id, data);
     switch (binding->id) {
         case BIND_GEAR:
@@ -992,11 +1054,11 @@ void runtime_theme_update(const honda_dash_data_t *data)
         if (binding->kind == WIDGET_LABEL) {
             update_label(binding, data);
         } else if (binding->kind == WIDGET_BAR) {
-            lv_bar_set_value(binding->object, (int32_t)lroundf(binding_value(binding->id, data)), LV_ANIM_OFF);
+            lv_bar_set_value(binding->object, (int32_t)lroundf(binding_number(binding, data)), LV_ANIM_OFF);
         } else if (binding->kind == WIDGET_ARC) {
-            lv_arc_set_value(binding->object, (int32_t)lroundf(binding_value(binding->id, data)));
+            lv_arc_set_value(binding->object, (int32_t)lroundf(binding_number(binding, data)));
         } else if (binding->kind == WIDGET_PATH_GAUGE && binding->path_gauge) {
-            int value = (int)lroundf(binding_value(binding->id, data));
+            int value = (int)lroundf(binding_number(binding, data));
             path_gauge_t *gauge = binding->path_gauge;
             int range = gauge->maximum - gauge->minimum;
             int previous = range > 0 ? (gauge->value - gauge->minimum) * gauge->segment_count / range : 0;
@@ -1004,7 +1066,7 @@ void runtime_theme_update(const honda_dash_data_t *data)
             gauge->value = value;
             if (current != previous) lv_obj_invalidate(binding->object);
         } else if (binding->kind == WIDGET_NEEDLE || binding->kind == WIDGET_ANALOG_TACH) {
-            int32_t value = (int32_t)lroundf(binding_value(binding->id, data));
+            int32_t value = (int32_t)lroundf(binding_number(binding, data));
             if (binding->meter_indicator) lv_meter_set_indicator_value(binding->object, binding->meter_indicator, value);
             if (binding->value_label) {
                 char text[24];
@@ -1022,6 +1084,11 @@ void runtime_theme_update(const honda_dash_data_t *data)
                     break;
                 case BIND_OIL_INDICATOR: visible = data->oil_valid && data->oil_psi < 15.0f; break;
                 case BIND_KNOCK_INDICATOR: visible = data->knock_valid && data->knock_deg > 1.5f; break;
+                case BIND_ECU_VALUE: {
+                    float canonical = 0.0f;
+                    visible = ecu_channel_get(binding->ecu_channel, &canonical) && canonical >= 0.5f;
+                    break;
+                }
                 default: break;
             }
             if (visible) lv_obj_clear_flag(binding->object, LV_OBJ_FLAG_HIDDEN);

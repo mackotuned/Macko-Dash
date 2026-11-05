@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "ecu_channels.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -106,6 +108,12 @@ void dash_config_set_fuel_empty_mv(int millivolts);
 int dash_config_get_fuel_full_mv(void);
 void dash_config_set_fuel_full_mv(int millivolts);
 float dash_config_fuel_percent(float voltage);
+/* Tank size used to turn an ECU's fuel level in litres (Haltech) into a
+   percentage for the fuel gauge. */
+#define DASH_CONFIG_FUEL_TANK_LITERS_MIN 5
+#define DASH_CONFIG_FUEL_TANK_LITERS_MAX 400
+int dash_config_get_fuel_tank_liters(void);
+void dash_config_set_fuel_tank_liters(int liters);
 
 int dash_config_get_compressor_on_psi(void);
 void dash_config_set_compressor_on_psi(int psi);
@@ -143,7 +151,11 @@ void dash_config_set_log_name(dash_config_log_name_t name);
 const char *dash_config_get_log_prefix(void);
 
 #define DASH_CONFIG_HAL_FIELD_COUNT 8
+/* Field-slot channels: 0..DASH_CONFIG_HAL_CHANNEL_COUNT-1 are the core
+   dashboard values (coolant ... fuel); the rest are the extended ECU
+   channels from ecu_channels.h, starting at DASH_CONFIG_HAL_CHANNEL_COUNT. */
 #define DASH_CONFIG_HAL_CHANNEL_COUNT 11
+#define DASH_CONFIG_FIELD_CHANNEL_COUNT (DASH_CONFIG_HAL_CHANNEL_COUNT + ECU_CHANNEL_COUNT)
 int dash_config_get_hal_field_channel(int slot);
 void dash_config_set_hal_field_channel(int slot, int channel);
 void dash_config_reset_hal_field_channels(void);
