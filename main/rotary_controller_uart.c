@@ -9,11 +9,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-#include "air_ride.h"
-#include "dash_config.h"
 #include "honda_dash_ui.h"
 #include "rotary_controller_protocol.h"
-#include "ruin_capture_recorder.h"
 
 #define CONTROLLER_UART UART_NUM_1
 #define CONTROLLER_RX_BUFFER_SIZE 512
@@ -25,8 +22,6 @@
 static const char *TAG = "rotary_uart";
 static uint8_t s_tx_sequence;
 static SemaphoreHandle_t s_tx_mutex;
-static portMUX_TYPE s_hvac_lock = portMUX_INITIALIZER_UNLOCKED;
-static rotary_controller_hvac_state_t s_hvac_state;
 
 typedef struct {
     uint8_t data[ROTARY_PROTOCOL_MAX_FRAME];
@@ -64,10 +59,7 @@ static void send_state(uint8_t sequence, const honda_dash_controller_state_t *st
     rotary_protocol_put_u16(&payload[3], (uint16_t)state->count);
     rotary_protocol_put_u32(&payload[5], (uint32_t)state->value);
     payload[9] = state->recording ? 1 : 0;
-    payload[10] = state->air_pressure_valid ? 1 : 0;
-    for (size_t index = 0; index < 4; ++index) {
-        rotary_protocol_put_u16(&payload[11 + index * 2], state->air_pressure_psi[index]);
-    }
+    /* bytes 10..18 (air pressure) are kept zero for protocol compatibility */
     size_t label_length = strnlen(state->label, sizeof(state->label));
     if (label_length > ROTARY_PROTOCOL_MAX_PAYLOAD - 19) {
         label_length = ROTARY_PROTOCOL_MAX_PAYLOAD - 19;
@@ -86,48 +78,6 @@ static void handle_frame(const uint8_t *frame, size_t frame_length)
     rotary_protocol_type_t type = (rotary_protocol_type_t)frame[3];
     uint8_t sequence = frame[4];
     const uint8_t *payload = &frame[ROTARY_PROTOCOL_HEADER_SIZE];
-
-    if (type == ROTARY_PROTOCOL_CAPTURE_CHUNK) {
-        ruin_capture_recorder_ingest(payload, payload_length);
-        return;
-    }
-    if (type == ROTARY_PROTOCOL_CAPTURE_STATUS) {
-        ruin_capture_recorder_handle_status(payload, payload_length);
-        return;
-    }
-    if (type == ROTARY_PROTOCOL_AIR_RIDE_STATE) {
-        if (payload_length != 14) return;
-        air_ride_state_t state = {
-            .connected = payload[0] != 0,
-            .pressure_valid = payload[1] != 0,
-            .compressor_valid = payload[2] != 0,
-            .compressor_on = payload[3] != 0,
-            .tank_psi = rotary_protocol_get_u16(&payload[4]),
-            .front_left_psi = rotary_protocol_get_u16(&payload[6]),
-            .front_right_psi = rotary_protocol_get_u16(&payload[8]),
-            .rear_left_psi = rotary_protocol_get_u16(&payload[10]),
-            .rear_right_psi = rotary_protocol_get_u16(&payload[12]),
-        };
-        air_ride_update_state(&state);
-        return;
-    }
-    if (type == ROTARY_PROTOCOL_HVAC_STATE) {
-        if (payload_length != 9) return;
-        portENTER_CRITICAL(&s_hvac_lock);
-        s_hvac_state = (rotary_controller_hvac_state_t) {
-            .connected = payload[0] != 0,
-            .fan = payload[1],
-            .mode = payload[2],
-            .temp = payload[3],
-            .target_fan = payload[4],
-            .target_mode = payload[5],
-            .target_temp = payload[6],
-            .moving_mask = payload[7],
-            .fault_flags = payload[8],
-        };
-        portEXIT_CRITICAL(&s_hvac_lock);
-        return;
-    }
 
     honda_dash_controller_event_t event = HONDA_DASH_CONTROLLER_GET_STATE;
     int32_t value = 0;
@@ -219,55 +169,5 @@ esp_err_t rotary_controller_uart_start(void)
              CONFIG_ROTARY_CONTROLLER_BAUD);
     send_frame(ROTARY_PROTOCOL_PONG, ++s_tx_sequence, NULL, 0);
     return ESP_OK;
-}
-
-esp_err_t rotary_controller_air_ride_request(uint8_t command)
-{
-    if (!CONFIG_ROTARY_CONTROLLER_ENABLE || !s_tx_mutex) return ESP_ERR_INVALID_STATE;
-    if (command == AIR_RIDE_COMPRESSOR_ON || command == AIR_RIDE_COMPRESSOR_OFF) {
-        uint8_t payload[5] = {command};
-        rotary_protocol_put_u16(&payload[1], dash_config_get_compressor_on_psi());
-        rotary_protocol_put_u16(&payload[3], dash_config_get_compressor_off_psi());
-        return send_frame(ROTARY_PROTOCOL_AIR_RIDE_COMMAND, ++s_tx_sequence,
-                          payload, sizeof(payload));
-    }
-    return send_frame(ROTARY_PROTOCOL_AIR_RIDE_COMMAND, ++s_tx_sequence,
-                      &command, sizeof(command));
-}
-
-void rotary_controller_hvac_get_state(rotary_controller_hvac_state_t *state)
-{
-    if (!state) return;
-    portENTER_CRITICAL(&s_hvac_lock);
-    *state = s_hvac_state;
-    portEXIT_CRITICAL(&s_hvac_lock);
-}
-
-esp_err_t rotary_controller_hvac_request(uint8_t fan_level, uint8_t mode_level,
-                                         uint8_t temp_level)
-{
-    if (!CONFIG_ROTARY_CONTROLLER_ENABLE || !s_tx_mutex) return ESP_ERR_INVALID_STATE;
-    if (fan_level > 4 || mode_level > 4 || temp_level > 4) return ESP_ERR_INVALID_ARG;
-    uint8_t payload[3] = {fan_level, mode_level, temp_level};
-    return send_frame(ROTARY_PROTOCOL_HVAC_COMMAND, ++s_tx_sequence,
-                      payload, sizeof(payload));
-}
-
-esp_err_t rotary_controller_capture_start(char *filename, size_t filename_size)
-{
-    if (!CONFIG_ROTARY_CONTROLLER_ENABLE || !s_tx_mutex) return ESP_ERR_INVALID_STATE;
-    esp_err_t error = ruin_capture_recorder_start(filename, filename_size);
-    if (error != ESP_OK) return error;
-    uint8_t command = ROTARY_CAPTURE_START;
-    send_frame(ROTARY_PROTOCOL_CAPTURE_CONTROL, ++s_tx_sequence, &command, sizeof(command));
-    return ESP_OK;
-}
-
-esp_err_t rotary_controller_capture_stop(void)
-{
-    if (!CONFIG_ROTARY_CONTROLLER_ENABLE || !s_tx_mutex) return ESP_ERR_INVALID_STATE;
-    uint8_t command = ROTARY_CAPTURE_STOP;
-    send_frame(ROTARY_PROTOCOL_CAPTURE_CONTROL, ++s_tx_sequence, &command, sizeof(command));
-    return ruin_capture_recorder_stop();
 }
 

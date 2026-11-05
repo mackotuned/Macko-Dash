@@ -59,6 +59,9 @@ void dash_config_set_can_protocol(const char *name);
 int  dash_config_get_vtec_rpm(void);
 int  dash_config_get_redline_rpm(void);
 void dash_config_set_vtec_rpm(int rpm);
+/* VTEC indicator on MackoDash V2 (off by default: not every car has VTEC) */
+bool dash_config_get_show_vtec(void);
+void dash_config_set_show_vtec(bool show);
 void dash_config_set_redline_rpm(int rpm);
 
 #define DASH_CONFIG_SHIFT_STAGE_COUNT 3
@@ -115,12 +118,6 @@ float dash_config_fuel_percent(float voltage);
 int dash_config_get_fuel_tank_liters(void);
 void dash_config_set_fuel_tank_liters(int liters);
 
-int dash_config_get_compressor_on_psi(void);
-void dash_config_set_compressor_on_psi(int psi);
-int dash_config_get_compressor_off_psi(void);
-void dash_config_set_compressor_off_psi(int psi);
-bool dash_config_get_show_air_ride(void);
-void dash_config_set_show_air_ride(bool show);
 
 typedef enum {
    DASH_CONFIG_SMOOTHING_OFF = 0,

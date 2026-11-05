@@ -108,8 +108,6 @@ typedef enum {
     HONDA_DASH_CONTROLLER_LOGS,
     HONDA_DASH_CONTROLLER_TRIP_RESET,
     HONDA_DASH_CONTROLLER_ALERT,
-    HONDA_DASH_CONTROLLER_AIR_RIDE,
-    HONDA_DASH_CONTROLLER_CLIMATE,
 } honda_dash_controller_page_t;
 
 typedef enum {
@@ -127,8 +125,6 @@ typedef struct {
     int32_t count;
     int32_t value;
     bool recording;
-    bool air_pressure_valid;
-    uint16_t air_pressure_psi[4];
     char label[48];
 } honda_dash_controller_state_t;
 

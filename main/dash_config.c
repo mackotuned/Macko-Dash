@@ -16,6 +16,7 @@
 #define KEY_BRIGHTNESS   "cfg_bright"
 #define KEY_DISPLAY_TIMING "cfg_disp_tmg"
 #define KEY_SHOW_SIM     "cfg_show_sim"
+#define KEY_SHOW_VTEC    "cfg_show_vtec"
 #define KEY_VALUE_SMOOTH "cfg_smooth"
 #define KEY_SMOOTH_LEVEL "cfg_smooth_lvl"
 #define KEY_AUTO_RECORD  "cfg_auto_rec"
@@ -28,9 +29,6 @@
 #define KEY_FUEL_EMPTY   "cfg_fuel_emp"
 #define KEY_FUEL_FULL    "cfg_fuel_full"
 #define KEY_FUEL_TANK_L  "cfg_fuel_tank"
-#define KEY_COMP_ON      "air_comp_on"
-#define KEY_COMP_OFF     "air_comp_off"
-#define KEY_SHOW_AIR     "air_show"
 
 #define DEFAULT_VTEC_RPM    5600
 #define DEFAULT_REDLINE_RPM 8400
@@ -46,11 +44,6 @@
 #define DEFAULT_FUEL_EMPTY_MV 3290
 #define DEFAULT_FUEL_FULL_MV 290
 #define DEFAULT_FUEL_TANK_LITERS 50
-#define DEFAULT_COMPRESSOR_ON_PSI 120
-#define DEFAULT_COMPRESSOR_OFF_PSI 150
-#define COMPRESSOR_PSI_MIN 80
-#define COMPRESSOR_PSI_MAX 200
-#define COMPRESSOR_PSI_GAP 5
 
 static const char *const SHIFT_STAGE_RPM_KEYS[DASH_CONFIG_SHIFT_STAGE_COUNT] = {
     "cfg_shift_s1", "cfg_shift_s2", "cfg_shift_s3",
@@ -121,13 +114,11 @@ static int  s_redline_rpm = DEFAULT_REDLINE_RPM;
 static int s_brightness = DEFAULT_BRIGHTNESS;
 static dash_config_display_timing_t s_display_timing = DASH_CONFIG_DISPLAY_TIMING_STANDARD;
 static bool s_show_sim_button = false;
+static bool s_show_vtec = false;
 static int s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
 static int s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
 static int s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
 static int s_fuel_tank_liters = DEFAULT_FUEL_TANK_LITERS;
-static int s_compressor_on_psi = DEFAULT_COMPRESSOR_ON_PSI;
-static int s_compressor_off_psi = DEFAULT_COMPRESSOR_OFF_PSI;
-static bool s_show_air_ride = false;
 static dash_config_smoothing_strength_t s_smoothing_strength = DASH_CONFIG_SMOOTHING_OFF;
 static bool s_auto_record = false;
 static dash_config_log_name_t s_log_name = DASH_CONFIG_LOG_NAME_GENERAL;
@@ -194,6 +185,9 @@ void dash_config_init(void)
             val >= DASH_CONFIG_DISPLAY_TIMING_STANDARD && val < DASH_CONFIG_DISPLAY_TIMING_COUNT) {
         s_display_timing = (dash_config_display_timing_t)val;
     }
+    if (nvs_get_i32(h, KEY_SHOW_VTEC, &val) == ESP_OK) {
+        s_show_vtec = (val != 0);
+    }
     if (nvs_get_i32(h, KEY_SHOW_SIM, &val) == ESP_OK) {
         s_show_sim_button = (val != 0);
     }
@@ -210,19 +204,6 @@ void dash_config_init(void)
     if (nvs_get_i32(h, KEY_FUEL_TANK_L, &val) == ESP_OK &&
             val >= DASH_CONFIG_FUEL_TANK_LITERS_MIN && val <= DASH_CONFIG_FUEL_TANK_LITERS_MAX) {
         s_fuel_tank_liters = (int)val;
-    }
-    if (nvs_get_i32(h, KEY_COMP_ON, &val) == ESP_OK &&
-            val >= COMPRESSOR_PSI_MIN && val <= COMPRESSOR_PSI_MAX) {
-        s_compressor_on_psi = (int)val;
-    }
-    if (nvs_get_i32(h, KEY_COMP_OFF, &val) == ESP_OK &&
-            val >= COMPRESSOR_PSI_MIN && val <= COMPRESSOR_PSI_MAX) {
-        s_compressor_off_psi = (int)val;
-    }
-    if (nvs_get_i32(h, KEY_SHOW_AIR, &val) == ESP_OK) s_show_air_ride = val != 0;
-    if (s_compressor_on_psi + COMPRESSOR_PSI_GAP > s_compressor_off_psi) {
-        s_compressor_on_psi = DEFAULT_COMPRESSOR_ON_PSI;
-        s_compressor_off_psi = DEFAULT_COMPRESSOR_OFF_PSI;
     }
     if (nvs_get_i32(h, KEY_SMOOTH_LEVEL, &val) == ESP_OK &&
             val >= DASH_CONFIG_SMOOTHING_OFF && val < DASH_CONFIG_SMOOTHING_COUNT) {
@@ -426,47 +407,6 @@ static void persist_i32(const char *key, int value)
     nvs_close(h);
 }
 
-int dash_config_get_compressor_on_psi(void)
-{
-    return s_compressor_on_psi;
-}
-
-void dash_config_set_compressor_on_psi(int psi)
-{
-    if (psi < COMPRESSOR_PSI_MIN) psi = COMPRESSOR_PSI_MIN;
-    if (psi > s_compressor_off_psi - COMPRESSOR_PSI_GAP) {
-        psi = s_compressor_off_psi - COMPRESSOR_PSI_GAP;
-    }
-    s_compressor_on_psi = psi;
-    persist_i32(KEY_COMP_ON, psi);
-}
-
-int dash_config_get_compressor_off_psi(void)
-{
-    return s_compressor_off_psi;
-}
-
-void dash_config_set_compressor_off_psi(int psi)
-{
-    if (psi > COMPRESSOR_PSI_MAX) psi = COMPRESSOR_PSI_MAX;
-    if (psi < s_compressor_on_psi + COMPRESSOR_PSI_GAP) {
-        psi = s_compressor_on_psi + COMPRESSOR_PSI_GAP;
-    }
-    s_compressor_off_psi = psi;
-    persist_i32(KEY_COMP_OFF, psi);
-}
-
-bool dash_config_get_show_air_ride(void)
-{
-    return s_show_air_ride;
-}
-
-void dash_config_set_show_air_ride(bool show)
-{
-    s_show_air_ride = show;
-    persist_i32(KEY_SHOW_AIR, show ? 1 : 0);
-}
-
 void dash_config_set_language(dash_config_language_t language)
 {
     if (language < DASH_CONFIG_LANGUAGE_ENGLISH || language >= DASH_CONFIG_LANGUAGE_COUNT) {
@@ -578,6 +518,17 @@ void dash_config_set_display_timing(dash_config_display_timing_t timing)
 bool dash_config_get_show_sim_button(void)
 {
     return s_show_sim_button;
+}
+
+bool dash_config_get_show_vtec(void)
+{
+    return s_show_vtec;
+}
+
+void dash_config_set_show_vtec(bool show)
+{
+    s_show_vtec = show;
+    persist_i32(KEY_SHOW_VTEC, show ? 1 : 0);
 }
 
 void dash_config_set_show_sim_button(bool show)
@@ -946,13 +897,11 @@ void dash_config_factory_reset(void)
     s_brightness = DEFAULT_BRIGHTNESS;
     s_display_timing = DASH_CONFIG_DISPLAY_TIMING_STANDARD;
     s_show_sim_button = false;
+    s_show_vtec = false;
     s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
     s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
     s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
     s_fuel_tank_liters = DEFAULT_FUEL_TANK_LITERS;
-    s_compressor_on_psi = DEFAULT_COMPRESSOR_ON_PSI;
-    s_compressor_off_psi = DEFAULT_COMPRESSOR_OFF_PSI;
-    s_show_air_ride = false;
     s_smoothing_strength = DASH_CONFIG_SMOOTHING_OFF;
     s_auto_record = false;
     s_log_name = DASH_CONFIG_LOG_NAME_GENERAL;
@@ -985,13 +934,11 @@ void dash_config_factory_reset(void)
     nvs_set_i32(h, KEY_BRIGHTNESS, (int32_t)s_brightness);
     nvs_set_i32(h, KEY_DISPLAY_TIMING, DASH_CONFIG_DISPLAY_TIMING_STANDARD);
     nvs_set_i32(h, KEY_SHOW_SIM, 0);
+    nvs_set_i32(h, KEY_SHOW_VTEC, 0);
     nvs_set_i32(h, KEY_FUEL_ANALOG, s_fuel_analog_input);
     nvs_set_i32(h, KEY_FUEL_EMPTY, s_fuel_empty_mv);
     nvs_set_i32(h, KEY_FUEL_FULL, s_fuel_full_mv);
     nvs_set_i32(h, KEY_FUEL_TANK_L, s_fuel_tank_liters);
-    nvs_set_i32(h, KEY_COMP_ON, s_compressor_on_psi);
-    nvs_set_i32(h, KEY_COMP_OFF, s_compressor_off_psi);
-    nvs_set_i32(h, KEY_SHOW_AIR, 0);
     nvs_set_i32(h, KEY_VALUE_SMOOTH, 0);
     nvs_set_i32(h, KEY_SMOOTH_LEVEL, DASH_CONFIG_SMOOTHING_OFF);
     nvs_set_i32(h, KEY_AUTO_RECORD, 0);

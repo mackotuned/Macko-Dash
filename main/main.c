@@ -14,12 +14,10 @@
 #include "dashboard_runtime.h"
 #include "uart_file_transfer.h"
 #include "rotary_controller_uart.h"
-#include "ruin_capture_recorder.h"
 #include "ota_c6_hosted_bridge.h"
 #include "dash_sim.h"
 #include "dash_config.h"
 #include "data_logger.h"
-#include "air_ride.h"
 #include "achievement_system.h"
 #include "session_peaks.h"
 #include "theme_storage.h"
@@ -382,7 +380,6 @@ void dashboard_runtime_get_stats(dashboard_runtime_stats_t *stats)
 void app_main(void) {
     ESP_LOGW("main", "Reset reason: %d", (int)esp_reset_reason());
     dash_config_init();
-    air_ride_init();
     achievement_system_init();
     session_peaks_init();
 
@@ -461,7 +458,6 @@ void app_main(void) {
     }
 
     data_logger_init();
-    ruin_capture_recorder_init();
     ESP_ERROR_CHECK_WITHOUT_ABORT(uart_file_transfer_start());
 
 #if CONFIG_HONDA_DASH_ENABLE_WIFI_OTA

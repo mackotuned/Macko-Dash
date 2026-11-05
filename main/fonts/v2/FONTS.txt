@@ -1,0 +1,12 @@
+MackoDash V2 bitmap fonts
+
+v2_font_speed.c, v2_font_gear.c  - Exo 2 Black Italic (900)
+v2_font_value44.c, v2_font_value34.c, v2_font_brand18.c - Exo 2 ExtraBold Italic (800)
+v2_font_label13.c, v2_font_label16.c - Barlow Semi Condensed Bold (700)
+
+Exo 2: Copyright 2013 The Exo 2 Project Authors (https://github.com/NDISCOVER/Exo-2.0)
+Barlow: Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
+
+Both fonts are licensed under the SIL Open Font License, Version 1.1
+(see ../OFL.txt and https://openfontlicense.org). The .c files are
+4 bpp bitmap renderings limited to the characters the theme uses.

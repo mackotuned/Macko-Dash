@@ -965,13 +965,20 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         uint16_t buffer_height;
         bool ppa;
         bool double_buffer;
+        bool psram;
         const char *name;
     } lvgl_profile_try_t;
 
+    /* LVGL renders into this strip, then DMA2D copies it into the frame
+       buffer. Taller strips mean fewer render/copy passes per frame. The
+       strip stays in PSRAM: internal SRAM on the P4 is only ~350 KB and a
+       96 KB strip there starved later task stacks (USB file transfer). */
     static const lvgl_profile_try_t tries[] = {
-        {24, true, false, "ppa_compact"},
-        {24, false, false, "stable"},
-        {20, false, false, "safe"},
+        {64, true, false, true, "ppa_psram_64"},
+        {48, true, false, true, "ppa_psram_48"},
+        {24, true, false, true, "ppa_compact"},
+        {24, false, false, true, "stable"},
+        {20, false, false, true, "safe"},
     };
 
     lv_display_t *disp = NULL;
@@ -980,15 +987,17 @@ static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
         disp_cfg.profile.buffer_height = tries[i].buffer_height;
         disp_cfg.profile.enable_ppa_accel = tries[i].ppa;
         disp_cfg.profile.require_double_buffer = tries[i].double_buffer;
+        disp_cfg.profile.use_psram = tries[i].psram;
 
         disp = esp_lv_adapter_register_display(&disp_cfg);
         if (disp)
         {
-            ESP_LOGI(TAG, "LVGL profile selected: %s (buffer_height=%u ppa=%d double=%d)",
+            ESP_LOGI(TAG, "LVGL profile selected: %s (buffer_height=%u ppa=%d double=%d psram=%d)",
                      tries[i].name,
                      tries[i].buffer_height,
                      tries[i].ppa,
-                     tries[i].double_buffer);
+                     tries[i].double_buffer,
+                     tries[i].psram);
             break;
         }
 

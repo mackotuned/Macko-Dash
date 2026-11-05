@@ -11,12 +11,14 @@
 #include "device_log_viewer.h"
 #include "driver/uart.h"
 #include "esp_check.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
 #include "theme_storage.h"
+
 
 #define TRANSFER_UART UART_NUM_0
 #define TRANSFER_BAUD CONFIG_ESP_CONSOLE_UART_BAUDRATE
@@ -311,6 +313,7 @@ static void handle_put_logo(const char *arguments)
     esp_restart();
 }
 
+
 static void transfer_task(void *argument)
 {
     (void)argument;
@@ -356,7 +359,10 @@ esp_err_t uart_file_transfer_start(void)
         ESP_RETURN_ON_ERROR(uart_driver_install(TRANSFER_UART, 8192, 8192, 0, NULL, 0),
                             TAG, "UART driver install failed");
     }
-    if (xTaskCreate(transfer_task, "uart_files", 6144, NULL, 4, NULL) != pdPASS) {
+    /* Stack in PSRAM: internal RAM is nearly all taken by LVGL objects by the
+       time this starts, and this task never runs with the cache disabled. */
+    if (xTaskCreateWithCaps(transfer_task, "uart_files", 6144, NULL, 4, NULL,
+                            MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
     ESP_LOGI(TAG, "UART log/theme transfer ready at %d baud", TRANSFER_BAUD);
