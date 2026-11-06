@@ -8,6 +8,7 @@
  */
 
 #include "wifi_update.h"
+#include "rotary_controller_uart.h"
 
 #define FW_POLL_MS 250
 
@@ -469,6 +470,94 @@ static void fw_build_update_page(lv_obj_t *panel)
     lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 }
 
+/* ------------------------------ knob page -------------------------- */
+
+static lv_obj_t *s_knob_switch;
+static lv_obj_t *s_knob_dot;
+static lv_obj_t *s_knob_title;
+static lv_obj_t *s_knob_detail;
+
+static void knob_switch_cb(lv_event_t *e)
+{
+    bool on = lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED);
+    dash_config_set_wireless_knob(on);
+    wifi_update_knob_network(on);
+}
+
+static void knob_refresh(const wu_status_t *st)
+{
+    char version[24] = "";
+    bool connected = rotary_controller_wireless_status(version, sizeof(version));
+    bool enabled = dash_config_get_wireless_knob();
+    char title[48], detail[96];
+    lv_color_t dot = V2_DIM;
+    if (!enabled) {
+        snprintf(title, sizeof(title), "Wireless knob is off");
+        snprintf(detail, sizeof(detail), "Turn it on to use a knob without a data cable.");
+    } else if (connected) {
+        snprintf(title, sizeof(title), "Knob connected");
+        int n = snprintf(detail, sizeof(detail), "Knob firmware %s", version[0] ? version : "1.1 or older");
+        if (st->knob_rssi) snprintf(detail + n, sizeof(detail) - n, "  |  signal %d dBm", st->knob_rssi);
+        dot = V2_GREEN;
+    } else if (st->knob_ap) {
+        snprintf(title, sizeof(title), "Waiting for the knob");
+        snprintf(detail, sizeof(detail), "Dash network %s is on. Power the knob and it joins by itself.",
+                 st->knob_ssid);
+        dot = V2_AMBER;
+    } else {
+        snprintf(title, sizeof(title), "Starting knob network...");
+        detail[0] = '\0';
+        dot = V2_AMBER;
+    }
+    set_label_text_if_changed(s_knob_title, title);
+    set_label_text_if_changed(s_knob_detail, detail);
+    ui_set_bg_color(s_knob_dot, dot, LV_PART_MAIN);
+    if (enabled != lv_obj_has_state(s_knob_switch, LV_STATE_CHECKED)) {
+        if (enabled) lv_obj_add_state(s_knob_switch, LV_STATE_CHECKED);
+        else lv_obj_clear_state(s_knob_switch, LV_STATE_CHECKED);
+    }
+}
+
+static void fw_build_knob_page(lv_obj_t *panel)
+{
+    lv_obj_t *page = make_plain_container(panel);
+    s_page_knob = page;
+    lv_obj_set_size(page, LV_PCT(100), LV_PCT(100));
+    lv_obj_add_flag(page, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(page, 12, LV_PART_MAIN);
+    lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *card = fw_card(page, 92);
+    lv_obj_t *name = v2_label(card, "Wireless knob", &v2_font_label16, V2_TEXT);
+    lv_obj_set_pos(name, 0, 4);
+    lv_obj_t *hint = v2_label(card, "Connects the MackoDash knob over Wi-Fi. Only power is wired.",
+                              &v2_font_label13, V2_LABEL);
+    lv_obj_set_pos(hint, 0, 32);
+    s_knob_switch = lv_switch_create(card);
+    lv_obj_set_size(s_knob_switch, 72, 38);
+    lv_obj_align(s_knob_switch, LV_ALIGN_RIGHT_MID, 0, 0);
+    ui_set_bg_color(s_knob_switch, V2_RED, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    if (dash_config_get_wireless_knob()) lv_obj_add_state(s_knob_switch, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(s_knob_switch, knob_switch_cb, LV_EVENT_VALUE_CHANGED, NULL);
+
+    lv_obj_t *status = fw_card(page, 92);
+    s_knob_dot = v2_box(status, 0, 8, 12, 12, V2_DIM, 6);
+    s_knob_title = v2_label(status, "", &v2_font_label16, V2_TEXT);
+    lv_obj_set_pos(s_knob_title, 24, 2);
+    s_knob_detail = v2_label(status, "", &v2_font_label13, V2_LABEL);
+    lv_obj_set_pos(s_knob_detail, 24, 30);
+    lv_obj_set_width(s_knob_detail, LV_PCT(95));
+    lv_label_set_long_mode(s_knob_detail, LV_LABEL_LONG_WRAP);
+
+    lv_obj_t *note = v2_label(page,
+                              "The knob joins the nearest MackoDash by itself. Knobs need firmware 1.2.0 or "
+                              "newer for wireless; install it once with the MackoDash USB updater.",
+                              &v2_font_label13, V2_DIM);
+    lv_obj_set_width(note, LV_PCT(100));
+    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+}
+
 /* ------------------------------ lifecycle --------------------------- */
 
 static void fw_refresh(void)
@@ -482,6 +571,7 @@ static void fw_refresh(void)
     }
     if (s_page_wifi && !lv_obj_has_flag(s_page_wifi, LV_OBJ_FLAG_HIDDEN)) wifi_refresh(&st);
     if (s_page_update && !lv_obj_has_flag(s_page_update, LV_OBJ_FLAG_HIDDEN)) fw_update_refresh(&st);
+    if (s_page_knob && !lv_obj_has_flag(s_page_knob, LV_OBJ_FLAG_HIDDEN)) knob_refresh(&st);
 }
 
 static void fw_timer_cb(lv_timer_t *timer)
@@ -506,6 +596,13 @@ static void fw_on_page_shown(lv_obj_t *page)
         fw_refresh();
         return;
     }
+    if (page && page == s_page_knob) {
+        /* the knob network is separate from home Wi-Fi: leave the station off */
+        wifi_update_radio_off();
+        if (!s_fw_timer) s_fw_timer = lv_timer_create(fw_timer_cb, FW_POLL_MS, NULL);
+        fw_refresh();
+        return;
+    }
     wifi_pw_close();
     s_fw_auto_check = false;
     if (s_fw_timer && !s_fw_ota_mode) {   /* keep watching an install that is still running */
@@ -519,4 +616,5 @@ static void fw_build_pages(lv_obj_t *panel)
 {
     fw_build_wifi_page(panel);
     fw_build_update_page(panel);
+    fw_build_knob_page(panel);
 }

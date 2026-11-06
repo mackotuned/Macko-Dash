@@ -467,6 +467,8 @@ void app_main(void) {
 #else
     /* home Wi-Fi firmware updates; also confirms this firmware booted fine */
     wifi_update_init();
+    /* wireless knob: its Wi-Fi network is the last thing to start */
+    if (dash_config_get_wireless_knob()) wifi_update_knob_network(true);
 #endif
 
     vTaskDelay(pdMS_TO_TICKS(1));

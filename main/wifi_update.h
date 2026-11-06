@@ -18,6 +18,11 @@ extern "C" {
 
 #define WU_MAX_APS 16
 
+/* Wireless knob network. The knob joins the strongest network whose name
+   starts with this prefix, using this password (must match the knob). */
+#define WU_KNOB_SSID_PREFIX "MackoDash-"
+#define WU_KNOB_PASSWORD    "mackodash-knob-link"
+
 typedef struct {
     char ssid[33];      /* exact network name, may contain trailing spaces */
     int8_t rssi;
@@ -55,6 +60,9 @@ typedef struct {
     char latest[24];        /* latest version on GitHub, e.g. "3.3.0" */
     char upd_detail[96];
     int progress;           /* 0-100 while downloading */
+    bool knob_ap;           /* knob network is running */
+    char knob_ssid[33];
+    int knob_rssi;          /* signal of the connected knob, 0 if none */
 } wu_status_t;
 
 /* Call once after the dash is up: confirms this firmware booted fine
@@ -68,6 +76,9 @@ int wifi_update_get_aps(wu_ap_t *out, int max);
 void wifi_update_connect(const char *ssid, const char *password);
 void wifi_update_forget(void);
 bool wifi_update_saved_ssid(char *out, size_t len);
+
+/* Start/stop the private network the wireless knob joins. */
+void wifi_update_knob_network(bool on);
 
 void wifi_update_check(void);
 void wifi_update_install(void);

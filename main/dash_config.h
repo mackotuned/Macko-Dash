@@ -61,6 +61,9 @@ int  dash_config_get_redline_rpm(void);
 void dash_config_set_vtec_rpm(int rpm);
 /* VTEC indicator on MackoDash V2 (off by default: not every car has VTEC) */
 bool dash_config_get_show_vtec(void);
+/* Wireless knob: the dash runs a private Wi-Fi network the knob joins. */
+bool dash_config_get_wireless_knob(void);
+void dash_config_set_wireless_knob(bool enabled);
 void dash_config_set_show_vtec(bool show);
 void dash_config_set_redline_rpm(int rpm);
 

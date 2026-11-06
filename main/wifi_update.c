@@ -18,6 +18,8 @@
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_mac.h"
+#include "esp_timer.h"
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
@@ -28,6 +30,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "nvs.h"
+#include "rotary_controller_uart.h"
 
 #define RELEASE_API_URL "https://api.github.com/repos/mackotuned/MackoDash-Flash-Tools/releases/latest"
 #define FIRMWARE_ASSET  "mackodash.bin"
@@ -47,6 +50,8 @@ enum {
     CMD_FORGET,
     CMD_CHECK,
     CMD_INSTALL,
+    CMD_KNOB_ON,
+    CMD_KNOB_OFF,
 };
 
 typedef struct {
@@ -62,8 +67,12 @@ static int s_ap_count;
 
 /* worker-task-only state */
 static bool s_wifi_ready;
-static bool s_radio_on;
+static bool s_radio_on;          /* home Wi-Fi (station) wanted */
+static bool s_knob_ap;           /* knob network (access point) wanted */
+static bool s_started;           /* esp_wifi_start() done */
 static esp_netif_t *s_netif;
+static esp_netif_t *s_ap_netif;
+static int64_t s_knob_poll_us;
 static int s_connect_tries;
 static int s_ignore_disconnects;
 static bool s_save_on_connect;
@@ -271,6 +280,7 @@ static bool wifi_ready(void)
     err = esp_event_loop_create_default();
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) goto fail;
     if (!s_netif) s_netif = esp_netif_create_default_wifi_sta();
+    if (!s_ap_netif) s_ap_netif = esp_netif_create_default_wifi_ap();
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL);
     esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_wifi_event, NULL);
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -312,19 +322,97 @@ static void start_connect(const char *ssid, const char *pass, bool save)
     if (err != ESP_OK) set_wifi(WU_WIFI_FAILED, s_conn_ssid, "Could not connect (%s)", esp_err_to_name(err));
 }
 
+/* Station (home Wi-Fi) and access point (knob network) can run together. */
+static esp_err_t apply_mode(void)
+{
+    wifi_mode_t mode = s_radio_on ? (s_knob_ap ? WIFI_MODE_APSTA : WIFI_MODE_STA)
+                                  : (s_knob_ap ? WIFI_MODE_AP : WIFI_MODE_NULL);
+    if (mode == WIFI_MODE_NULL) {
+        if (s_started) esp_wifi_stop();
+        s_started = false;
+        return ESP_OK;
+    }
+    esp_err_t err = esp_wifi_set_mode(mode);
+    if (err != ESP_OK) return err;
+    if (s_knob_ap) {
+        wifi_config_t ap = {0};
+        lock();
+        size_t ssid_len = strnlen(s_status.knob_ssid, sizeof(ap.ap.ssid));
+        memcpy(ap.ap.ssid, s_status.knob_ssid, ssid_len);
+        unlock();
+        ap.ap.ssid_len = (uint8_t)ssid_len;
+        snprintf((char *)ap.ap.password, sizeof(ap.ap.password), "%s", WU_KNOB_PASSWORD);
+        ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
+        ap.ap.channel = 1;            /* follows the home network's channel when connected */
+        ap.ap.max_connection = 2;
+        ap.ap.pmf_cfg.capable = true;
+        err = esp_wifi_set_config(WIFI_IF_AP, &ap);
+        if (err != ESP_OK) return err;
+    }
+    if (!s_started) {
+        err = esp_wifi_start();
+        if (err != ESP_OK) return err;
+        s_started = true;
+    }
+    return ESP_OK;
+}
+
+static void knob_on(void)
+{
+    if (s_knob_ap) return;
+    if (!wifi_ready()) return;
+    s_knob_ap = true;
+    esp_err_t err = apply_mode();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "knob network did not start: %s", esp_err_to_name(err));
+        s_knob_ap = false;
+        return;
+    }
+    err = rotary_controller_net_start();
+    lock();
+    s_status.knob_ap = true;
+    unlock();
+    ESP_LOGI(TAG, "knob network up (%s)", esp_err_to_name(err));
+}
+
+static void knob_off(void)
+{
+    if (!s_knob_ap) return;
+    s_knob_ap = false;
+    apply_mode();
+    lock();
+    s_status.knob_ap = false;
+    s_status.knob_rssi = 0;
+    unlock();
+}
+
+static void knob_poll(void)
+{
+    if (!s_knob_ap) return;
+    int64_t now = esp_timer_get_time();
+    if (now - s_knob_poll_us < 2000000) return;
+    s_knob_poll_us = now;
+    wifi_sta_list_t list = {0};
+    int rssi = 0;
+    if (esp_wifi_ap_get_sta_list(&list) == ESP_OK && list.num > 0) rssi = list.sta[0].rssi;
+    lock();
+    s_status.knob_rssi = rssi;
+    unlock();
+}
+
 static void radio_on(void)
 {
     if (s_radio_on) return;
     ESP_LOGI(TAG, "radio on");
     set_wifi(WU_WIFI_STARTING, "", "Starting Wi-Fi...");
     if (!wifi_ready()) return;
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_err_t err = esp_wifi_start();
+    s_radio_on = true;
+    esp_err_t err = apply_mode();
     if (err != ESP_OK) {
+        s_radio_on = false;
         set_wifi(WU_WIFI_ERROR, "", "Wi-Fi did not start (%s)", esp_err_to_name(err));
         return;
     }
-    s_radio_on = true;
     char ssid[33], pass[65];
     lock();
     snprintf(ssid, sizeof(ssid), "%s", s_saved_ssid);
@@ -341,8 +429,8 @@ static void radio_off(void)
     wu_wifi_state_t state = wifi_state();
     if (state == WU_WIFI_CONNECTED || state == WU_WIFI_CONNECTING) s_ignore_disconnects++;
     esp_wifi_disconnect();
-    esp_wifi_stop();
     s_radio_on = false;
+    apply_mode();               /* keeps the knob network running if it is on */
     s_scan_retry_at = 0;
     lock();
     s_status.scanning = false;
@@ -715,6 +803,7 @@ static void worker(void *arg)
     for (;;) {
         wu_msg_t msg;
         if (xQueueReceive(s_queue, &msg, pdMS_TO_TICKS(250)) != pdTRUE) {
+            knob_poll();
             if (s_scan_retry_at && (int32_t)(xTaskGetTickCount() - s_scan_retry_at) >= 0) {
                 s_scan_retry_at = 0;
                 scan_start();
@@ -752,6 +841,8 @@ static void worker(void *arg)
             break;
         case CMD_CHECK: check_for_update(); break;
         case CMD_INSTALL: install_update(); break;
+        case CMD_KNOB_ON: knob_on(); break;
+        case CMD_KNOB_OFF: knob_off(); break;
         default: break;
         }
     }
@@ -783,6 +874,12 @@ void wifi_update_init(void)
         esp_ota_mark_app_valid_cancel_rollback();
     }
     creds_load();
+    /* knob network name: MackoDash-XXXX from this dash's MAC address */
+    uint8_t mac[6] = {0};
+    esp_efuse_mac_get_default(mac);
+    lock();
+    snprintf(s_status.knob_ssid, sizeof(s_status.knob_ssid), "%s%02X%02X", WU_KNOB_SSID_PREFIX, mac[4], mac[5]);
+    unlock();
 }
 
 void wifi_update_radio_on(void) { ensure_task(); post(CMD_RADIO_ON, 0); }
@@ -791,6 +888,7 @@ void wifi_update_scan(void) { ensure_task(); post(CMD_SCAN, 0); }
 void wifi_update_forget(void) { ensure_task(); post(CMD_FORGET, 0); }
 void wifi_update_check(void) { ensure_task(); post(CMD_CHECK, 0); }
 void wifi_update_install(void) { ensure_task(); post(CMD_INSTALL, 0); }
+void wifi_update_knob_network(bool on) { ensure_task(); post(on ? CMD_KNOB_ON : CMD_KNOB_OFF, 0); }
 
 void wifi_update_connect(const char *ssid, const char *password)
 {
