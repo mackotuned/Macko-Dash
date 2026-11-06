@@ -29,6 +29,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "lwip/sockets.h"
 #include "nvs.h"
 #include "rotary_controller_uart.h"
 
@@ -36,6 +37,11 @@
 #define FIRMWARE_ASSET  "mackodash.bin"
 #define NVS_NS          "wifi_upd"
 #define API_BODY_MAX    (128 * 1024)
+#define KNOB_RELEASE_API_URL "https://api.github.com/repos/mackotuned/MackoDash-S3-Controller/releases/latest"
+#define KNOB_FIRMWARE_ASSET  "mackodash_rotary.bin"
+#define KNOB_PROJECT         "mackodash_rotary"
+#define KNOB_IMAGE_MAX       (3 * 1024 * 1024)   /* the knob's app slot */
+#define KNOB_HTTP_PORT       8080
 
 static const char *TAG = "wifi_update";
 
@@ -52,6 +58,8 @@ enum {
     CMD_INSTALL,
     CMD_KNOB_ON,
     CMD_KNOB_OFF,
+    CMD_KNOB_CHECK,
+    CMD_KNOB_INSTALL,
 };
 
 typedef struct {
@@ -425,7 +433,7 @@ static void radio_on(void)
 static void radio_off(void)
 {
     if (!s_radio_on) return;
-    if (upd_state() == WU_UPD_DOWNLOADING) return;
+    if (upd_state() == WU_UPD_DOWNLOADING || s_status.knob_upd == WU_UPD_DOWNLOADING) return;
     wu_wifi_state_t state = wifi_state();
     if (state == WU_WIFI_CONNECTED || state == WU_WIFI_CONNECTING) s_ignore_disconnects++;
     esp_wifi_disconnect();
@@ -582,21 +590,21 @@ static int compare_versions(const char *a, const char *b)
     return 0;
 }
 
-static void check_for_update(void)
-{
-    if (wifi_state() != WU_WIFI_CONNECTED) {
-        set_upd(WU_UPD_ERROR, "Connect to Wi-Fi first");
-        return;
-    }
-    set_upd(WU_UPD_CHECKING, "Checking for updates...");
+typedef struct {
+    char latest[24];
+    char *url;          /* download URL of the wanted asset, NULL if missing */
+    int size;
+} release_t;
 
+/* Reads a GitHub repository's latest release. NULL on success, else a message. */
+static const char *fetch_release(const char *api_url, const char *asset_name, release_t *out)
+{
+    static char message[96];
+    memset(out, 0, sizeof(*out));
     body_t body = {.data = heap_caps_malloc(API_BODY_MAX, MALLOC_CAP_SPIRAM), .len = 0};
-    if (!body.data) {
-        set_upd(WU_UPD_ERROR, "Out of memory");
-        return;
-    }
+    if (!body.data) return "Out of memory";
     esp_http_client_config_t hc = {
-        .url = RELEASE_API_URL,
+        .url = api_url,
         .crt_bundle_attach = esp_crt_bundle_attach,
         .event_handler = collect_body,
         .user_data = &body,
@@ -613,12 +621,12 @@ static void check_for_update(void)
     body.data[body.len] = '\0';
 
     if (err != ESP_OK || status != 200) {
-        ESP_LOGW(TAG, "release check failed: %s, HTTP %d", esp_err_to_name(err), status);
-        if (err != ESP_OK) set_upd(WU_UPD_ERROR, "Could not reach GitHub (%s)", esp_err_to_name(err));
-        else if (status == 403 || status == 429) set_upd(WU_UPD_ERROR, "GitHub is busy, try again in a few minutes");
-        else set_upd(WU_UPD_ERROR, "GitHub answered %d", status);
         free(body.data);
-        return;
+        ESP_LOGW(TAG, "release check failed: %s, HTTP %d", esp_err_to_name(err), status);
+        if (err != ESP_OK) snprintf(message, sizeof(message), "Could not reach GitHub (%s)", esp_err_to_name(err));
+        else if (status == 403 || status == 429) snprintf(message, sizeof(message), "GitHub is busy, try again in a few minutes");
+        else snprintf(message, sizeof(message), "GitHub answered %d", status);
+        return message;
     }
 
     cJSON *root = cJSON_Parse(body.data);
@@ -626,38 +634,50 @@ static void check_for_update(void)
     const cJSON *tag = root ? cJSON_GetObjectItem(root, "tag_name") : NULL;
     if (!cJSON_IsString(tag)) {
         cJSON_Delete(root);
-        set_upd(WU_UPD_ERROR, "Could not read the release information");
-        return;
+        return "Could not read the release information";
     }
-    char latest[24];
-    snprintf(latest, sizeof(latest), "%s", tag->valuestring[0] == 'v' ? tag->valuestring + 1 : tag->valuestring);
-
-    free(s_bin_url);
-    s_bin_url = NULL;
-    s_bin_size = 0;
+    snprintf(out->latest, sizeof(out->latest), "%s", tag->valuestring[0] == 'v' ? tag->valuestring + 1 : tag->valuestring);
     const cJSON *asset;
     cJSON_ArrayForEach(asset, cJSON_GetObjectItem(root, "assets")) {
         const cJSON *name = cJSON_GetObjectItem(asset, "name");
         const cJSON *url = cJSON_GetObjectItem(asset, "browser_download_url");
         const cJSON *size = cJSON_GetObjectItem(asset, "size");
-        if (cJSON_IsString(name) && strcmp(name->valuestring, FIRMWARE_ASSET) == 0 && cJSON_IsString(url)) {
-            s_bin_url = strdup(url->valuestring);
-            s_bin_size = cJSON_IsNumber(size) ? size->valueint : 0;
+        if (cJSON_IsString(name) && strcmp(name->valuestring, asset_name) == 0 && cJSON_IsString(url)) {
+            out->url = strdup(url->valuestring);
+            out->size = cJSON_IsNumber(size) ? size->valueint : 0;
         }
     }
     cJSON_Delete(root);
+    return NULL;
+}
 
+static void check_for_update(void)
+{
+    if (wifi_state() != WU_WIFI_CONNECTED) {
+        set_upd(WU_UPD_ERROR, "Connect to Wi-Fi first");
+        return;
+    }
+    set_upd(WU_UPD_CHECKING, "Checking for updates...");
+    release_t rel;
+    const char *problem = fetch_release(RELEASE_API_URL, FIRMWARE_ASSET, &rel);
+    if (problem) {
+        set_upd(WU_UPD_ERROR, "%s", problem);
+        return;
+    }
+    free(s_bin_url);
+    s_bin_url = rel.url;
+    s_bin_size = rel.size;
     lock();
-    snprintf(s_status.latest, sizeof(s_status.latest), "%s", latest);
+    snprintf(s_status.latest, sizeof(s_status.latest), "%s", rel.latest);
     unlock();
 
     const esp_app_desc_t *app = esp_app_get_description();
-    if (compare_versions(latest, app->version) <= 0) {
+    if (compare_versions(rel.latest, app->version) <= 0) {
         set_upd(WU_UPD_CURRENT, "You have the latest version");
     } else if (!s_bin_url) {
-        set_upd(WU_UPD_USB_ONLY, "Version %s must be installed with the MackoDash USB updater", latest);
+        set_upd(WU_UPD_USB_ONLY, "Version %s must be installed with the MackoDash USB updater", rel.latest);
     } else {
-        set_upd(WU_UPD_AVAILABLE, "Version %s is ready to install", latest);
+        set_upd(WU_UPD_AVAILABLE, "Version %s is ready to install", rel.latest);
     }
 }
 
@@ -671,6 +691,8 @@ typedef struct {
     size_t len;
     size_t cap;
     size_t expected;
+    int *progress;      /* status field to update, scaled to 0..span */
+    int span;
 } image_buf_t;
 
 static esp_err_t collect_image(esp_http_client_event_t *e)
@@ -682,12 +704,58 @@ static esp_err_t collect_image(esp_http_client_event_t *e)
     if (img->len + e->data_len > img->cap) return ESP_FAIL;
     memcpy(img->data + img->len, e->data, e->data_len);
     img->len += e->data_len;
-    if (img->expected) {
+    if (img->expected && img->progress) {
         lock();
-        s_status.progress = (int)((int64_t)img->len * 85 / img->expected);
+        *img->progress = (int)((int64_t)img->len * img->span / img->expected);
         unlock();
     }
     return ESP_OK;
+}
+
+/* Downloads a firmware image into PSRAM and checks it is an app image of the
+   given project. NULL on success (img->data owned by the caller). */
+static const char *download_image(const char *url, size_t cap, size_t expected, const char *project,
+                                  int *progress, int span, image_buf_t *img)
+{
+    static char message[96];
+    *img = (image_buf_t){.cap = cap, .expected = expected, .progress = progress, .span = span};
+    img->data = heap_caps_malloc(cap, MALLOC_CAP_SPIRAM);
+    if (!img->data) return "Out of memory";
+    esp_http_client_config_t hc = {
+        .url = url,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+        .event_handler = collect_image,
+        .user_data = img,
+        .user_agent = "MackoDash",
+        .timeout_ms = 20000,
+        .buffer_size = 8192,      /* GitHub's download redirect has a very long Location header */
+        .buffer_size_tx = 4096,
+        .max_redirection_count = 5,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&hc);
+    esp_err_t err = esp_http_client_perform(client);
+    int status = esp_http_client_get_status_code(client);
+    esp_http_client_cleanup(client);
+    ESP_LOGI(TAG, "download: %s, HTTP %d, %u bytes", esp_err_to_name(err), status, (unsigned)img->len);
+
+    const char *problem = NULL;
+    if (err != ESP_OK || status != 200 || img->len == 0 || (img->expected && img->len != img->expected)) {
+        snprintf(message, sizeof(message), "Download failed (%s). Nothing was changed.",
+                 err != ESP_OK ? esp_err_to_name(err) : "incomplete");
+        problem = message;
+    } else {
+        const esp_app_desc_t *desc = (const esp_app_desc_t *)(img->data + APP_DESC_OFFSET);
+        if (img->len < APP_DESC_OFFSET + sizeof(esp_app_desc_t) || (uint8_t)img->data[0] != IMAGE_MAGIC ||
+                desc->magic_word != ESP_APP_DESC_MAGIC_WORD ||
+                strncmp(desc->project_name, project, sizeof(desc->project_name)) != 0) {
+            problem = "The download is not the right firmware. Nothing was changed.";
+        }
+    }
+    if (problem) {
+        free(img->data);
+        img->data = NULL;
+    }
+    return problem;
 }
 
 typedef struct {
@@ -739,47 +807,17 @@ static void install_update(void)
 
     /* The whole image is downloaded into PSRAM and checked before anything is
        written, so a dropped connection can never leave a half-written slot. */
-    image_buf_t img = {.cap = part->size, .expected = s_bin_size > 0 ? (size_t)s_bin_size : 0};
-    img.data = heap_caps_malloc(img.cap, MALLOC_CAP_SPIRAM);
-    if (!img.data) {
-        set_upd(WU_UPD_ERROR, "Out of memory");
-        return;
-    }
-    esp_http_client_config_t hc = {
-        .url = s_bin_url,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-        .event_handler = collect_image,
-        .user_data = &img,
-        .user_agent = "MackoDash",
-        .timeout_ms = 20000,
-        .buffer_size = 8192,      /* GitHub's download redirect has a very long Location header */
-        .buffer_size_tx = 4096,
-        .max_redirection_count = 5,
-    };
-    esp_http_client_handle_t client = esp_http_client_init(&hc);
-    esp_err_t err = esp_http_client_perform(client);
-    int status = esp_http_client_get_status_code(client);
-    esp_http_client_cleanup(client);
-    ESP_LOGI(TAG, "download: %s, HTTP %d, %u bytes", esp_err_to_name(err), status, (unsigned)img.len);
-
-    if (err != ESP_OK || status != 200 || img.len == 0 || (img.expected && img.len != img.expected)) {
-        free(img.data);
-        set_upd(WU_UPD_ERROR, "Download failed (%s). Nothing was changed.",
-                err != ESP_OK ? esp_err_to_name(err) : "incomplete");
-        return;
-    }
-    const esp_app_desc_t *desc = (const esp_app_desc_t *)(img.data + APP_DESC_OFFSET);
-    if (img.len < APP_DESC_OFFSET + sizeof(esp_app_desc_t) || (uint8_t)img.data[0] != IMAGE_MAGIC ||
-            desc->magic_word != ESP_APP_DESC_MAGIC_WORD ||
-            strncmp(desc->project_name, esp_app_get_description()->project_name, sizeof(desc->project_name)) != 0) {
-        free(img.data);
-        set_upd(WU_UPD_ERROR, "The download is not MackoDash firmware. Nothing was changed.");
+    image_buf_t img;
+    const char *problem = download_image(s_bin_url, part->size, s_bin_size > 0 ? (size_t)s_bin_size : 0,
+                                         esp_app_get_description()->project_name, &s_status.progress, 85, &img);
+    if (problem) {
+        set_upd(WU_UPD_ERROR, "%s", problem);
         return;
     }
 
     set_upd(WU_UPD_DOWNLOADING, "Installing...");
     write_job_t job = {.part = part, .data = img.data, .len = img.len};
-    err = run_flash_job(write_image_job, &job);
+    esp_err_t err = run_flash_job(write_image_job, &job);
     free(img.data);
     if (err != ESP_OK) {
         set_upd(WU_UPD_ERROR, err == ESP_ERR_OTA_VALIDATE_FAILED ? "The download was damaged. Nothing was changed."
@@ -795,6 +833,199 @@ static void install_update(void)
     esp_restart();
 }
 
+/* ---------------------------- knob updates --------------------------- */
+
+/* The dash downloads the knob firmware into PSRAM, serves it over plain HTTP
+   on the knob network and tells the knob (MD frame) where to fetch it. */
+
+static char *s_knob_bin_url;
+static int s_knob_bin_size;
+static image_buf_t s_knob_img;
+static int s_knob_phase;                /* 0 idle, 1 sending, 2 waiting for the new version */
+static int64_t s_knob_deadline_us;
+static int64_t s_knob_announce_us;
+static volatile size_t s_srv_sent;
+static volatile bool s_srv_client;
+static volatile bool s_srv_done;
+static volatile bool s_srv_ok;
+
+static void set_knob_upd(wu_upd_state_t state, const char *fmt, ...)
+{
+    lock();
+    s_status.knob_upd = state;
+    if (fmt) {
+        va_list ap;
+        va_start(ap, fmt);
+        vsnprintf(s_status.knob_upd_detail, sizeof(s_status.knob_upd_detail), fmt, ap);
+        va_end(ap);
+    } else {
+        s_status.knob_upd_detail[0] = '\0';
+    }
+    unlock();
+}
+
+static void knob_server_task(void *arg)
+{
+    (void)arg;
+    bool ok = false;
+    int listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (listener >= 0) {
+        int yes = 1;
+        setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        struct sockaddr_in addr = {.sin_family = AF_INET, .sin_port = htons(KNOB_HTTP_PORT),
+                                   .sin_addr.s_addr = htonl(INADDR_ANY)};
+        if (bind(listener, (struct sockaddr *)&addr, sizeof(addr)) == 0 && listen(listener, 1) == 0) {
+            struct timeval wait = {.tv_sec = 60, .tv_usec = 0};
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(listener, &fds);
+            if (select(listener + 1, &fds, NULL, NULL, &wait) > 0) {
+                int client = accept(listener, NULL, NULL);
+                if (client >= 0) {
+                    s_srv_client = true;
+                    struct timeval io = {.tv_sec = 15, .tv_usec = 0};
+                    setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &io, sizeof(io));
+                    setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &io, sizeof(io));
+                    char request[512];
+                    recv(client, request, sizeof(request), 0);    /* any GET gets the image */
+                    char header[128];
+                    int hl = snprintf(header, sizeof(header),
+                                      "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
+                                      "Content-Length: %u\r\nConnection: close\r\n\r\n", (unsigned)s_knob_img.len);
+                    ok = send(client, header, hl, 0) == hl;
+                    for (size_t off = 0; ok && off < s_knob_img.len;) {
+                        size_t n = s_knob_img.len - off < 4096 ? s_knob_img.len - off : 4096;
+                        int sent = send(client, s_knob_img.data + off, n, 0);
+                        if (sent <= 0) ok = false;
+                        else off += sent, s_srv_sent = off;
+                    }
+                    shutdown(client, SHUT_WR);
+                    vTaskDelay(pdMS_TO_TICKS(200));
+                    close(client);
+                }
+            }
+        }
+        close(listener);
+    }
+    s_srv_ok = ok;
+    s_srv_done = true;
+    vTaskDeleteWithCaps(NULL);
+}
+
+static void knob_check(void)
+{
+    if (wifi_state() != WU_WIFI_CONNECTED) {
+        set_knob_upd(WU_UPD_ERROR, "Connect the dash to Wi-Fi first");
+        return;
+    }
+    char version[24] = "";
+    if (!rotary_controller_wireless_status(version, sizeof(version))) {
+        set_knob_upd(WU_UPD_ERROR, "The knob is not connected");
+        return;
+    }
+    set_knob_upd(WU_UPD_CHECKING, "Checking for knob updates...");
+    release_t rel;
+    const char *problem = fetch_release(KNOB_RELEASE_API_URL, KNOB_FIRMWARE_ASSET, &rel);
+    if (problem) {
+        set_knob_upd(WU_UPD_ERROR, "%s", problem);
+        return;
+    }
+    free(s_knob_bin_url);
+    s_knob_bin_url = rel.url;
+    s_knob_bin_size = rel.size;
+    lock();
+    snprintf(s_status.knob_latest, sizeof(s_status.knob_latest), "%s", rel.latest);
+    unlock();
+    if (!version[0]) {
+        set_knob_upd(WU_UPD_USB_ONLY, "Install knob 1.2.0 with the USB updater once to update it from here");
+    } else if (compare_versions(rel.latest, version) <= 0) {
+        set_knob_upd(WU_UPD_CURRENT, "The knob has the latest version");
+    } else if (!s_knob_bin_url) {
+        set_knob_upd(WU_UPD_USB_ONLY, "Knob %s must be installed with the USB updater", rel.latest);
+    } else {
+        set_knob_upd(WU_UPD_AVAILABLE, "Knob %s is ready to install", rel.latest);
+    }
+}
+
+static void knob_install(void)
+{
+    lock();
+    bool ready = s_status.knob_upd == WU_UPD_AVAILABLE;
+    s_status.knob_progress = 0;
+    unlock();
+    if (!ready || !s_knob_bin_url || s_knob_phase) return;
+    set_knob_upd(WU_UPD_DOWNLOADING, "Downloading knob firmware...");
+    const char *problem = download_image(s_knob_bin_url, KNOB_IMAGE_MAX,
+                                         s_knob_bin_size > 0 ? (size_t)s_knob_bin_size : 0, KNOB_PROJECT,
+                                         &s_status.knob_progress, 40, &s_knob_img);
+    if (problem) {
+        set_knob_upd(WU_UPD_ERROR, "%s", problem);
+        return;
+    }
+    s_srv_sent = 0;
+    s_srv_client = s_srv_done = s_srv_ok = false;
+    if (xTaskCreateWithCaps(knob_server_task, "knob_srv", 4096, NULL, 4, NULL, MALLOC_CAP_SPIRAM) != pdPASS) {
+        free(s_knob_img.data);
+        s_knob_img.data = NULL;
+        set_knob_upd(WU_UPD_ERROR, "Out of memory");
+        return;
+    }
+    s_knob_phase = 1;
+    s_knob_announce_us = 0;
+    s_knob_deadline_us = esp_timer_get_time() + 90LL * 1000 * 1000;
+    set_knob_upd(WU_UPD_DOWNLOADING, "Sending to the knob...");
+}
+
+/* Drives a running knob update; called from the worker loop. */
+static void knob_tick(void)
+{
+    if (!s_knob_phase) return;
+    int64_t now = esp_timer_get_time();
+    char latest[24];
+    lock();
+    snprintf(latest, sizeof(latest), "%s", s_status.knob_latest);
+    unlock();
+
+    if (s_knob_phase == 1) {
+        if (!s_srv_client && now >= s_knob_announce_us) {
+            s_knob_announce_us = now + 2000000;
+            rotary_controller_send_knob_update(KNOB_HTTP_PORT, (uint32_t)s_knob_img.len, latest);
+        }
+        if (s_knob_img.len) {
+            lock();
+            s_status.knob_progress = 40 + (int)((int64_t)s_srv_sent * 55 / s_knob_img.len);
+            unlock();
+        }
+        if (s_srv_done) {
+            free(s_knob_img.data);
+            s_knob_img.data = NULL;
+            if (!s_srv_ok) {
+                s_knob_phase = 0;
+                set_knob_upd(WU_UPD_ERROR, s_srv_client ? "Sending to the knob failed. Try again."
+                                                        : "The knob did not answer. Try again.");
+                return;
+            }
+            s_knob_phase = 2;
+            s_knob_deadline_us = now + 90LL * 1000 * 1000;
+            set_knob_upd(WU_UPD_DOWNLOADING, "The knob is installing...");
+        }
+        return;
+    }
+
+    char version[24] = "";
+    bool connected = rotary_controller_wireless_status(version, sizeof(version));
+    if (connected && compare_versions(version, latest) == 0) {
+        s_knob_phase = 0;
+        lock();
+        s_status.knob_progress = 100;
+        unlock();
+        set_knob_upd(WU_UPD_CURRENT, "Knob updated to %s", latest);
+    } else if (now > s_knob_deadline_us) {
+        s_knob_phase = 0;
+        set_knob_upd(WU_UPD_ERROR, "The knob did not come back with the new version");
+    }
+}
+
 /* ------------------------------ worker ------------------------------ */
 
 static void worker(void *arg)
@@ -804,6 +1035,7 @@ static void worker(void *arg)
         wu_msg_t msg;
         if (xQueueReceive(s_queue, &msg, pdMS_TO_TICKS(250)) != pdTRUE) {
             knob_poll();
+            knob_tick();
             if (s_scan_retry_at && (int32_t)(xTaskGetTickCount() - s_scan_retry_at) >= 0) {
                 s_scan_retry_at = 0;
                 scan_start();
@@ -843,6 +1075,8 @@ static void worker(void *arg)
         case CMD_INSTALL: install_update(); break;
         case CMD_KNOB_ON: knob_on(); break;
         case CMD_KNOB_OFF: knob_off(); break;
+        case CMD_KNOB_CHECK: knob_check(); break;
+        case CMD_KNOB_INSTALL: knob_install(); break;
         default: break;
         }
     }
@@ -889,6 +1123,8 @@ void wifi_update_forget(void) { ensure_task(); post(CMD_FORGET, 0); }
 void wifi_update_check(void) { ensure_task(); post(CMD_CHECK, 0); }
 void wifi_update_install(void) { ensure_task(); post(CMD_INSTALL, 0); }
 void wifi_update_knob_network(bool on) { ensure_task(); post(on ? CMD_KNOB_ON : CMD_KNOB_OFF, 0); }
+void wifi_update_knob_check(void) { ensure_task(); post(CMD_KNOB_CHECK, 0); }
+void wifi_update_knob_install(void) { ensure_task(); post(CMD_KNOB_INSTALL, 0); }
 
 void wifi_update_connect(const char *ssid, const char *password)
 {

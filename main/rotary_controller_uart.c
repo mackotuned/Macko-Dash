@@ -44,6 +44,8 @@ static int s_sock = -1;
 static portMUX_TYPE s_knob_lock = portMUX_INITIALIZER_UNLOCKED;
 static int64_t s_knob_last_rx;
 static char s_knob_version[24];
+static struct sockaddr_in s_knob_addr;
+static bool s_knob_addr_valid;
 
 typedef struct {
     uint8_t data[ROTARY_PROTOCOL_MAX_FRAME];
@@ -116,6 +118,8 @@ static void handle_frame(const uint8_t *frame, size_t frame_length, reply_to_t t
     if (to) {
         portENTER_CRITICAL(&s_knob_lock);
         s_knob_last_rx = esp_timer_get_time();
+        s_knob_addr = *to;
+        s_knob_addr_valid = true;
         /* knob 1.2.0+ puts its firmware version in the PING payload */
         if (type == ROTARY_PROTOCOL_PING && payload_length > 0) {
             size_t n = payload_length < sizeof(s_knob_version) - 1 ? payload_length : sizeof(s_knob_version) - 1;
@@ -285,6 +289,21 @@ esp_err_t rotary_controller_net_start(void)
     esp_err_t err = start_controller_task();
     ESP_LOGI(TAG, "Wireless knob link listening on UDP %d", KNOB_UDP_PORT);
     return err;
+}
+
+bool rotary_controller_send_knob_update(uint16_t port, uint32_t size, const char *version)
+{
+    portENTER_CRITICAL(&s_knob_lock);
+    bool valid = s_knob_addr_valid;
+    struct sockaddr_in to = s_knob_addr;
+    portEXIT_CRITICAL(&s_knob_lock);
+    if (!valid) return false;
+    uint8_t payload[6 + 24] = {0};
+    rotary_protocol_put_u16(&payload[0], port);
+    rotary_protocol_put_u32(&payload[2], size);
+    size_t n = version ? strnlen(version, 23) : 0;
+    memcpy(&payload[6], version, n);
+    return send_frame(&to, ROTARY_PROTOCOL_KNOB_UPDATE, ++s_tx_sequence, payload, (uint16_t)(6 + n)) == ESP_OK;
 }
 
 bool rotary_controller_wireless_status(char *version, size_t version_len)

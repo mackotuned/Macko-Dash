@@ -21,6 +21,9 @@ esp_err_t rotary_controller_net_start(void);
    knob reports (empty for knobs older than 1.2.0). */
 bool rotary_controller_wireless_status(char *version, size_t version_len);
 
+/* Tells the wireless knob to fetch new firmware from the dash on this port. */
+bool rotary_controller_send_knob_update(uint16_t port, uint32_t size, const char *version);
+
 #ifdef __cplusplus
 }
 #endif

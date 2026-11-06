@@ -476,6 +476,58 @@ static lv_obj_t *s_knob_switch;
 static lv_obj_t *s_knob_dot;
 static lv_obj_t *s_knob_title;
 static lv_obj_t *s_knob_detail;
+static lv_obj_t *s_knob_upd_status;
+static lv_obj_t *s_knob_upd_bar;
+static lv_obj_t *s_knob_upd_btn;
+static lv_obj_t *s_knob_upd_label;
+static bool s_knob_auto_check;
+
+static void knob_update_btn_cb(lv_event_t *e)
+{
+    (void)e;
+    wu_status_t st;
+    wifi_update_get_status(&st);
+    if (st.knob_upd == WU_UPD_AVAILABLE) {
+        wifi_update_knob_install();
+    } else {
+        /* the check needs home Wi-Fi: connect, then check once connected */
+        s_knob_auto_check = true;
+        wifi_update_radio_on();
+    }
+}
+
+static void knob_update_refresh(const wu_status_t *st, bool knob_connected)
+{
+    bool busy = st->knob_upd == WU_UPD_CHECKING || st->knob_upd == WU_UPD_DOWNLOADING;
+    const char *status = st->knob_upd_detail;
+    char button[40] = "CHECK FOR KNOB UPDATE";
+    if (st->knob_upd == WU_UPD_IDLE) status = "Uses the dash's home Wi-Fi to look for a newer knob version.";
+    if (s_knob_auto_check && !busy) {
+        if (st->wifi == WU_WIFI_CONNECTED) {
+            s_knob_auto_check = false;
+            wifi_update_knob_check();
+        } else if (st->wifi == WU_WIFI_FAILED || st->wifi == WU_WIFI_ERROR ||
+                   (st->wifi == WU_WIFI_IDLE && !st->ssid[0])) {
+            s_knob_auto_check = false;
+        } else {
+            status = "Connecting to Wi-Fi...";
+            busy = true;
+        }
+    }
+    if (st->knob_upd == WU_UPD_AVAILABLE) snprintf(button, sizeof(button), "UPDATE KNOB TO %s", st->knob_latest);
+    else if (st->knob_upd == WU_UPD_CHECKING) snprintf(button, sizeof(button), "CHECKING...");
+    else if (st->knob_upd == WU_UPD_DOWNLOADING) snprintf(button, sizeof(button), "UPDATING %d%%", st->knob_progress);
+    else if (busy) snprintf(button, sizeof(button), "CONNECTING...");
+    set_label_text_if_changed(s_knob_upd_status, status);
+    set_label_text_if_changed(s_knob_upd_label, button);
+    fw_set_enabled(s_knob_upd_btn, !busy && (knob_connected || st->knob_upd == WU_UPD_AVAILABLE));
+    if (st->knob_upd == WU_UPD_DOWNLOADING) {
+        lv_obj_clear_flag(s_knob_upd_bar, LV_OBJ_FLAG_HIDDEN);
+        lv_bar_set_value(s_knob_upd_bar, st->knob_progress, LV_ANIM_OFF);
+    } else {
+        lv_obj_add_flag(s_knob_upd_bar, LV_OBJ_FLAG_HIDDEN);
+    }
+}
 
 static void knob_switch_cb(lv_event_t *e)
 {
@@ -512,6 +564,7 @@ static void knob_refresh(const wu_status_t *st)
     set_label_text_if_changed(s_knob_title, title);
     set_label_text_if_changed(s_knob_detail, detail);
     ui_set_bg_color(s_knob_dot, dot, LV_PART_MAIN);
+    knob_update_refresh(st, connected);
     if (enabled != lv_obj_has_state(s_knob_switch, LV_STATE_CHECKED)) {
         if (enabled) lv_obj_add_state(s_knob_switch, LV_STATE_CHECKED);
         else lv_obj_clear_state(s_knob_switch, LV_STATE_CHECKED);
@@ -549,6 +602,21 @@ static void fw_build_knob_page(lv_obj_t *panel)
     lv_obj_set_pos(s_knob_detail, 24, 30);
     lv_obj_set_width(s_knob_detail, LV_PCT(95));
     lv_label_set_long_mode(s_knob_detail, LV_LABEL_LONG_WRAP);
+
+    lv_obj_t *upd = fw_card(page, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(upd, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(upd, 10, LV_PART_MAIN);
+    s_knob_upd_status = v2_label(upd, "", &v2_font_label13, V2_LABEL);
+    lv_obj_set_width(s_knob_upd_status, LV_PCT(100));
+    lv_label_set_long_mode(s_knob_upd_status, LV_LABEL_LONG_WRAP);
+    s_knob_upd_bar = lv_bar_create(upd);
+    lv_obj_set_size(s_knob_upd_bar, LV_PCT(100), 10);
+    lv_bar_set_range(s_knob_upd_bar, 0, 100);
+    ui_set_bg_color(s_knob_upd_bar, V2_TRACK, LV_PART_MAIN);
+    ui_set_bg_color(s_knob_upd_bar, V2_RED, LV_PART_INDICATOR);
+    lv_obj_add_flag(s_knob_upd_bar, LV_OBJ_FLAG_HIDDEN);
+    s_knob_upd_btn = fw_button(upd, "CHECK FOR KNOB UPDATE", true, LV_PCT(100), 54, knob_update_btn_cb, NULL,
+                               &s_knob_upd_label);
 
     lv_obj_t *note = v2_label(page,
                               "The knob joins the nearest MackoDash by itself. Knobs need firmware 1.2.0 or "
@@ -605,6 +673,7 @@ static void fw_on_page_shown(lv_obj_t *page)
     }
     wifi_pw_close();
     s_fw_auto_check = false;
+    s_knob_auto_check = false;
     if (s_fw_timer && !s_fw_ota_mode) {   /* keep watching an install that is still running */
         lv_timer_del(s_fw_timer);
         s_fw_timer = NULL;

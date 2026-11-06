@@ -63,6 +63,10 @@ typedef struct {
     bool knob_ap;           /* knob network is running */
     char knob_ssid[33];
     int knob_rssi;          /* signal of the connected knob, 0 if none */
+    wu_upd_state_t knob_upd; /* knob firmware update */
+    char knob_latest[24];
+    char knob_upd_detail[96];
+    int knob_progress;      /* 0-100 */
 } wu_status_t;
 
 /* Call once after the dash is up: confirms this firmware booted fine
@@ -79,6 +83,9 @@ bool wifi_update_saved_ssid(char *out, size_t len);
 
 /* Start/stop the private network the wireless knob joins. */
 void wifi_update_knob_network(bool on);
+/* Knob firmware: check GitHub for a newer knob release / send it to the knob. */
+void wifi_update_knob_check(void);
+void wifi_update_knob_install(void);
 
 void wifi_update_check(void);
 void wifi_update_install(void);
