@@ -6,7 +6,7 @@
 
 **A configurable digital gauge cluster for the 9-inch Elecrow CrowPanel ESP32-P4/C6**
 
-**Current firmware: 3.2.1**
+**Current firmware: 3.3.0**
 
 [Get Latest Release](https://github.com/mackotuned/MackoDash-Flash-Tools/releases/latest) | [Browse Older Versions](https://github.com/mackotuned/MackoDash-Flash-Tools/releases) | [Firmware Update Guide](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update) | [Custom Theme Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) | [Get Support](#support)
 
@@ -118,6 +118,16 @@ Use the official Windows updater from the [latest MackoDash release](https://git
 The full firmware ZIP contains the ESP32-P4 bootloader, partition table, OTA metadata, dashboard application, and SPIFFS storage. NVS settings, odometer and trip data, SD-card themes, and ESP32-C6 firmware are not touched. Onboard SPIFFS is replaced by the version included in the firmware bundle.
 
 > Do not disconnect USB or dashboard power until verification has finished.
+
+### Updating over Wi-Fi (firmware 3.3.0 and newer)
+
+Once the dashboard runs 3.3.0 or newer, later versions can be installed without a PC:
+
+1. Open **Settings → System → Wi-Fi**, pick your network and enter its password. The network is remembered.
+2. Open **Settings → System → Firmware Update**. The dashboard checks for the newest release.
+3. Select **Install**. The update downloads, is checked, installs, and the dashboard restarts.
+
+Keep the dashboard properly powered (ignition on) until it restarts; USB power from a PC may not be enough for Wi-Fi. Settings, odometer data and themes are kept. If a new version does not start correctly, the dashboard returns to the previous version on the next power-up. Wi-Fi is only switched on while those two pages are open. Some releases must still be installed over USB; the dashboard says so when that is the case.
 
 ## Custom Themes
 
