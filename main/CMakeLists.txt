@@ -157,6 +157,7 @@ idf_component_register(
         "theme_storage.c"
         "runtime_theme.c"
         "ota_update_stub.c"
+        "wifi_update.c"
         "honda_dash/honda_dash_ui.c"
         "odometer/odometer.c"
         "canbus/canbus.c"
@@ -195,6 +196,16 @@ idf_component_register(
         spiffs
         json
         espressif__zlib
+        esp_wifi
+        esp_http_client
+        esp-tls
+        mbedtls
+        app_update
 )
+
+# esp_hosted brings up the C6 link from a startup constructor, before the
+# display. Wrap esp_hosted_init so that does nothing; wifi_update.c starts the
+# link itself, last, only when the Wi-Fi or Firmware Update page is opened.
+idf_build_set_property(LINK_OPTIONS "-Wl,--wrap=esp_hosted_init" APPEND)
 
 endif()

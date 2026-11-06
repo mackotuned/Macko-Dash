@@ -16,6 +16,7 @@
 #include "rotary_controller_uart.h"
 #include "ota_c6_hosted_bridge.h"
 #include "dash_sim.h"
+#include "wifi_update.h"
 #include "dash_config.h"
 #include "data_logger.h"
 #include "achievement_system.h"
@@ -464,7 +465,8 @@ void app_main(void) {
     esp_err_t bridge_err = ota_c6_hosted_bridge_register();
     ESP_LOGI("main", "C6 hosted OTA bridge register -> %s", esp_err_to_name(bridge_err));
 #else
-    ESP_LOGI("main", "WiFi/OTA feature disabled at build time");
+    /* home Wi-Fi firmware updates; also confirms this firmware booted fine */
+    wifi_update_init();
 #endif
 
     vTaskDelay(pdMS_TO_TICKS(1));

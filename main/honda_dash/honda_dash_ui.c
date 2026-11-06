@@ -511,6 +511,9 @@ static lv_obj_t *shell_redirect_page(lv_obj_t *page);
 static void shell_build(lv_obj_t *overlay, lv_obj_t *panel);
 static void shell_build_ecu_page(lv_obj_t *page);
 static void shell_build_peaks_grid(lv_obj_t *grid);
+/* Wi-Fi + firmware update pages (ui_wifi_update.inc.c) */
+static void fw_build_pages(lv_obj_t *panel);
+static void fw_on_page_shown(lv_obj_t *page);
 static void peaks_set(int index, bool valid, const char *format, double value, const char *unit);
 static void peaks_highlight(int index);
 typedef enum {
@@ -586,6 +589,7 @@ static lv_obj_t *s_page_info;
 static lv_obj_t *s_page_peaks;
 static lv_obj_t *s_page_logs;
 static lv_obj_t *s_page_update;
+static lv_obj_t *s_page_wifi;
 static lv_obj_t *s_page_config;
 static lv_obj_t *s_page_units;
 static lv_obj_t *s_page_display;
@@ -751,12 +755,8 @@ static lv_obj_t *s_ecu_restart_note;
 static void cfg_protocol_tiles_refresh(void);
 static lv_obj_t *s_brightness_slider;
 static lv_obj_t *s_brightness_value_label;
-static lv_obj_t *s_update_status_label;
-static lv_obj_t *s_update_details_label;
-static lv_obj_t *s_update_qr;
 static lv_obj_t *s_contact_qr;
 static lv_obj_t *s_contact_destination_label;
-static lv_timer_t *s_update_poll_timer;
 static bool s_update_background_paused = false;
 static bool s_render_paused = false;
 static void sim_buttons_apply_visibility(void);
@@ -1337,6 +1337,7 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_add_flag(s_page_peaks, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_logs, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_update, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_page_wifi, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_config, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_units, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_ecu, LV_OBJ_FLAG_HIDDEN);
@@ -1356,6 +1357,7 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_clear_flag(page, LV_OBJ_FLAG_HIDDEN);
     s_settings_current_page = page;
     shell_page_shown(page);
+    fw_on_page_shown(page);
     if (s_settings_nav_label) {
         lv_label_set_text(s_settings_nav_label,
                           page == s_page_main ? LV_SYMBOL_CLOSE : LV_SYMBOL_LEFT);
@@ -1497,6 +1499,7 @@ static void settings_set_render_paused(bool paused)
 static void settings_close_cb(lv_event_t *e)
 {
     (void)e;
+    fw_on_page_shown(NULL);
     if (!ota_update_is_running() && !ota_update_is_starting()) {
         settings_set_update_background_paused(false);
     }
@@ -1558,6 +1561,8 @@ static void settings_open_odometer_cb(lv_event_t *e) { (void)e; settings_show_pa
 static void settings_open_fuel_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_fuel); }
 
 static void settings_open_contact_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_contact); }
+static void settings_open_wifi_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_wifi); }
+static void settings_open_update_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_update); }
 static void settings_achievements_refresh(void)
 {
     char text[48];
@@ -2397,43 +2402,14 @@ static void settings_nav_cb(lv_event_t *e)
                s_settings_current_page == s_page_shortcuts ||
                s_settings_current_page == s_page_readme ||
              s_settings_current_page == s_page_theme_resets ||
-             s_settings_current_page == s_page_contact) {
+             s_settings_current_page == s_page_contact ||
+             s_settings_current_page == s_page_wifi ||
+             s_settings_current_page == s_page_update) {
         settings_config_back_cb(e);
     } else {
         settings_back_cb(e);
     }
 }
-static void settings_update_refresh_ui(void);
-
-static void settings_update_poll_timer_cb(lv_timer_t *timer)
-{
-    (void)timer;
-    settings_update_refresh_ui();
-    if (!ota_update_is_starting()) {
-        if (s_update_poll_timer) {
-            lv_timer_del(s_update_poll_timer);
-            s_update_poll_timer = NULL;
-        }
-    }
-}
-
-static void settings_update_start_poll_timer(void)
-{
-    if (!s_update_poll_timer) {
-        s_update_poll_timer = lv_timer_create(settings_update_poll_timer_cb, 300, NULL);
-    } else {
-        lv_timer_reset(s_update_poll_timer);
-    }
-}
-
-static void settings_update_stop_poll_timer(void)
-{
-    if (s_update_poll_timer) {
-        lv_timer_del(s_update_poll_timer);
-        s_update_poll_timer = NULL;
-    }
-}
-
 typedef struct {
     const char *label;
     const char *destination;
@@ -2459,106 +2435,6 @@ static void settings_contact_show(uint16_t selected)
 static void settings_contact_select_cb(lv_event_t *event)
 {
     settings_contact_show(lv_dropdown_get_selected(lv_event_get_target(event)));
-}
-
-static void settings_update_refresh_qr(void)
-{
-    if (!s_update_qr) {
-        return;
-    }
-
-    char qr_payload[128];
-    snprintf(qr_payload, sizeof(qr_payload), "%s", ota_update_get_url());
-    lv_qrcode_update(s_update_qr, qr_payload, (uint32_t)strlen(qr_payload));
-}
-
-static void settings_update_refresh_ui(void)
-{
-    if (!s_update_status_label || !s_update_details_label) {
-        return;
-    }
-
-    if (ota_update_is_starting()) {
-        lv_label_set_text_fmt(
-            s_update_status_label,
-            "C6 OTA: STARTING [%s]",
-            ota_update_get_status_detail());
-        lv_label_set_text_fmt(
-            s_update_details_label,
-            "Bringing up Wi-Fi AP and web uploader.\nStage: %s",
-            ota_update_get_status_detail());
-        lv_obj_add_flag(s_update_qr, LV_OBJ_FLAG_HIDDEN);
-    } else if (ota_update_is_running()) {
-        lv_label_set_text(s_update_status_label, "C6 OTA: READY TO CONNECT");
-        lv_label_set_text_fmt(
-            s_update_details_label,
-            "1) Join Wi-Fi: %s\n2) Scan QR to open uploader (or browse %s)",
-            ota_update_get_ssid(),
-            ota_update_get_url());
-        lv_obj_clear_flag(s_update_qr, LV_OBJ_FLAG_HIDDEN);
-        settings_update_refresh_qr();
-    } else {
-        esp_err_t last_err = ota_update_get_last_error();
-        if (last_err != ESP_OK) {
-            lv_label_set_text_fmt(
-                s_update_status_label,
-                "C6 OTA: FAILED 0x%x [%s]",
-                (unsigned int)last_err,
-                ota_update_get_status_detail());
-            lv_label_set_text_fmt(
-                s_update_details_label,
-                "Wi-Fi AP did not start. Press Start to retry.\nStage: %s",
-                ota_update_get_status_detail());
-        } else {
-            lv_label_set_text(s_update_status_label, "C6 OTA: IDLE [DBG0721]");
-            lv_label_set_text(
-                s_update_details_label,
-                "Press Start, then join ESP-Hosted-OTA in phone Wi-Fi settings.\nAfter joining, scan QR to open the uploader page.");
-        }
-        lv_obj_add_flag(s_update_qr, LV_OBJ_FLAG_HIDDEN);
-    }
-}
-
-static void settings_start_update_cb(lv_event_t *e)
-{
-    (void)e;
-    esp_err_t err = ota_update_start_ap_server();
-    if (err != ESP_OK) {
-        settings_update_stop_poll_timer();
-        if (err == ESP_ERR_NOT_SUPPORTED) {
-            lv_label_set_text(s_update_status_label, "C6 OTA Start Failed: bridge not registered");
-            lv_label_set_text(
-                s_update_details_label,
-                "No hosted-OTA bridge is registered yet.\nThe C6 bridge module must call ota_update_register_bridge().");
-            return;
-        }
-        lv_label_set_text_fmt(
-            s_update_status_label,
-            "C6 OTA: FAILED 0x%x [%s]",
-            (unsigned int)err,
-            ota_update_get_status_detail());
-        lv_label_set_text_fmt(
-            s_update_details_label,
-            "Immediate start failure.\nStage: %s",
-            ota_update_get_status_detail());
-        settings_update_refresh_ui();
-        settings_update_stop_poll_timer();
-        return;
-    }
-    settings_update_start_poll_timer();
-    settings_update_refresh_ui();
-}
-
-static void settings_stop_update_cb(lv_event_t *e)
-{
-    (void)e;
-    settings_update_stop_poll_timer();
-    esp_err_t err = ota_update_stop_ap_server();
-    if (err != ESP_OK) {
-        lv_label_set_text_fmt(s_update_status_label, "C6 OTA Stop Failed: 0x%x", (unsigned int)err);
-        return;
-    }
-    settings_update_refresh_ui();
 }
 
 /* ---- theme picker ---- */
@@ -4633,63 +4509,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_t *theme_set_lbl = make_label(theme_set_btn, "Set", DASH_FONT_LABEL14, C_WHITE);
     lv_obj_center(theme_set_lbl);
 
-    /* ---- page: firmware update ---- */
-    s_page_update = make_plain_container(panel);
-    lv_obj_set_size(s_page_update, LV_PCT(100), LV_PCT(100));
-    lv_obj_add_flag(s_page_update, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_flex_flow(s_page_update, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(s_page_update, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_row(s_page_update, 12, LV_PART_MAIN);
-
-    make_label(s_page_update, "FIRMWARE UPDATE [DBG0721]", DASH_FONT_LABEL14, C_LABEL);
-    make_label(s_page_update, "Join OTA Wi-Fi on your phone, then scan QR to open uploader.", DASH_FONT_LABEL14, C_WHITE);
-
-    s_update_status_label = make_label(s_page_update, "Update Server: STOPPED", DASH_FONT_LABEL14, C_LABEL);
-    lv_obj_set_width(s_update_status_label, LV_PCT(96));
-    lv_label_set_long_mode(s_update_status_label, LV_LABEL_LONG_WRAP);
-    s_update_details_label = make_label(s_page_update, "", DASH_FONT_LABEL14, C_LABEL);
-    lv_obj_set_width(s_update_details_label, LV_PCT(96));
-    lv_label_set_long_mode(s_update_details_label, LV_LABEL_LONG_WRAP);
-
-    s_update_qr = lv_qrcode_create(s_page_update, 170, lv_color_hex(0xf4f3ef), lv_color_hex(0x151619));
-    lv_obj_set_style_border_width(s_update_qr, 4, LV_PART_MAIN);
-    ui_set_border_color(s_update_qr, lv_color_hex(0x2a2c31), LV_PART_MAIN);
-
-    lv_obj_t *upd_btn_row = make_plain_container(s_page_update);
-    lv_obj_set_size(upd_btn_row, LV_PCT(100), 60);
-    lv_obj_set_flex_flow(upd_btn_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_column(upd_btn_row, 14, LV_PART_MAIN);
-
-    lv_obj_t *upd_start_btn = lv_obj_create(upd_btn_row);
-    lv_obj_set_flex_grow(upd_start_btn, 1);
-    lv_obj_set_height(upd_start_btn, 60);
-    ui_set_bg_color(upd_start_btn, C_RED, LV_PART_MAIN);
-    ui_set_bg_opa(upd_start_btn, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(upd_start_btn, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(upd_start_btn, 12, LV_PART_MAIN);
-    lv_obj_clear_flag(upd_start_btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(upd_start_btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(upd_start_btn, settings_start_update_cb, LV_EVENT_CLICKED, NULL);
-    add_press_feedback(upd_start_btn);
-    lv_obj_t *upd_start_lbl = make_label(upd_start_btn, "Start", DASH_FONT_LABEL14, C_WHITE);
-    lv_obj_center(upd_start_lbl);
-
-    lv_obj_t *upd_stop_btn = lv_obj_create(upd_btn_row);
-    lv_obj_set_flex_grow(upd_stop_btn, 1);
-    lv_obj_set_height(upd_stop_btn, 60);
-    ui_set_bg_color(upd_stop_btn, C_PANEL, LV_PART_MAIN);
-    ui_set_bg_opa(upd_stop_btn, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(upd_stop_btn, 1, LV_PART_MAIN);
-    ui_set_border_color(upd_stop_btn, C_LINE, LV_PART_MAIN);
-    lv_obj_set_style_radius(upd_stop_btn, 12, LV_PART_MAIN);
-    lv_obj_clear_flag(upd_stop_btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(upd_stop_btn, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(upd_stop_btn, settings_stop_update_cb, LV_EVENT_CLICKED, NULL);
-    add_press_feedback(upd_stop_btn);
-    lv_obj_t *upd_stop_lbl = make_label(upd_stop_btn, "Stop", DASH_FONT_LABEL14, C_LABEL);
-    lv_obj_center(upd_stop_lbl);
-
-    settings_update_refresh_ui();
+    fw_build_pages(panel);
 
     /* ---- page: contact and support ---- */
     s_page_contact = make_plain_container(panel);
@@ -4963,6 +4783,8 @@ static void build_settings_overlay(lv_obj_t *cluster)
     lv_obj_set_scrollbar_mode(cfg_scroll, LV_SCROLLBAR_MODE_AUTO);
 
     build_config_section_header(cfg_scroll, "SYSTEM");
+    build_config_menu_row(cfg_scroll, "Firmware Update", settings_open_update_cb);
+    build_config_menu_row(cfg_scroll, "Wi-Fi", settings_open_wifi_cb);
     build_config_menu_row(cfg_scroll, "Diagnostics", settings_open_info_cb);
     build_config_menu_row(cfg_scroll, "Contact & Support", settings_open_contact_cb);
     build_config_menu_row(cfg_scroll, "Shortcuts & Tips", settings_open_shortcuts_cb);
@@ -7401,6 +7223,7 @@ static void hal_channel_thresholds_rebuild(void)
 #include "theme_v2.inc.c"
 #include "theme_tach.inc.c"
 #include "ui_mackotuned.inc.c"
+#include "ui_wifi_update.inc.c"
 
 static void system_field_long_press_cb(lv_event_t *e)
 {
