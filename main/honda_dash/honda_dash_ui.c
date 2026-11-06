@@ -2477,30 +2477,6 @@ static void theme_stage_selection(int idx)
         }
     }
 }
-static lv_obj_t *theme_card_for_id(int idx)
-{
-    switch (idx) {
-    case THEME_ID_MODERN: return s_theme_card_modern;
-    case THEME_ID_RACE_LCD: return s_theme_card_race_lcd;
-    case THEME_ID_HALDASH: return s_theme_card_haldash;
-    case THEME_ID_ENDURANCE: return s_theme_card_endurance;
-    case THEME_ID_TOURING: return s_theme_card_touring;
-    case THEME_ID_V2: return s_theme_card_v2;
-    case THEME_ID_TACH: return s_theme_card_tach;
-    default:
-        if (idx >= 100 && (size_t)(idx - 100) < theme_storage_get_count()) {
-            return s_theme_card_sd[idx - 100];
-        }
-        return NULL;
-    }
-}
-
-static void theme_scroll_selection_into_view(int idx)
-{
-    lv_obj_t *card = theme_card_for_id(idx);
-    if (card) lv_obj_scroll_to_view(card, LV_ANIM_ON);
-}
-
 /* ---- theme persistence (NVS) ---- */
 #define THEME_NVS_NAMESPACE "honda_dash"
 #define THEME_NVS_KEY       "theme_idx"
@@ -8539,8 +8515,21 @@ static void controller_hide_settings(void)
     settings_set_render_paused(false);
 }
 
+/* VIEW on the knob switches the live theme as you turn; only a press keeps
+   it. Any other way out puts the theme you started with back. */
+static int s_view_original_theme = -1;
+
+static void controller_view_revert(void)
+{
+    if (s_view_original_theme < 0) return;
+    int original = s_view_original_theme;
+    s_view_original_theme = -1;
+    if (s_active_theme != original) activate_theme(original, false);
+}
+
 static void controller_prepare_open(void)
 {
+    controller_view_revert();
     if (s_trip_reset_modal) trip_reset_modal_close();
     if (s_quick_brightness_overlay) {
         lv_obj_del(s_quick_brightness_overlay);
@@ -8832,6 +8821,7 @@ static void controller_peak_scroll_into_view(void)
 
 static void controller_close_to_home(void)
 {
+    controller_view_revert();
     if (s_trip_reset_modal) trip_reset_modal_close();
     controller_hide_settings();
     s_controller_page = HONDA_DASH_CONTROLLER_HOME;
@@ -8927,6 +8917,7 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
         if (event == HONDA_DASH_CONTROLLER_PRESS || event == HONDA_DASH_CONTROLLER_BACK) {
             critical_warning_dismiss();
         }
+        controller_view_revert();
         controller_fill_state(state);
         return true;
     }
@@ -8942,10 +8933,8 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
         s_controller_page = (honda_dash_controller_page_t)value;
         switch (s_controller_page) {
         case HONDA_DASH_CONTROLLER_VIEW:
+            s_view_original_theme = s_active_theme;
             s_controller_selection = controller_theme_selection(s_active_theme);
-            theme_stage_selection(controller_theme_id(s_controller_selection));
-            controller_open_settings_page(s_page_theme);
-            theme_scroll_selection_into_view(controller_theme_id(s_controller_selection));
             break;
         case HONDA_DASH_CONTROLLER_BRIGHTNESS:
             s_controller_selection = dash_config_get_brightness() / 5 - 1;
@@ -8990,8 +8979,8 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
         case HONDA_DASH_CONTROLLER_VIEW:
             s_controller_selection = controller_wrap(s_controller_selection + step,
                                                        controller_theme_count());
-            theme_stage_selection(controller_theme_id(s_controller_selection));
-            theme_scroll_selection_into_view(controller_theme_id(s_controller_selection));
+            /* show it on the dash right away; not saved until the press */
+            activate_theme(controller_theme_id(s_controller_selection), false);
             break;
         case HONDA_DASH_CONTROLLER_BRIGHTNESS: {
             int brightness = dash_config_get_brightness() + step * 5;
@@ -9042,9 +9031,8 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
     } else if (event == HONDA_DASH_CONTROLLER_PRESS) {
         switch (s_controller_page) {
         case HONDA_DASH_CONTROLLER_VIEW:
-            if (controller_theme_id(s_controller_selection) != s_active_theme) {
-                activate_theme(controller_theme_id(s_controller_selection), true);
-            }
+            s_view_original_theme = -1;          /* keep what is shown */
+            activate_theme(controller_theme_id(s_controller_selection), true);
             controller_close_to_home();
             break;
         case HONDA_DASH_CONTROLLER_BRIGHTNESS:
