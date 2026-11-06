@@ -13,6 +13,15 @@ extern "C" {
 
 esp_err_t rotary_controller_uart_start(void);
 
+/* What is plugged into the accessory port (old wired-knob plug). */
+typedef enum {
+    ROTARY_PORT_SEARCHING = 0,
+    ROTARY_PORT_KNOB,
+    ROTARY_PORT_GPS,
+} rotary_port_mode_t;
+
+rotary_port_mode_t rotary_controller_port_mode(void);
+
 /* Wireless knob: listen for knob frames on UDP (call once the knob Wi-Fi
    network is up). */
 esp_err_t rotary_controller_net_start(void);

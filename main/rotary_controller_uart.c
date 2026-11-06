@@ -14,6 +14,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "gps.h"
 #include "honda_dash_ui.h"
 #include "lwip/sockets.h"
 #include "rotary_controller_protocol.h"
@@ -31,6 +32,8 @@ static const char *TAG = "rotary_uart";
 static uint8_t s_tx_sequence;
 static SemaphoreHandle_t s_tx_mutex;
 static bool s_uart_ready;
+static volatile rotary_port_mode_t s_port_mode = ROTARY_PORT_SEARCHING;
+static int64_t s_uart_frame_ok_us;     /* last good knob frame on the UART */
 
 /* wireless knob (UDP over the dash's knob Wi-Fi network) */
 typedef struct {
@@ -77,7 +80,8 @@ static esp_err_t send_frame(reply_to_t to, rotary_protocol_type_t type, uint8_t 
     if (to) {
         ok = s_sock >= 0 && sendto(s_sock, frame, total, 0, (const struct sockaddr *)to, sizeof(*to)) == (int)total;
     } else {
-        ok = s_uart_ready && uart_write_bytes(CONTROLLER_UART, frame, total) == (int)total;
+        ok = s_uart_ready && s_port_mode == ROTARY_PORT_KNOB &&
+             uart_write_bytes(CONTROLLER_UART, frame, total) == (int)total;
     }
     xSemaphoreGive(s_tx_mutex);
     return ok ? ESP_OK : ESP_FAIL;
@@ -115,9 +119,13 @@ static void handle_frame(const uint8_t *frame, size_t frame_length, reply_to_t t
     uint8_t sequence = frame[4];
     const uint8_t *payload = &frame[ROTARY_PROTOCOL_HEADER_SIZE];
 
+    if (!to) s_uart_frame_ok_us = esp_timer_get_time();
     if (to) {
+        int64_t now = esp_timer_get_time();
+        bool arrived = !s_knob_last_rx || now - s_knob_last_rx > KNOB_TIMEOUT_US;
+        if (arrived) ESP_LOGI(TAG, "wireless knob connected");
         portENTER_CRITICAL(&s_knob_lock);
-        s_knob_last_rx = esp_timer_get_time();
+        s_knob_last_rx = now;
         s_knob_addr = *to;
         s_knob_addr_valid = true;
         /* knob 1.2.0+ puts its firmware version in the PING payload */
@@ -180,6 +188,84 @@ static void parser_push(frame_parser_t *parser, uint8_t byte)
     }
 }
 
+/* ------------------------- accessory port ---------------------------
+   The old wired-knob plug (UART1) takes either a wired knob (MD frames at
+   115200) or a GPS module (NMEA). The port is probed at the usual baud rates
+   until one of them answers, and probed again if it goes quiet. */
+
+static const int SEARCH_BAUDS[] = {115200, 9600, 38400, 57600, 4800};
+#define SEARCH_BAUD_COUNT ((int)(sizeof(SEARCH_BAUDS) / sizeof(SEARCH_BAUDS[0])))
+#define SEARCH_DWELL_US   1600000
+#define KNOB_QUIET_US     15000000
+#define GPS_QUIET_US      5000000
+
+static int s_search_index;
+static int64_t s_search_started_us;
+static int s_port_baud = 115200;
+static int64_t s_gps_ok_us;
+
+static void port_set_baud(int baud)
+{
+    s_port_baud = baud;
+    uart_set_baudrate(CONTROLLER_UART, baud);
+    uart_flush_input(CONTROLLER_UART);
+}
+
+static void port_search_restart(void)
+{
+    if (s_port_mode == ROTARY_PORT_GPS) gps_set_detected(false, 0);
+    s_port_mode = ROTARY_PORT_SEARCHING;
+    s_search_index = 0;
+    s_search_started_us = esp_timer_get_time();
+    port_set_baud(SEARCH_BAUDS[0]);
+}
+
+static void port_service(frame_parser_t *parser, const uint8_t *data, int received)
+{
+    int64_t now = esp_timer_get_time();
+    switch (s_port_mode) {
+    case ROTARY_PORT_SEARCHING: {
+        int64_t before = s_uart_frame_ok_us;
+        bool nmea = gps_feed(data, received);
+        if (s_port_baud == 115200) {
+            for (int i = 0; i < received; ++i) parser_push(parser, data[i]);
+        }
+        if (s_uart_frame_ok_us != before) {
+            s_port_mode = ROTARY_PORT_KNOB;
+            ESP_LOGI(TAG, "accessory port: wired knob");
+        } else if (nmea) {
+            ESP_LOGI(TAG, "accessory port: GPS at %d baud", s_port_baud);
+            int baud = gps_configure(CONTROLLER_UART, s_port_baud);
+            s_port_baud = baud;
+            s_port_mode = ROTARY_PORT_GPS;
+            s_gps_ok_us = esp_timer_get_time();
+            gps_set_detected(true, baud);
+        } else if (now - s_search_started_us >= SEARCH_DWELL_US) {
+            s_search_index = (s_search_index + 1) % SEARCH_BAUD_COUNT;
+            s_search_started_us = now;
+            port_set_baud(SEARCH_BAUDS[s_search_index]);
+        }
+        break;
+    }
+    case ROTARY_PORT_KNOB:
+        for (int i = 0; i < received; ++i) parser_push(parser, data[i]);
+        if (now - s_uart_frame_ok_us > KNOB_QUIET_US) port_search_restart();
+        break;
+    case ROTARY_PORT_GPS:
+        if (gps_feed(data, received)) s_gps_ok_us = now;
+        if (now - s_gps_ok_us > GPS_QUIET_US) {
+            ESP_LOGI(TAG, "accessory port: GPS went quiet");
+            port_search_restart();
+        }
+        break;
+    }
+}
+
+rotary_port_mode_t rotary_controller_port_mode(void)
+{
+    return s_port_mode;
+}
+
 /* One task handles both links. Its stack is in internal RAM because knob
    actions can save settings (flash writes). */
 static void controller_task(void *argument)
@@ -191,7 +277,7 @@ static void controller_task(void *argument)
     while (true) {
         if (s_uart_ready) {
             int received = uart_read_bytes(CONTROLLER_UART, buffer, sizeof(buffer), pdMS_TO_TICKS(10));
-            for (int index = 0; index < received; ++index) parser_push(&parser, buffer[index]);
+            port_service(&parser, buffer, received < 0 ? 0 : received);
         }
         TickType_t wait = s_uart_ready ? 0 : pdMS_TO_TICKS(100);
         while (s_net_queue && xQueueReceive(s_net_queue, &net, wait) == pdTRUE) {
@@ -249,6 +335,7 @@ esp_err_t rotary_controller_uart_start(void)
     ESP_RETURN_ON_ERROR(uart_driver_install(CONTROLLER_UART, CONTROLLER_RX_BUFFER_SIZE, 0,
                                             0, NULL, 0), TAG, "UART driver install failed");
     s_uart_ready = true;
+    s_search_started_us = esp_timer_get_time();
     esp_err_t err = start_controller_task();
     if (err != ESP_OK) {
         s_uart_ready = false;
@@ -258,7 +345,6 @@ esp_err_t rotary_controller_uart_start(void)
     ESP_LOGI(TAG, "Controller UART ready: TX GPIO%d, RX GPIO%d, %d baud",
              CONFIG_ROTARY_CONTROLLER_TX_GPIO, CONFIG_ROTARY_CONTROLLER_RX_GPIO,
              CONFIG_ROTARY_CONTROLLER_BAUD);
-    send_frame(NULL, ROTARY_PROTOCOL_PONG, ++s_tx_sequence, NULL, 0);
     return ESP_OK;
 }
 

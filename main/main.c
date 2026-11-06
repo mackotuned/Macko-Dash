@@ -17,6 +17,7 @@
 #include "ota_c6_hosted_bridge.h"
 #include "dash_sim.h"
 #include "wifi_update.h"
+#include "gps.h"
 #include "dash_config.h"
 #include "data_logger.h"
 #include "achievement_system.h"
@@ -66,6 +67,7 @@ static float current_fuel_percent(void)
 static bool s_render_paused_active = false;
 
 static void odometer_tracking_task(void *arg);
+static bool selected_speed_kph(float *kph);
 static void start_can_background_tasks(void);
 static void stop_can_background_tasks(void);
 static void start_gauge_timer(void);
@@ -164,7 +166,9 @@ void gauge_timer(lv_timer_t * t) {
     drivetrain_live = canbus_has_live_drivetrain();
     bool can_gear_live = canbus_has_live_gear();
 
-    float speed_mph = can_data.speed * 0.621371f;
+    float speed_kph_now = 0.0f;
+    selected_speed_kph(&speed_kph_now);
+    float speed_mph = speed_kph_now * 0.621371f;
 
     if (speed_mph < MIN_VALID_SPEED_MPH)
         speed_mph = 0.0f;
@@ -267,8 +271,8 @@ static void odometer_tracking_task(void *arg){
 
         /* can_data.speed keeps its last value when CAN drops out; only
            integrate while speed is actually being received. */
-        float speed_kph = can_data.speed;
-        if (!canbus_has_live_drivetrain() || !isfinite(speed_kph) ||
+        float speed_kph = 0.0f;
+        if (!selected_speed_kph(&speed_kph) ||
                 speed_kph < 0.5f || speed_kph > 400.0f || dt_s <= 0.0 || dt_s > 2.0) {
             continue;
         }
@@ -323,6 +327,31 @@ static void stop_gauge_timer(void)
     if (s_gauge_timer) {
         lv_timer_del(s_gauge_timer);
         s_gauge_timer = NULL;
+    }
+}
+
+/* Road speed in km/h from the source chosen in Settings > System > GPS.
+   Returns false when the chosen source has nothing usable. */
+static bool selected_speed_kph(float *kph)
+{
+    float ecu = can_data.speed;
+    bool ecu_ok = canbus_has_live_drivetrain() && isfinite(ecu) && ecu >= 0.0f && ecu < 400.0f;
+    float gps = 0.0f;
+    bool gps_ok = gps_get_speed_kph(&gps);
+    switch (dash_config_get_speed_source()) {
+    case DASH_SPEED_SOURCE_GPS:
+        *kph = gps_ok ? gps : 0.0f;
+        return gps_ok;
+    case DASH_SPEED_SOURCE_AUTO:
+        if (ecu_ok) {
+            *kph = ecu;
+            return true;
+        }
+        *kph = gps_ok ? gps : 0.0f;
+        return gps_ok;
+    default:
+        *kph = ecu_ok ? ecu : 0.0f;
+        return ecu_ok;
     }
 }
 

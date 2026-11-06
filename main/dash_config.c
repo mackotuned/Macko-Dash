@@ -18,6 +18,7 @@
 #define KEY_SHOW_SIM     "cfg_show_sim"
 #define KEY_SHOW_VTEC    "cfg_show_vtec"
 #define KEY_KNOB_WIFI    "cfg_knob_wifi"
+#define KEY_SPEED_SRC    "cfg_speed_src"
 #define KEY_VALUE_SMOOTH "cfg_smooth"
 #define KEY_SMOOTH_LEVEL "cfg_smooth_lvl"
 #define KEY_AUTO_RECORD  "cfg_auto_rec"
@@ -116,7 +117,8 @@ static int s_brightness = DEFAULT_BRIGHTNESS;
 static dash_config_display_timing_t s_display_timing = DASH_CONFIG_DISPLAY_TIMING_STANDARD;
 static bool s_show_sim_button = false;
 static bool s_show_vtec = false;
-static bool s_wireless_knob = false;
+static bool s_wireless_knob = true;    /* on unless the user turned it off */
+static int s_speed_source = DASH_SPEED_SOURCE_ECU;
 static int s_fuel_analog_input = DEFAULT_FUEL_ANALOG;
 static int s_fuel_empty_mv = DEFAULT_FUEL_EMPTY_MV;
 static int s_fuel_full_mv = DEFAULT_FUEL_FULL_MV;
@@ -186,6 +188,9 @@ void dash_config_init(void)
     if (nvs_get_i32(h, KEY_DISPLAY_TIMING, &val) == ESP_OK &&
             val >= DASH_CONFIG_DISPLAY_TIMING_STANDARD && val < DASH_CONFIG_DISPLAY_TIMING_COUNT) {
         s_display_timing = (dash_config_display_timing_t)val;
+    }
+    if (nvs_get_i32(h, KEY_SPEED_SRC, &val) == ESP_OK && val >= 0 && val <= DASH_SPEED_SOURCE_GPS) {
+        s_speed_source = val;
     }
     if (nvs_get_i32(h, KEY_KNOB_WIFI, &val) == ESP_OK) {
         s_wireless_knob = (val != 0);
@@ -523,6 +528,18 @@ void dash_config_set_display_timing(dash_config_display_timing_t timing)
 bool dash_config_get_show_sim_button(void)
 {
     return s_show_sim_button;
+}
+
+dash_speed_source_t dash_config_get_speed_source(void)
+{
+    return (dash_speed_source_t)s_speed_source;
+}
+
+void dash_config_set_speed_source(dash_speed_source_t source)
+{
+    if (source < DASH_SPEED_SOURCE_ECU || source > DASH_SPEED_SOURCE_GPS) return;
+    s_speed_source = source;
+    persist_i32(KEY_SPEED_SRC, (int)source);
 }
 
 bool dash_config_get_wireless_knob(void)

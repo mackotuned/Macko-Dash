@@ -47,7 +47,7 @@ static const char *shell_page_title(lv_obj_t *page)
         {&s_page_config, "SYSTEM"}, {&s_page_fuel, "FUEL GAUGE"},
         {&s_page_info, "ABOUT"}, {&s_page_shortcuts, "SHORTCUTS"}, {&s_page_readme, "GUIDE"},
         {&s_page_theme_resets, "THEME RESETS"}, {&s_page_contact, "SUPPORT"}, {&s_page_update, "FIRMWARE UPDATE"},
-        {&s_page_wifi, "WI-FI"}, {&s_page_knob, "KNOB"},
+        {&s_page_wifi, "WI-FI"}, {&s_page_knob, "KNOB"}, {&s_page_gps, "GPS"},
     };
     for (size_t i = 0; i < sizeof(titles) / sizeof(titles[0]); ++i) {
         if (*titles[i].page == page) return titles[i].title;
@@ -70,7 +70,7 @@ static void shell_page_shown(lv_obj_t *page)
         {&s_page_shortcuts, &s_page_config}, {&s_page_readme, &s_page_config},
         {&s_page_theme_resets, &s_page_config}, {&s_page_contact, &s_page_config},
         {&s_page_update, &s_page_config}, {&s_page_wifi, &s_page_config},
-        {&s_page_knob, &s_page_config},
+        {&s_page_knob, &s_page_config}, {&s_page_gps, &s_page_config},
     };
     for (size_t c = 0; c < sizeof(children) / sizeof(children[0]); ++c) {
         if (*children[c].page != page) continue;

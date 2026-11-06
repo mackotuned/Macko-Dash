@@ -591,6 +591,7 @@ static lv_obj_t *s_page_logs;
 static lv_obj_t *s_page_update;
 static lv_obj_t *s_page_wifi;
 static lv_obj_t *s_page_knob;
+static lv_obj_t *s_page_gps;
 static lv_obj_t *s_page_config;
 static lv_obj_t *s_page_units;
 static lv_obj_t *s_page_display;
@@ -1340,6 +1341,7 @@ static void settings_show_page(lv_obj_t *page)
     lv_obj_add_flag(s_page_update, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_wifi, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_knob, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(s_page_gps, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_config, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_units, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_page_ecu, LV_OBJ_FLAG_HIDDEN);
@@ -1566,6 +1568,7 @@ static void settings_open_contact_cb(lv_event_t *e) { (void)e; settings_show_pag
 static void settings_open_wifi_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_wifi); }
 static void settings_open_update_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_update); }
 static void settings_open_knob_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_knob); }
+static void settings_open_gps_cb(lv_event_t *e) { (void)e; settings_show_page(s_page_gps); }
 static void settings_achievements_refresh(void)
 {
     char text[48];
@@ -2408,6 +2411,7 @@ static void settings_nav_cb(lv_event_t *e)
              s_settings_current_page == s_page_contact ||
              s_settings_current_page == s_page_wifi ||
              s_settings_current_page == s_page_knob ||
+             s_settings_current_page == s_page_gps ||
              s_settings_current_page == s_page_update) {
         settings_config_back_cb(e);
     } else {
@@ -4766,6 +4770,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     build_config_menu_row(cfg_scroll, "Firmware Update", settings_open_update_cb);
     build_config_menu_row(cfg_scroll, "Wi-Fi", settings_open_wifi_cb);
     build_config_menu_row(cfg_scroll, "Knob", settings_open_knob_cb);
+    build_config_menu_row(cfg_scroll, "GPS & Speed Source", settings_open_gps_cb);
     build_config_menu_row(cfg_scroll, "Diagnostics", settings_open_info_cb);
     build_config_menu_row(cfg_scroll, "Contact & Support", settings_open_contact_cb);
     build_config_menu_row(cfg_scroll, "Shortcuts & Tips", settings_open_shortcuts_cb);

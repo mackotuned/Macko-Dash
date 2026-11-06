@@ -9,6 +9,7 @@
 
 #include "wifi_update.h"
 #include "rotary_controller_uart.h"
+#include "gps.h"
 
 #define FW_POLL_MS 250
 
@@ -626,6 +627,114 @@ static void fw_build_knob_page(lv_obj_t *panel)
     lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
 }
 
+/* ------------------------------ GPS page --------------------------- */
+
+static lv_obj_t *s_gps_dot;
+static lv_obj_t *s_gps_title;
+static lv_obj_t *s_gps_detail;
+static lv_obj_t *s_gps_src_btn[3];
+static lv_obj_t *s_gps_src_hint;
+
+static const char *const GPS_SOURCE_NAMES[3] = {"ECU", "AUTO", "GPS ONLY"};
+static const char *const GPS_SOURCE_HINTS[3] = {
+    "Speed and odometer come from the ECU over CAN.",
+    "Uses the ECU's speed when it sends one, otherwise GPS.",
+    "Ignores the ECU's speed. Speed and odometer come from GPS.",
+};
+
+static void gps_source_style(void)
+{
+    int selected = (int)dash_config_get_speed_source();
+    for (int i = 0; i < 3; ++i) {
+        bool on = i == selected;
+        ui_set_bg_color(s_gps_src_btn[i], on ? V2_RED : V2_CHIP_OFF, LV_PART_MAIN);
+        ui_set_border_color(s_gps_src_btn[i], on ? V2_RED : V2_PILL_LINE, LV_PART_MAIN);
+    }
+    set_label_text_if_changed(s_gps_src_hint, GPS_SOURCE_HINTS[selected]);
+}
+
+static void gps_source_cb(lv_event_t *e)
+{
+    dash_config_set_speed_source((dash_speed_source_t)(intptr_t)lv_event_get_user_data(e));
+    gps_source_style();
+}
+
+static void gps_refresh(void)
+{
+    gps_status_t st;
+    gps_get_status(&st);
+    rotary_port_mode_t port = rotary_controller_port_mode();
+    char title[48], detail[112];
+    lv_color_t dot = V2_DIM;
+    if (port == ROTARY_PORT_KNOB) {
+        snprintf(title, sizeof(title), "Wired knob on the accessory port");
+        snprintf(detail, sizeof(detail), "Unplug the knob cable and connect the GPS module there.");
+    } else if (!st.detected) {
+        snprintf(title, sizeof(title), "No GPS detected");
+        snprintf(detail, sizeof(detail), "Searching the accessory port. Check the wiring below.");
+    } else if (!st.fix) {
+        snprintf(title, sizeof(title), "GPS connected, waiting for satellites");
+        snprintf(detail, sizeof(detail), "%d satellites in view. The first fix can take a few minutes "
+                 "with a clear view of the sky.", st.satellites);
+        dot = V2_AMBER;
+    } else {
+        bool kph = dash_config_get_speed_kph();
+        snprintf(title, sizeof(title), "GPS fix: %.0f %s", kph ? st.speed_kph : st.speed_kph * 0.621371f,
+                 kph ? "km/h" : "mph");
+        snprintf(detail, sizeof(detail), "%d satellites  |  %.0f updates per second  |  %d baud",
+                 st.satellites, st.rate_hz, st.baud);
+        dot = V2_GREEN;
+    }
+    set_label_text_if_changed(s_gps_title, title);
+    set_label_text_if_changed(s_gps_detail, detail);
+    ui_set_bg_color(s_gps_dot, dot, LV_PART_MAIN);
+}
+
+static void fw_build_gps_page(lv_obj_t *panel)
+{
+    lv_obj_t *page = make_plain_container(panel);
+    s_page_gps = page;
+    lv_obj_set_size(page, LV_PCT(100), LV_PCT(100));
+    lv_obj_add_flag(page, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_flex_flow(page, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(page, 12, LV_PART_MAIN);
+    lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t *status = fw_card(page, 100);
+    s_gps_dot = v2_box(status, 0, 8, 12, 12, V2_DIM, 6);
+    s_gps_title = v2_label(status, "", &v2_font_label16, V2_TEXT);
+    lv_obj_set_pos(s_gps_title, 24, 2);
+    s_gps_detail = v2_label(status, "", &v2_font_label13, V2_LABEL);
+    lv_obj_set_pos(s_gps_detail, 24, 30);
+    lv_obj_set_width(s_gps_detail, LV_PCT(95));
+    lv_label_set_long_mode(s_gps_detail, LV_LABEL_LONG_WRAP);
+
+    lv_obj_t *src = fw_card(page, LV_SIZE_CONTENT);
+    lv_obj_set_flex_flow(src, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_row(src, 10, LV_PART_MAIN);
+    fw_caption(src, "SPEED SOURCE");
+    lv_obj_t *row = make_plain_container(src);
+    lv_obj_set_size(row, LV_PCT(100), 54);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_column(row, 10, LV_PART_MAIN);
+    for (int i = 0; i < 3; ++i) {
+        s_gps_src_btn[i] = fw_button(row, GPS_SOURCE_NAMES[i], false, 100, 54, gps_source_cb,
+                                     (void *)(intptr_t)i, NULL);
+        lv_obj_set_flex_grow(s_gps_src_btn[i], 1);
+    }
+    s_gps_src_hint = v2_label(src, "", &v2_font_label13, V2_LABEL);
+    lv_obj_set_width(s_gps_src_hint, LV_PCT(100));
+    gps_source_style();
+
+    lv_obj_t *note = v2_label(page,
+                              "Wiring (old knob plug): GPS VCC to the plug's power, GND to GND, "
+                              "GPS TX to GPIO 50, GPS RX to GPIO 49. Works with u-blox NEO-6M style "
+                              "modules; they are set to 5 updates per second automatically.",
+                              &v2_font_label13, V2_DIM);
+    lv_obj_set_width(note, LV_PCT(100));
+    lv_label_set_long_mode(note, LV_LABEL_LONG_WRAP);
+}
+
 /* ------------------------------ lifecycle --------------------------- */
 
 static void fw_refresh(void)
@@ -640,6 +749,7 @@ static void fw_refresh(void)
     if (s_page_wifi && !lv_obj_has_flag(s_page_wifi, LV_OBJ_FLAG_HIDDEN)) wifi_refresh(&st);
     if (s_page_update && !lv_obj_has_flag(s_page_update, LV_OBJ_FLAG_HIDDEN)) fw_update_refresh(&st);
     if (s_page_knob && !lv_obj_has_flag(s_page_knob, LV_OBJ_FLAG_HIDDEN)) knob_refresh(&st);
+    if (s_page_gps && !lv_obj_has_flag(s_page_gps, LV_OBJ_FLAG_HIDDEN)) gps_refresh();
 }
 
 static void fw_timer_cb(lv_timer_t *timer)
@@ -664,7 +774,7 @@ static void fw_on_page_shown(lv_obj_t *page)
         fw_refresh();
         return;
     }
-    if (page && page == s_page_knob) {
+    if (page && (page == s_page_knob || page == s_page_gps)) {
         /* the knob network is separate from home Wi-Fi: leave the station off */
         wifi_update_radio_off();
         if (!s_fw_timer) s_fw_timer = lv_timer_create(fw_timer_cb, FW_POLL_MS, NULL);
@@ -686,4 +796,5 @@ static void fw_build_pages(lv_obj_t *panel)
     fw_build_wifi_page(panel);
     fw_build_update_page(panel);
     fw_build_knob_page(panel);
+    fw_build_gps_page(panel);
 }

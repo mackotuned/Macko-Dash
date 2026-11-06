@@ -81,6 +81,8 @@ static bool s_started;           /* esp_wifi_start() done */
 static esp_netif_t *s_netif;
 static esp_netif_t *s_ap_netif;
 static int64_t s_knob_poll_us;
+static bool s_knob_wanted;        /* keep retrying the knob network until it is up */
+static int64_t s_knob_retry_us;
 static int s_connect_tries;
 static int s_ignore_disconnects;
 static bool s_save_on_connect;
@@ -289,8 +291,12 @@ static bool wifi_ready(void)
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) goto fail;
     if (!s_netif) s_netif = esp_netif_create_default_wifi_sta();
     if (!s_ap_netif) s_ap_netif = esp_netif_create_default_wifi_ap();
-    esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL);
-    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_wifi_event, NULL);
+    static bool handlers;   /* wifi_ready() is retried; register only once */
+    if (!handlers) {
+        esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL);
+        esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_wifi_event, NULL);
+        handlers = true;
+    }
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     err = esp_wifi_init(&cfg);
     if (err != ESP_OK) goto fail;
@@ -367,7 +373,9 @@ static esp_err_t apply_mode(void)
 
 static void knob_on(void)
 {
+    s_knob_wanted = true;
     if (s_knob_ap) return;
+    s_knob_retry_us = esp_timer_get_time() + 10000000;   /* if this attempt fails, try again */
     if (!wifi_ready()) return;
     s_knob_ap = true;
     esp_err_t err = apply_mode();
@@ -385,6 +393,7 @@ static void knob_on(void)
 
 static void knob_off(void)
 {
+    s_knob_wanted = false;
     if (!s_knob_ap) return;
     s_knob_ap = false;
     apply_mode();
@@ -396,8 +405,12 @@ static void knob_off(void)
 
 static void knob_poll(void)
 {
-    if (!s_knob_ap) return;
     int64_t now = esp_timer_get_time();
+    if (s_knob_wanted && !s_knob_ap && now >= s_knob_retry_us) {
+        ESP_LOGW(TAG, "knob network not up yet, retrying");
+        knob_on();
+    }
+    if (!s_knob_ap) return;
     if (now - s_knob_poll_us < 2000000) return;
     s_knob_poll_us = now;
     wifi_sta_list_t list = {0};

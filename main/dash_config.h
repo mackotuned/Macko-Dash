@@ -62,6 +62,14 @@ void dash_config_set_vtec_rpm(int rpm);
 /* VTEC indicator on MackoDash V2 (off by default: not every car has VTEC) */
 bool dash_config_get_show_vtec(void);
 /* Wireless knob: the dash runs a private Wi-Fi network the knob joins. */
+typedef enum {
+    DASH_SPEED_SOURCE_ECU = 0,   /* CAN speed from the ECU (default) */
+    DASH_SPEED_SOURCE_AUTO,      /* ECU speed when the ECU sends it, otherwise GPS */
+    DASH_SPEED_SOURCE_GPS,       /* GPS only; ECU speed is ignored */
+} dash_speed_source_t;
+dash_speed_source_t dash_config_get_speed_source(void);
+void dash_config_set_speed_source(dash_speed_source_t source);
+
 bool dash_config_get_wireless_knob(void);
 void dash_config_set_wireless_knob(bool enabled);
 void dash_config_set_show_vtec(bool show);

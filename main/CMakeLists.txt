@@ -158,6 +158,7 @@ idf_component_register(
         "runtime_theme.c"
         "ota_update_stub.c"
         "wifi_update.c"
+        "gps.c"
         "honda_dash/honda_dash_ui.c"
         "odometer/odometer.c"
         "canbus/canbus.c"
