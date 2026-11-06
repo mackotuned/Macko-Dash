@@ -262,7 +262,7 @@ static const char *pick_theme_name(system_field_theme_t theme)
 {
     switch (theme) {
         case SYSTEM_FIELD_MODERN: return "MACKODASH V1";
-        case SYSTEM_FIELD_V2: return "MACKODASH V2";
+        case SYSTEM_FIELD_V2: return s_active_theme == THEME_ID_TACH ? "MACKODASH TACH" : "MACKODASH V2";
         case SYSTEM_FIELD_RACE: return "RACE LCD";
         case SYSTEM_FIELD_ENDURANCE: return "HUNTERDASH";
         case SYSTEM_FIELD_TOURING: return "RALLY STAGE";

@@ -59,7 +59,8 @@ static void send_state(uint8_t sequence, const honda_dash_controller_state_t *st
     rotary_protocol_put_u16(&payload[3], (uint16_t)state->count);
     rotary_protocol_put_u32(&payload[5], (uint32_t)state->value);
     payload[9] = state->recording ? 1 : 0;
-    /* bytes 10..18 (air pressure) are kept zero for protocol compatibility */
+    payload[10] = state->night ? 1 : 0;   /* status flags (bit 0: night mode) */
+    /* bytes 11..18 (old air pressure values) are kept zero for compatibility */
     size_t label_length = strnlen(state->label, sizeof(state->label));
     if (label_length > ROTARY_PROTOCOL_MAX_PAYLOAD - 19) {
         label_length = ROTARY_PROTOCOL_MAX_PAYLOAD - 19;

@@ -108,6 +108,9 @@ typedef enum {
     HONDA_DASH_CONTROLLER_LOGS,
     HONDA_DASH_CONTROLLER_TRIP_RESET,
     HONDA_DASH_CONTROLLER_ALERT,
+    /* 10 and 11 were the knob's Air Ride / Climate pages; keep them unused */
+    HONDA_DASH_CONTROLLER_GAUGE = 12,
+    HONDA_DASH_CONTROLLER_NIGHT = 13,
 } honda_dash_controller_page_t;
 
 typedef enum {
@@ -125,6 +128,9 @@ typedef struct {
     int32_t count;
     int32_t value;
     bool recording;
+    bool night;           /* night dimming active */
+    /* Readout pages send "CAPTION|VALUE|UNIT"; GAUGE packs the bar fill
+       (0..1000, 0xFFFF = none) in value bits 0-15 and the tone in 16-17. */
     char label[48];
 } honda_dash_controller_state_t;
 

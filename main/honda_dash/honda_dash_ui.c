@@ -369,6 +369,7 @@ static lv_obj_t *s_theme_haldash;
 static lv_obj_t *s_theme_endurance;
 static lv_obj_t *s_theme_touring;
 static lv_obj_t *s_theme_v2;
+static lv_obj_t *s_theme_tach;
 static lv_obj_t *s_cluster;
 
 #define THEME_ID_MODERN   0
@@ -377,6 +378,7 @@ static lv_obj_t *s_cluster;
 #define THEME_ID_ENDURANCE 8
 #define THEME_ID_TOURING  9
 #define THEME_ID_V2       10
+#define THEME_ID_TACH     11
 #define V2_SEG_COUNT_EXPORT 44   /* must match V2_SEG_COUNT in theme_v2.inc.c */
 
 /* MackoDash V2 (theme_v2.inc.c, included near the end of this file) */
@@ -385,6 +387,15 @@ static lv_obj_t *s_v2_odo_val_label;
 static long s_v2_last_odo = -1;
 static lv_obj_t *build_theme_v2(lv_obj_t *cluster);
 static void update_theme_v2(const honda_dash_data_t *data, int rpm, bool limiter_hit, float fuel);
+/* MackoDash Tach (theme_tach.inc.c) */
+static lv_obj_t *build_theme_tach(lv_obj_t *cluster);
+static void update_theme_tach(const honda_dash_data_t *data, int rpm, bool limiter_hit, float fuel);
+static void tach_shift_apply(bool active, int flash_on, lv_color_t color, lv_opa_t active_opa);
+static void tach_refresh_identity(int slot);
+static void tach_refresh_live_unit(int slot, const char *unit);
+static void tach_build_preview(lv_obj_t *pv);
+static lv_obj_t *s_tach_odo_caption;
+static long s_tach_last_odo;
 static void v2_rpm_apply(int bucket, bool flashing, int flash_on, lv_color_t stage_color, lv_opa_t active_opa);
 static void v2_refresh_identity(int slot);
 static void v2_refresh_live_unit(int slot, const char *unit);
@@ -440,6 +451,8 @@ static void odo_tiles_refresh_display(void)
     if (s_odo_caption_label) lv_label_set_text(s_odo_caption_label, caption);
     if (s_v2_odo_caption_label) lv_label_set_text(s_v2_odo_caption_label, caption);
     s_v2_last_odo = -1;   /* V2 formats its own value on the next update */
+    if (s_tach_odo_caption) lv_label_set_text(s_tach_odo_caption, caption);
+    s_tach_last_odo = -1;
     if (s_odo_val_label) lv_label_set_text(s_odo_val_label, buf);
     if (s_achievement_count_label) {
         snprintf(buf, sizeof(buf), "%u/%u", achievement_system_get_count(),
@@ -2554,6 +2567,7 @@ static lv_obj_t *s_theme_card_race_lcd;
 static lv_obj_t *s_theme_card_haldash;
 static lv_obj_t *s_theme_card_endurance;
 static lv_obj_t *s_theme_card_touring;
+static lv_obj_t *s_theme_card_tach;
 static lv_obj_t *s_theme_card_v2;
 static lv_obj_t *s_theme_card_sd[THEME_STORAGE_MAX_PACKAGES];
 static lv_obj_t *s_theme_grid;
@@ -2576,6 +2590,7 @@ static void theme_stage_selection(int idx)
     theme_card_set_selected(s_theme_card_endurance, idx == THEME_ID_ENDURANCE);
     theme_card_set_selected(s_theme_card_touring, idx == THEME_ID_TOURING);
     theme_card_set_selected(s_theme_card_v2, idx == THEME_ID_V2);
+    theme_card_set_selected(s_theme_card_tach, idx == THEME_ID_TACH);
     for (size_t index = 0; index < theme_storage_get_count(); ++index) {
         if (s_theme_card_sd[index]) {
             theme_card_set_selected(s_theme_card_sd[index], idx == 100 + (int)index);
@@ -2591,6 +2606,7 @@ static lv_obj_t *theme_card_for_id(int idx)
     case THEME_ID_ENDURANCE: return s_theme_card_endurance;
     case THEME_ID_TOURING: return s_theme_card_touring;
     case THEME_ID_V2: return s_theme_card_v2;
+    case THEME_ID_TACH: return s_theme_card_tach;
     default:
         if (idx >= 100 && (size_t)(idx - 100) < theme_storage_get_count()) {
             return s_theme_card_sd[idx - 100];
@@ -2683,7 +2699,8 @@ static int theme_storage_load(void)
         }
     }
     if (err != ESP_OK || (val != THEME_ID_RACE_LCD && val != THEME_ID_HALDASH &&
-            val != THEME_ID_ENDURANCE && val != THEME_ID_TOURING && val != THEME_ID_V2)) return THEME_ID_MODERN;
+            val != THEME_ID_ENDURANCE && val != THEME_ID_TOURING && val != THEME_ID_V2 &&
+            val != THEME_ID_TACH)) return THEME_ID_MODERN;
     theme_recovery_set_pending(true);
     return (int)val;
 }
@@ -2726,6 +2743,7 @@ static void refresh_active_theme(void)
     else if (s_active_theme == THEME_ID_ENDURANCE) update_theme_endurance(data, rpm, limiter_hit, fuel);
     else if (s_active_theme == THEME_ID_TOURING) update_theme_touring(data, rpm, limiter_hit, fuel);
     else if (s_active_theme == THEME_ID_V2) update_theme_v2(data, rpm, limiter_hit, fuel);
+    else if (s_active_theme == THEME_ID_TACH) update_theme_tach(data, rpm, limiter_hit, fuel);
     else update_theme_modern(data, rpm, limiter_hit, vtec_on, fuel);
 }
 
@@ -2746,7 +2764,8 @@ static void activate_theme(int idx, bool persist)
     } else {
         runtime_theme_unload();
         if (idx != THEME_ID_RACE_LCD && idx != THEME_ID_HALDASH &&
-                idx != THEME_ID_ENDURANCE && idx != THEME_ID_TOURING && idx != THEME_ID_V2) idx = THEME_ID_MODERN;
+                idx != THEME_ID_ENDURANCE && idx != THEME_ID_TOURING && idx != THEME_ID_V2 &&
+                idx != THEME_ID_TACH) idx = THEME_ID_MODERN;
     }
     s_active_theme = idx;
     if (idx == THEME_ID_RACE_LCD) {
@@ -2763,12 +2782,14 @@ static void activate_theme(int idx, bool persist)
     lv_obj_add_flag(s_theme_endurance, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(s_theme_touring, LV_OBJ_FLAG_HIDDEN);
     if (s_theme_v2) lv_obj_add_flag(s_theme_v2, LV_OBJ_FLAG_HIDDEN);
+    if (s_theme_tach) lv_obj_add_flag(s_theme_tach, LV_OBJ_FLAG_HIDDEN);
     theme_card_set_selected(s_theme_card_modern, idx == THEME_ID_MODERN);
     theme_card_set_selected(s_theme_card_race_lcd, idx == THEME_ID_RACE_LCD);
     theme_card_set_selected(s_theme_card_haldash, idx == THEME_ID_HALDASH);
     theme_card_set_selected(s_theme_card_endurance, idx == THEME_ID_ENDURANCE);
     theme_card_set_selected(s_theme_card_touring, idx == THEME_ID_TOURING);
     theme_card_set_selected(s_theme_card_v2, idx == THEME_ID_V2);
+    theme_card_set_selected(s_theme_card_tach, idx == THEME_ID_TACH);
     for (size_t i = 0; i < theme_storage_get_count(); ++i) {
         if (s_theme_card_sd[i]) theme_card_set_selected(s_theme_card_sd[i], idx == 100 + (int)i);
     }
@@ -2783,17 +2804,20 @@ static void activate_theme(int idx, bool persist)
                           (idx == THEME_ID_HALDASH ? s_theme_haldash :
                           (idx == THEME_ID_ENDURANCE ? s_theme_endurance :
                           (idx == THEME_ID_TOURING ? s_theme_touring :
-                          (idx == THEME_ID_V2 ? s_theme_v2 : s_theme_modern))));
+                          (idx == THEME_ID_V2 ? s_theme_v2 :
+                          (idx == THEME_ID_TACH ? s_theme_tach : s_theme_modern)))));
         lv_obj_clear_flag(shown, LV_OBJ_FLAG_HIDDEN);
     }
 
     /* MackoDash V2 puts the RPM bar under the bezel at the top, so its status
        badges move into the free space below the RPM scale / indicator pills */
     if (s_can_status_badge) {
-        lv_obj_align(s_can_status_badge, LV_ALIGN_TOP_MID, 0, idx == THEME_ID_V2 ? 92 : 60);
+        lv_obj_align(s_can_status_badge, LV_ALIGN_TOP_MID, 0,
+                     idx == THEME_ID_V2 ? 92 : (idx == THEME_ID_TACH ? 0 : 60));
     }
     if (s_record_status_badge) {
-        lv_obj_align(s_record_status_badge, LV_ALIGN_TOP_MID, 0, idx == THEME_ID_V2 ? 432 : 22);
+        lv_obj_align(s_record_status_badge, LV_ALIGN_TOP_MID, 0,
+                     idx == THEME_ID_V2 ? 432 : (idx == THEME_ID_TACH ? 494 : 22));
     }
 
     if (persist) theme_storage_save(idx);
@@ -2870,7 +2894,7 @@ static void theme_delete_confirm_cb(lv_event_t *e)
     size_t new_count = old_count - 1;
     for (size_t i = index; i < new_count; ++i) {
         s_theme_card_sd[i] = s_theme_card_sd[i + 1];
-        size_t card_index = i + 6;
+        size_t card_index = i + 7;
         lv_obj_set_grid_cell(s_theme_card_sd[i], LV_GRID_ALIGN_STRETCH, (int)(card_index % 2), 1,
                              LV_GRID_ALIGN_STRETCH, (int)(card_index / 2), 1);
     }
@@ -2971,6 +2995,10 @@ static void build_theme_preview(lv_obj_t *parent, int theme_idx)
 
     if (theme_idx == THEME_ID_V2) {
         v2_build_preview(pv);
+        return;
+    }
+    if (theme_idx == THEME_ID_TACH) {
+        tach_build_preview(pv);
         return;
     }
     switch (theme_idx) {
@@ -4378,6 +4406,8 @@ void honda_dash_ui_update_shift_lights(uint16_t rpm)
         }
     } else if (s_active_theme == THEME_ID_V2) {
         v2_rpm_apply(bucket, flashing, flash_on, current_color, active_opa);
+    } else if (s_active_theme == THEME_ID_TACH) {
+        tach_shift_apply(flashing || current_stage >= 0, flash_on, current_color, active_opa);
     } else if (s_active_theme == THEME_ID_HALDASH) {
         ui_set_arc_color(s_hal_rpm_arc, current_color, LV_PART_INDICATOR);
         ui_set_arc_opa(s_hal_rpm_arc, flash_on ? active_opa : LV_OPA_20, LV_PART_INDICATOR);
@@ -4550,7 +4580,7 @@ static void build_settings_overlay(lv_obj_t *cluster)
     theme_grid_col[0] = LV_GRID_FR(1); theme_grid_col[1] = LV_GRID_FR(1);
     theme_grid_col[2] = LV_GRID_TEMPLATE_LAST;
     size_t sd_theme_count = theme_storage_get_count();
-    size_t theme_card_count = 6 + sd_theme_count;
+    size_t theme_card_count = 7 + sd_theme_count;
     size_t theme_row_count = (theme_card_count + 1) / 2;
     for (size_t row = 0; row < theme_row_count; ++row) {
         theme_grid_row[row] = 180;
@@ -4566,12 +4596,13 @@ static void build_settings_overlay(lv_obj_t *cluster)
     s_theme_card_haldash = build_theme_grid_card(s_theme_grid, "HalDash", "Built in", THEME_ID_HALDASH, 1, 1, true);
     s_theme_card_endurance = build_theme_grid_card(s_theme_grid, "HunterDash", "Built in", THEME_ID_ENDURANCE, 0, 2, true);
     s_theme_card_touring = build_theme_grid_card(s_theme_grid, "Rally Stage", "Built in", THEME_ID_TOURING, 1, 2, true);
+    s_theme_card_tach    = build_theme_grid_card(s_theme_grid, "MackoDash Tach", "Built in", THEME_ID_TACH, 0, 3, true);
     theme_card_set_selected(s_theme_card_modern, true);
 
     for (size_t i = 0; i < sd_theme_count; ++i) {
         const theme_storage_package_t *package = theme_storage_get_package(i);
         if (!package) continue;
-        size_t card_index = i + 6;
+        size_t card_index = i + 7;
         s_theme_card_sd[i] = build_theme_grid_card(s_theme_grid, package->display_name, package->status,
                       100 + (int)i, (int)(card_index % 2), (int)(card_index / 2),
                       package->manifest_valid);
@@ -7219,6 +7250,7 @@ static void system_field_refresh_live_unit(system_field_theme_t theme, int slot,
         set_label_text_if_changed(s_hal_field_unit[slot], unit);
     } else if (theme == SYSTEM_FIELD_V2) {
         v2_refresh_live_unit(slot, unit);
+        tach_refresh_live_unit(slot, unit);
     }
 }
 
@@ -7252,7 +7284,10 @@ static void system_field_set_channel(system_field_theme_t theme, int slot, int c
 static void system_field_refresh_identity(system_field_theme_t theme, int slot)
 {
     if (theme == SYSTEM_FIELD_V2) theme = SYSTEM_FIELD_MODERN;   /* same slots, refreshes both */
-    if (theme == SYSTEM_FIELD_MODERN) v2_refresh_identity(slot);
+    if (theme == SYSTEM_FIELD_MODERN) {
+        v2_refresh_identity(slot);
+        tach_refresh_identity(slot);
+    }
     int channel = system_field_get_channel(theme, slot);
     if (channel < 0 || channel >= DASH_CONFIG_FIELD_CHANNEL_COUNT) channel = 0;
     if (theme == SYSTEM_FIELD_MODERN) {
@@ -7364,6 +7399,7 @@ static void hal_channel_thresholds_rebuild(void)
 }
 
 #include "theme_v2.inc.c"
+#include "theme_tach.inc.c"
 #include "ui_mackotuned.inc.c"
 
 static void system_field_long_press_cb(lv_event_t *e)
@@ -8223,6 +8259,8 @@ lv_obj_t *honda_dash_ui_create(lv_obj_t *parent)
 
     s_theme_v2 = build_theme_v2(cluster);
     lv_obj_add_flag(s_theme_v2, LV_OBJ_FLAG_HIDDEN);
+    s_theme_tach = build_theme_tach(cluster);
+    lv_obj_add_flag(s_theme_tach, LV_OBJ_FLAG_HIDDEN);
 
     build_critical_warning_banner(cluster);
     build_settings_button(telltale_strip, true);
@@ -8511,6 +8549,7 @@ void honda_dash_ui_update(const honda_dash_data_t *data)
     else if (s_active_theme == THEME_ID_ENDURANCE) update_theme_endurance(data, rpm, limiter_hit, fuel);
     else if (s_active_theme == THEME_ID_TOURING) update_theme_touring(data, rpm, limiter_hit, fuel);
     else if (s_active_theme == THEME_ID_V2) update_theme_v2(data, rpm, limiter_hit, fuel);
+    else if (s_active_theme == THEME_ID_TACH) update_theme_tach(data, rpm, limiter_hit, fuel);
     else update_theme_modern(data, rpm, limiter_hit, vtec_on, fuel);
     if (s_theme_stability_started_us != 0 &&
             esp_timer_get_time() - s_theme_stability_started_us >= 5000000) {
@@ -8695,7 +8734,7 @@ static void controller_open_settings_page(lv_obj_t *page)
 
 static int controller_theme_count(void)
 {
-    return 6 + (int)theme_storage_get_count();
+    return 7 + (int)theme_storage_get_count();
 }
 
 static int controller_theme_id(int selection)
@@ -8707,9 +8746,10 @@ static int controller_theme_id(int selection)
         THEME_ID_HALDASH,
         THEME_ID_ENDURANCE,
         THEME_ID_TOURING,
+        THEME_ID_TACH,
     };
-    if (selection < 6) return built_in_ids[selection];
-    return 100 + selection - 6;
+    if (selection < 7) return built_in_ids[selection];
+    return 100 + selection - 7;
 }
 static int controller_theme_selection(int theme_id)
 {
@@ -8733,68 +8773,227 @@ static const char *controller_log_preset_label(int selection)
 static const char *controller_theme_label(int selection)
 {
     static const char *const built_in_labels[] = {
-        "Modern", "Race LCD", "HalDash", "HunterDash", "Rally Stage",
+        "MackoDash V1", "MackoDash V2", "Race LCD", "HalDash", "HunterDash", "Rally Stage",
+        "MackoDash Tach",
     };
-    if (selection < 5) return built_in_labels[selection];
+    if (selection < 7) return built_in_labels[selection];
     const theme_storage_package_t *package =
-        theme_storage_get_package((size_t)(selection - 5));
+        theme_storage_get_package((size_t)(selection - 7));
     return package ? package->display_name : "SD Theme";
 }
 
 static void controller_peak_label(int selection, char *label, size_t label_size)
 {
+    static const char *const captions[PEAK_VALUE_COUNT] = {
+        "MAX RPM", "MAX SPEED", "MAX BOOST", "MAX COOLANT", "MAX INTAKE",
+        "MAX INJ DUTY", "MAX KNOCK", "MIN AFR", "MIN OIL PRESS", "MIN BATTERY",
+    };
     session_peaks_t peaks;
     session_peaks_get(&peaks);
-    if (!peaks.has_data) {
-        snprintf(label, label_size, "NO PEAK DATA");
-        return;
-    }
+    selection = controller_wrap(selection, PEAK_VALUE_COUNT);
+    bool kph = dash_config_get_speed_kph();
+    bool kpa = dash_config_get_pressure_kpa();
+    bool celsius = dash_config_get_temperature_celsius();
+    const char *temp_unit = celsius ? "\xC2\xB0" "C" : "\xC2\xB0" "F";
+    const char *pressure_unit = kpa ? "KPA" : "PSI";
+    bool valid = peaks.has_data;
+    char value[16];
+    const char *unit = "";
     switch (selection) {
     case PEAK_RPM:
-        snprintf(label, label_size, "RPM %u", peaks.max_rpm);
+        snprintf(value, sizeof(value), "%u", peaks.max_rpm);
+        unit = "RPM";
         break;
     case PEAK_SPEED:
-        snprintf(label, label_size, dash_config_get_speed_kph() ? "SPEED %.0f KPH" : "SPEED %.0f MPH",
-                 dash_config_get_speed_kph() ? peaks.max_speed_mph * 1.60934 : peaks.max_speed_mph);
+        snprintf(value, sizeof(value), "%.0f", kph ? peaks.max_speed_mph * 1.60934 : peaks.max_speed_mph);
+        unit = kph ? "KPH" : "MPH";
         break;
     case PEAK_BOOST:
-        snprintf(label, label_size, dash_config_get_pressure_kpa() ? "BOOST %.0f KPA" : "BOOST %.1f PSI",
-                 dash_config_get_pressure_kpa() ? peaks.max_boost_psi * 6.89476 : peaks.max_boost_psi);
+        snprintf(value, sizeof(value), kpa ? "%.0f" : "%.1f", kpa ? peaks.max_boost_psi * 6.89476 : peaks.max_boost_psi);
+        unit = pressure_unit;
         break;
     case PEAK_COOLANT:
-        snprintf(label, label_size, dash_config_get_temperature_celsius() ? "COOLANT %.0f C" : "COOLANT %.0f F",
-                 dash_config_get_temperature_celsius() ? (peaks.max_coolant_f - 32.0) * 5.0 / 9.0 : peaks.max_coolant_f);
+        snprintf(value, sizeof(value), "%.0f", celsius ? (peaks.max_coolant_f - 32.0) * 5.0 / 9.0 : peaks.max_coolant_f);
+        unit = temp_unit;
         break;
     case PEAK_INTAKE:
-        snprintf(label, label_size, dash_config_get_temperature_celsius() ? "INTAKE %.0f C" : "INTAKE %.0f F",
-                 dash_config_get_temperature_celsius() ? (peaks.max_intake_f - 32.0) * 5.0 / 9.0 : peaks.max_intake_f);
+        snprintf(value, sizeof(value), "%.0f", celsius ? (peaks.max_intake_f - 32.0) * 5.0 / 9.0 : peaks.max_intake_f);
+        unit = temp_unit;
         break;
     case PEAK_DUTY:
-        if (peaks.duty_valid) snprintf(label, label_size, "DUTY %.0f%%", peaks.max_duty_pct);
-        else snprintf(label, label_size, "DUTY --");
+        valid = valid && peaks.duty_valid;
+        snprintf(value, sizeof(value), "%.0f", peaks.max_duty_pct);
+        unit = "%";
         break;
     case PEAK_KNOCK:
-        if (peaks.knock_valid) snprintf(label, label_size, "KNOCK %.1f DEG", peaks.max_knock_deg);
-        else snprintf(label, label_size, "KNOCK --");
+        valid = valid && peaks.knock_valid;
+        snprintf(value, sizeof(value), "%.1f", peaks.max_knock_deg);
+        unit = "DEG";
         break;
     case PEAK_AFR_MIN:
-        if (peaks.afr_valid) snprintf(label, label_size, "MIN AFR %.2f", peaks.min_afr);
-        else snprintf(label, label_size, "MIN AFR --");
+        valid = valid && peaks.afr_valid;
+        snprintf(value, sizeof(value), "%.1f", peaks.min_afr);
+        unit = "AFR";
         break;
     case PEAK_OIL_MIN:
-        if (!peaks.oil_valid) {
-            snprintf(label, label_size, "MIN OIL --");
-        } else if (dash_config_get_pressure_kpa()) {
-            snprintf(label, label_size, "MIN OIL %.0f KPA", peaks.min_oil_psi * 6.89476);
-        } else {
-            snprintf(label, label_size, "MIN OIL %.1f PSI", peaks.min_oil_psi);
-        }
+        valid = valid && peaks.oil_valid;
+        snprintf(value, sizeof(value), kpa ? "%.0f" : "%.1f", kpa ? peaks.min_oil_psi * 6.89476 : peaks.min_oil_psi);
+        unit = pressure_unit;
         break;
     case PEAK_BATTERY_MIN:
     default:
-        if (peaks.battery_valid) snprintf(label, label_size, "MIN BATT %.1f V", peaks.min_battery_v);
-        else snprintf(label, label_size, "MIN BATT --");
+        valid = valid && peaks.battery_valid;
+        snprintf(value, sizeof(value), "%.1f", peaks.min_battery_v);
+        unit = "VOLTS";
         break;
+    }
+    snprintf(label, label_size, "%s|%s|%s", captions[selection], valid ? value : "--", valid ? unit : "");
+}
+
+/* ---- knob GAUGE page: one live value on the knob's own screen ---- */
+typedef struct {
+    const char *caption;
+    int channel;   /* HAL field channel (TILE_*, TILE_COUNT = fuel) or -1 for oil temp */
+} controller_gauge_t;
+
+static const controller_gauge_t CONTROLLER_GAUGES[] = {
+    {"BOOST", TILE_MAP}, {"COOLANT", TILE_ECT}, {"OIL PRESSURE", TILE_OIL},
+    {"OIL TEMP", -1}, {"AFR", TILE_AFR}, {"INTAKE TEMP", TILE_IAT},
+    {"BATTERY", TILE_BATT}, {"FUEL", TILE_COUNT}, {"KNOCK", TILE_KNOCK},
+    {"TIMING", TILE_TIMING}, {"INJ DUTY", TILE_DUTY}, {"THROTTLE", TILE_TPS},
+};
+#define CONTROLLER_GAUGE_COUNT ((int)(sizeof(CONTROLLER_GAUGES) / sizeof(CONTROLLER_GAUGES[0])))
+static int s_controller_gauge = 0;
+
+static void controller_gauge_fill(honda_dash_controller_state_t *state)
+{
+    const controller_gauge_t *gauge = &CONTROLLER_GAUGES[controller_wrap(s_controller_gauge, CONTROLLER_GAUGE_COUNT)];
+    const honda_dash_data_t *d = &s_last_data;
+    char value[16] = "--";
+    const char *unit = "";
+    float fraction = -1.0f;
+    int tone = 0;
+    bool kpa = dash_config_get_pressure_kpa();
+    bool celsius = dash_config_get_temperature_celsius();
+
+    if (gauge->channel < 0) {
+        int ch = ECU_CH_OIL_TEMP;
+        float canonical;
+        unit = celsius ? "\xC2\xB0" "C" : "\xC2\xB0" "F";
+        if (ecu_channel_get(ch, &canonical)) {
+            ecu_channel_format(ch, canonical, value, sizeof(value));
+            fraction = ecu_channel_fraction(ch, canonical);
+            float f = canonical;  /* canonical temperature unit is F */
+            tone = f >= 260.0f ? 2 : (f >= 240.0f ? 1 : 0);
+        }
+    } else if (s_have_last_data) {
+        int ch = gauge->channel;
+        float raw = 0.0f, lo = 0.0f, hi = 100.0f;
+        bool ok = true;
+        if (ch == TILE_COUNT) {
+            raw = d->fuel_pct;
+            unit = "%";
+            tone = raw <= 8.0f ? 2 : (raw <= 15.0f ? 1 : 0);
+        } else {
+            const float values[TILE_COUNT] = {
+                d->ect_f, d->iat_f, d->afr, d->timing_deg, d->map_psi,
+                d->batt_v, d->tps_pct, d->oil_psi, d->duty_pct, d->knock_deg,
+            };
+            raw = values[ch];
+            ok = !((ch == TILE_OIL && !d->oil_valid) || (ch == TILE_DUTY && !d->duty_valid) ||
+                   (ch == TILE_KNOCK && !d->knock_valid));
+            lo = TILE_DEFS[ch].min;
+            hi = TILE_DEFS[ch].max;
+            if ((ch == TILE_ECT || ch == TILE_IAT) && celsius) {
+                lo = (lo - 32.0f) * 5.0f / 9.0f;
+                hi = (hi - 32.0f) * 5.0f / 9.0f;
+            } else if ((ch == TILE_MAP || ch == TILE_OIL) && kpa) {
+                lo *= 6.89476f;
+                hi *= 6.89476f;
+            }
+            if (ok) {
+                uint32_t zone = zone_color_for((tile_id_t)ch, raw);
+                tone = zone == 0xe4002b ? 2 : (zone == 0xffb020 ? 1 : 0);
+            }
+            switch (ch) {
+            case TILE_ECT: case TILE_IAT: unit = celsius ? "\xC2\xB0" "C" : "\xC2\xB0" "F"; break;
+            case TILE_MAP: unit = system_field_is_vacuum(ch, raw) ? "INHG VAC" : (kpa ? "KPA" : "PSI"); break;
+            case TILE_OIL: unit = kpa ? "KPA" : "PSI"; break;
+            case TILE_AFR: unit = "AIR / FUEL"; break;
+            case TILE_BATT: unit = "VOLTS"; break;
+            case TILE_TIMING: unit = "DEG BTDC"; break;
+            case TILE_KNOCK: unit = "DEG RETARD"; break;
+            default: unit = "%"; break;
+            }
+        }
+        if (ok) {
+            if (ch == TILE_COUNT) snprintf(value, sizeof(value), "%.0f", raw);
+            else system_field_format_text(ch, raw, true, value, sizeof(value));
+            if (value[0] == '-' && value[1] != '-' && ch == TILE_MAP && system_field_is_vacuum(ch, raw)) {
+                memmove(value, value + 1, strlen(value));   /* vacuum shown as positive inHg */
+            }
+            fraction = hi > lo ? (raw - lo) / (hi - lo) : 0.0f;
+        }
+    }
+    if (fraction > 1.0f) fraction = 1.0f;
+    int permille = fraction < 0.0f ? 0xFFFF : (int)(fraction * 1000.0f + 0.5f);
+    state->value = (int32_t)(((uint32_t)tone << 16) | (uint32_t)permille);
+    state->selection = controller_wrap(s_controller_gauge, CONTROLLER_GAUGE_COUNT);
+    state->count = CONTROLLER_GAUGE_COUNT;
+    snprintf(state->label, sizeof(state->label), "%s|%s|%s", gauge->caption, value, unit);
+}
+
+/* ---- night dimming: one press dims the screen and shift lights ---- */
+#define CONTROLLER_NIGHT_BRIGHTNESS 20
+#define CONTROLLER_NIGHT_SHIFT 20
+static bool s_night_mode;
+static int s_day_brightness = -1;
+static int s_day_shift_brightness = -1;
+
+static void controller_apply_brightness(int brightness)
+{
+    if (brightness < 5) brightness = 5;
+    if (brightness > 100) brightness = 100;
+    bsp_display_brightness_set(brightness);
+    dash_config_set_brightness(brightness);
+    if (s_brightness_slider) lv_slider_set_value(s_brightness_slider, brightness, LV_ANIM_OFF);
+    if (s_brightness_value_label) {
+        char text[8];
+        snprintf(text, sizeof(text), "%d%%", brightness);
+        lv_label_set_text(s_brightness_value_label, text);
+    }
+}
+
+static void controller_toggle_night(void)
+{
+    if (!s_night_mode) {
+        s_day_brightness = dash_config_get_brightness();
+        s_day_shift_brightness = dash_config_get_shift_light_brightness();
+        controller_apply_brightness(s_day_brightness < CONTROLLER_NIGHT_BRIGHTNESS ?
+                                    s_day_brightness : CONTROLLER_NIGHT_BRIGHTNESS);
+        if (s_day_shift_brightness > CONTROLLER_NIGHT_SHIFT) {
+            dash_config_set_shift_light_brightness(CONTROLLER_NIGHT_SHIFT);
+        }
+        s_night_mode = true;
+    } else {
+        controller_apply_brightness(s_day_brightness > 0 ? s_day_brightness : 80);
+        if (s_day_shift_brightness > 0) dash_config_set_shift_light_brightness(s_day_shift_brightness);
+        s_night_mode = false;
+    }
+    s_shift_light_last_brightness = -1;
+}
+
+static void controller_trip_label(int selection, char *label, size_t label_size)
+{
+    bool km = dash_config_get_speed_kph();
+    double scale = km ? 1.60934 : 1.0;
+    const char *unit = km ? "KM" : "MILES";
+    if (selection == 1) {
+        snprintf(label, label_size, "TRIP A|%.1f|%s", odometer_get_trip_a_miles() * scale, unit);
+    } else if (selection == 2) {
+        snprintf(label, label_size, "TRIP B|%.1f|%s", odometer_get_trip_b_miles() * scale, unit);
+    } else {
+        snprintf(label, label_size, "ODOMETER|%.0f|%s", odometer_get_miles() * scale, unit);
     }
 }
 
@@ -8819,6 +9018,7 @@ static void controller_fill_state(honda_dash_controller_state_t *state)
         .page = s_controller_page,
         .selection = s_controller_selection,
         .recording = data_logger_is_recording(),
+        .night = s_night_mode,
     };
 
     if (critical_warning_needs_attention()) {
@@ -8848,9 +9048,10 @@ static void controller_fill_state(honda_dash_controller_state_t *state)
         break;
     case HONDA_DASH_CONTROLLER_TRIP:
         state->count = 3;
-        snprintf(state->label, sizeof(state->label), "%s",
-                 s_controller_selection == 0 ? "ODO" :
-                 (s_controller_selection == 1 ? "Trip A" : "Trip B"));
+        controller_trip_label(s_controller_selection, state->label, sizeof(state->label));
+        break;
+    case HONDA_DASH_CONTROLLER_GAUGE:
+        controller_gauge_fill(state);
         break;
     case HONDA_DASH_CONTROLLER_PEAKS:
         state->count = PEAK_VALUE_COUNT;
@@ -8878,7 +9079,7 @@ static void controller_fill_state(honda_dash_controller_state_t *state)
     case HONDA_DASH_CONTROLLER_TRIP_RESET:
         state->count = 2;
         snprintf(state->label, sizeof(state->label), "%s",
-                 s_controller_selection ? "Reset" : "Cancel");
+                 s_trip_reset_pending == 2 ? "TRIP B" : "TRIP A");
         break;
     case HONDA_DASH_CONTROLLER_HOME:
     default:
@@ -8925,6 +9126,13 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
             record_btn_cb(NULL);
             controller_close_to_home();
             break;
+        case HONDA_DASH_CONTROLLER_NIGHT:
+            controller_toggle_night();
+            controller_close_to_home();
+            break;
+        case HONDA_DASH_CONTROLLER_GAUGE:
+            s_controller_selection = s_controller_gauge;
+            break;
         case HONDA_DASH_CONTROLLER_TRIP:
             s_controller_selection = s_odo_display_mode;
             break;
@@ -8961,17 +9169,14 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
             int brightness = dash_config_get_brightness() + step * 5;
             if (brightness < 5) brightness = 5;
             if (brightness > 100) brightness = 100;
-            bsp_display_brightness_set(brightness);
-            dash_config_set_brightness(brightness);
+            controller_apply_brightness(brightness);
             s_controller_selection = brightness / 5 - 1;
-            if (s_brightness_slider) lv_slider_set_value(s_brightness_slider, brightness, LV_ANIM_OFF);
-            if (s_brightness_value_label) {
-                char text[8];
-                snprintf(text, sizeof(text), "%d%%", brightness);
-                lv_label_set_text(s_brightness_value_label, text);
-            }
             break;
         }
+        case HONDA_DASH_CONTROLLER_GAUGE:
+            s_controller_gauge = controller_wrap(s_controller_gauge + step, CONTROLLER_GAUGE_COUNT);
+            s_controller_selection = s_controller_gauge;
+            break;
         case HONDA_DASH_CONTROLLER_TRIP:
             s_controller_selection = controller_wrap(s_controller_selection + step, 3);
             s_odo_display_mode = s_controller_selection;
@@ -9018,6 +9223,7 @@ bool honda_dash_ui_controller_handle(honda_dash_controller_event_t event,
         case HONDA_DASH_CONTROLLER_TRIP:
         case HONDA_DASH_CONTROLLER_PEAKS:
         case HONDA_DASH_CONTROLLER_SHIFT:
+        case HONDA_DASH_CONTROLLER_GAUGE:
             controller_close_to_home();
             break;
         case HONDA_DASH_CONTROLLER_LOGS:
@@ -9434,6 +9640,8 @@ static void update_theme_classic(const honda_dash_data_t *data, int rpm, bool li
     }
 }
 #endif
+
+
 
 
 
