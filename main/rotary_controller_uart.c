@@ -14,6 +14,7 @@
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "dash_config.h"
 #include "gps.h"
 #include "honda_dash_ui.h"
 #include "lwip/sockets.h"
@@ -32,6 +33,7 @@ static const char *TAG = "rotary_uart";
 static uint8_t s_tx_sequence;
 static SemaphoreHandle_t s_tx_mutex;
 static bool s_uart_ready;
+static volatile bool s_swap_pending;
 static volatile rotary_port_mode_t s_port_mode = ROTARY_PORT_SEARCHING;
 static int64_t s_uart_frame_ok_us;     /* last good knob frame on the UART */
 
@@ -211,6 +213,16 @@ static void port_set_baud(int baud)
     uart_flush_input(CONTROLLER_UART);
 }
 
+/* Applies the TX/RX assignment from the settings (uart_set_pin releases the
+   previous pins first, so this is safe while the port is running). */
+static esp_err_t port_apply_pins(void)
+{
+    bool swapped = dash_config_get_port_swapped();
+    int tx = swapped ? CONFIG_ROTARY_CONTROLLER_RX_GPIO : CONFIG_ROTARY_CONTROLLER_TX_GPIO;
+    int rx = swapped ? CONFIG_ROTARY_CONTROLLER_TX_GPIO : CONFIG_ROTARY_CONTROLLER_RX_GPIO;
+    return uart_set_pin(CONTROLLER_UART, tx, rx, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+}
+
 static void port_search_restart(void)
 {
     if (s_port_mode == ROTARY_PORT_GPS) gps_set_detected(false, 0);
@@ -261,6 +273,11 @@ static void port_service(frame_parser_t *parser, const uint8_t *data, int receiv
     }
 }
 
+void rotary_controller_port_swap_changed(void)
+{
+    s_swap_pending = true;
+}
+
 rotary_port_mode_t rotary_controller_port_mode(void)
 {
     return s_port_mode;
@@ -275,6 +292,11 @@ static void controller_task(void *argument)
     uint8_t buffer[64];
     net_frame_t net;
     while (true) {
+        if (s_uart_ready && s_swap_pending) {
+            s_swap_pending = false;
+            port_apply_pins();
+            port_search_restart();
+        }
         if (s_uart_ready) {
             int received = uart_read_bytes(CONTROLLER_UART, buffer, sizeof(buffer), pdMS_TO_TICKS(10));
             port_service(&parser, buffer, received < 0 ? 0 : received);
@@ -329,9 +351,7 @@ esp_err_t rotary_controller_uart_start(void)
         .source_clk = UART_SCLK_DEFAULT,
     };
     ESP_RETURN_ON_ERROR(uart_param_config(CONTROLLER_UART, &configuration), TAG, "UART config failed");
-    ESP_RETURN_ON_ERROR(uart_set_pin(CONTROLLER_UART, CONFIG_ROTARY_CONTROLLER_TX_GPIO,
-                                     CONFIG_ROTARY_CONTROLLER_RX_GPIO,
-                                     UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE), TAG, "UART pin config failed");
+    ESP_RETURN_ON_ERROR(port_apply_pins(), TAG, "UART pin config failed");
     ESP_RETURN_ON_ERROR(uart_driver_install(CONTROLLER_UART, CONTROLLER_RX_BUFFER_SIZE, 0,
                                             0, NULL, 0), TAG, "UART driver install failed");
     s_uart_ready = true;

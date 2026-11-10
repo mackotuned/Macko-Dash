@@ -70,6 +70,10 @@ typedef enum {
 dash_speed_source_t dash_config_get_speed_source(void);
 void dash_config_set_speed_source(dash_speed_source_t source);
 
+/* Accessory port (old knob plug): swap TX and RX to correct crossed wiring. */
+bool dash_config_get_port_swapped(void);
+void dash_config_set_port_swapped(bool swapped);
+
 bool dash_config_get_wireless_knob(void);
 void dash_config_set_wireless_knob(bool enabled);
 void dash_config_set_show_vtec(bool show);

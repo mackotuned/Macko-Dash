@@ -11,6 +11,7 @@
 
 #define STANDSTILL_KPH   2.0f       /* GPS drifts a little when parked */
 #define FRESH_US         1500000    /* speed older than this is not used */
+#define SIGNAL_FRESH_US  5000000    /* satellite list arrives about once a second */
 
 static const char *TAG = "gps";
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -18,6 +19,8 @@ static gps_status_t s_status;
 static int64_t s_speed_us;          /* time of the last speed sentence */
 static int64_t s_rate_window_us;
 static int s_rate_count;
+static int64_t s_gsv_us;            /* time of the last complete satellite list */
+static int s_gsv_top[4];            /* strongest signals in the list being read */
 static bool s_vtg_seen;            /* VTG gives speed directly; RMC is only the fallback */
 
 static char s_line[100];
@@ -64,6 +67,40 @@ static void got_speed(float kph, bool valid)
     portEXIT_CRITICAL(&s_lock);
 }
 
+static void gsv_add(int snr)
+{
+    if (snr <= 0) return;           /* empty field: in view but not being tracked */
+    for (int i = 0; i < 4; ++i) {
+        if (snr > s_gsv_top[i]) {
+            for (int k = 3; k > i; --k) s_gsv_top[k] = s_gsv_top[k - 1];
+            s_gsv_top[i] = snr;
+            return;
+        }
+    }
+}
+
+/* $GPGSV,messages,number,in_view,[prn,elevation,azimuth,snr]x4 */
+static void handle_gsv(char **f, int n)
+{
+    int total = atoi(f[1]), number = atoi(f[2]);
+    if (number == 1) memset(s_gsv_top, 0, sizeof(s_gsv_top));
+    for (int i = 7; i < n; i += 4) gsv_add(atoi(f[i]));
+    if (number != total) return;
+    int sum = 0, count = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (s_gsv_top[i] > 0) {
+            sum += s_gsv_top[i];
+            count++;
+        }
+    }
+    int64_t now = esp_timer_get_time();
+    portENTER_CRITICAL(&s_lock);
+    s_status.sats_in_view = atoi(f[3]);
+    s_status.signal_db = count ? (sum + count / 2) / count : 0;
+    s_gsv_us = now;
+    portEXIT_CRITICAL(&s_lock);
+}
+
 static bool handle_sentence(char *line)
 {
     /* checksum: XOR of everything between '$' and '*' */
@@ -89,6 +126,8 @@ static bool handle_sentence(char *line)
         /* $GPRMC,time,status,lat,N,lon,E,knots,course,... -- used when VTG is off */
         bool valid = f[2][0] == 'A';
         if (!s_vtg_seen) got_speed(valid ? strtof(f[7], NULL) * 1.852f : 0.0f, valid);
+    } else if (strcmp(type, "GSV") == 0 && n > 3) {
+        handle_gsv(f, n);
     } else if (strcmp(type, "GGA") == 0 && n > 7) {
         /* $GPGGA,time,lat,N,lon,E,quality,satellites,... */
         portENTER_CRITICAL(&s_lock);
@@ -164,10 +203,10 @@ int gps_configure(uart_port_t uart, int current_baud)
         uart_set_baudrate(uart, fast_baud);
         uart_flush_input(uart);
     }
-    /* only GGA (satellites), RMC and VTG (speed) */
+    /* GGA (satellites), RMC and VTG (speed), and GSV (signal) less often */
     ubx_msg_rate(uart, 0x01, 0);   /* GLL */
     ubx_msg_rate(uart, 0x02, 0);   /* GSA */
-    ubx_msg_rate(uart, 0x03, 0);   /* GSV */
+    ubx_msg_rate(uart, 0x03, 5);   /* GSV: signal strengths, once a second at 5 Hz */
     ubx_msg_rate(uart, 0x00, 1);   /* GGA */
     ubx_msg_rate(uart, 0x04, 1);   /* RMC */
     ubx_msg_rate(uart, 0x05, 1);   /* VTG */
@@ -203,6 +242,8 @@ void gps_set_detected(bool detected, int baud)
         s_status.fix = false;
         s_status.speed_kph = 0;
         s_status.satellites = 0;
+        s_status.sats_in_view = 0;
+        s_status.signal_db = 0;
         s_status.rate_hz = 0;
     }
     portEXIT_CRITICAL(&s_lock);
@@ -214,7 +255,12 @@ void gps_get_status(gps_status_t *out)
     portENTER_CRITICAL(&s_lock);
     *out = s_status;
     bool fresh = now - s_speed_us < FRESH_US;
+    bool signal_fresh = now - s_gsv_us < SIGNAL_FRESH_US;
     portEXIT_CRITICAL(&s_lock);
+    if (!signal_fresh) {
+        out->sats_in_view = 0;
+        out->signal_db = 0;
+    }
     if (!fresh) {
         out->fix = false;
         out->speed_kph = 0;

@@ -16,7 +16,9 @@
 typedef struct {
     bool detected;          /* NMEA seen on the port recently */
     bool fix;               /* position fix with valid speed */
-    int satellites;
+    int satellites;         /* used in the position fix */
+    int sats_in_view;       /* heard by the module, also before a fix */
+    int signal_db;          /* average C/N0 of the 4 strongest, 0 if none */
     float speed_kph;        /* 0 below the standstill threshold */
     float rate_hz;          /* measured updates per second */
     int baud;

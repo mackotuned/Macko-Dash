@@ -22,6 +22,10 @@ typedef enum {
 
 rotary_port_mode_t rotary_controller_port_mode(void);
 
+/* Call after changing the TX/RX swap setting; the port re-applies it and
+   searches again. */
+void rotary_controller_port_swap_changed(void);
+
 /* Wireless knob: listen for knob frames on UDP (call once the knob Wi-Fi
    network is up). */
 esp_err_t rotary_controller_net_start(void);

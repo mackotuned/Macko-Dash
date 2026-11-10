@@ -6,7 +6,7 @@
 
 **A configurable digital gauge cluster for the 9-inch Elecrow CrowPanel ESP32-P4/C6**
 
-**Current firmware: 3.4.2**
+**Current firmware: 3.4.3**
 
 [Get Latest Release](https://github.com/mackotuned/MackoDash-Flash-Tools/releases/latest) | [Browse Older Versions](https://github.com/mackotuned/MackoDash-Flash-Tools/releases) | [Firmware Update Guide](https://github.com/mackotuned/MackoDash-Flash-Tools#firmware-update) | [Custom Theme Guide](https://github.com/mackotuned/MackoDash-Flash-Tools/blob/MackoDash/squareline-theme-guide.md) | [Get Support](#support)
 
@@ -85,7 +85,7 @@ Settings, theme selection, odometer data, and trip data are retained after power
 - Persistent odometer plus Trip A and Trip B
 - Adjustable display brightness and value smoothing
 - Optional [MackoDash S3 rotary controller](https://github.com/mackotuned/MackoDash-S3-Controller), wired or wireless (knob 1.2.0 or newer connects by itself; later knob versions install from **Settings > System > Knob**)
-- Optional GPS module (u-blox NEO-6M style, NMEA) on the old wired-knob plug: GPS TX to GPIO 50, GPS RX to GPIO 49, plus power and ground. Choose the speed source in **Settings > System > GPS & Speed Source**
+- Optional GPS module (u-blox NEO-6M style, NMEA) on the old wired-knob plug: GPS TX to GPIO 50, GPS RX to GPIO 49, plus power and ground. Choose the speed source in **Settings > System > GPS & Speed Source**, which also shows live signal strength and has a **Swap TX / RX** switch for crossed data wires
 	with local Air Ride controls
 - Persisted English, Spanish, Portuguese, and Japanese dashboard languages
 - Idle, Cruise, Full Throttle, and Redline simulation modes

@@ -634,6 +634,8 @@ static lv_obj_t *s_gps_title;
 static lv_obj_t *s_gps_detail;
 static lv_obj_t *s_gps_src_btn[3];
 static lv_obj_t *s_gps_src_hint;
+static lv_obj_t *s_gps_bars[5];
+static lv_obj_t *s_gps_signal;
 
 static const char *const GPS_SOURCE_NAMES[3] = {"ECU", "AUTO", "GPS ONLY"};
 static const char *const GPS_SOURCE_HINTS[3] = {
@@ -659,11 +661,30 @@ static void gps_source_cb(lv_event_t *e)
     gps_source_style();
 }
 
+static void gps_swap_cb(lv_event_t *e)
+{
+    dash_config_set_port_swapped(lv_obj_has_state(lv_event_get_target(e), LV_STATE_CHECKED));
+    rotary_controller_port_swap_changed();
+}
+
 static void gps_refresh(void)
 {
     gps_status_t st;
     gps_get_status(&st);
     rotary_port_mode_t port = rotary_controller_port_mode();
+
+    /* live signal: average strength of the 4 best satellites, in dB-Hz */
+    int db = st.signal_db;
+    int level = db >= 42 ? 5 : db >= 35 ? 4 : db >= 28 ? 3 : db >= 20 ? 2 : db > 0 ? 1 : 0;
+    static const char *const RATING[6] = {"No signal", "Very weak", "Weak", "Fair", "Good", "Excellent"};
+    lv_color_t bar = level >= 4 ? V2_GREEN : level == 3 ? V2_AMBER : V2_RED;
+    for (int i = 0; i < 5; ++i) ui_set_bg_color(s_gps_bars[i], i < level ? bar : V2_TRACK, LV_PART_MAIN);
+    char signal[64];
+    if (db > 0) snprintf(signal, sizeof(signal), "%s  |  %d dB  |  %d in view", RATING[level], db, st.sats_in_view);
+    else if (st.detected) snprintf(signal, sizeof(signal), "No signal  |  %d in view", st.sats_in_view);
+    else snprintf(signal, sizeof(signal), "--");
+    set_label_text_if_changed(s_gps_signal, signal);
+
     char title[48], detail[112];
     lv_color_t dot = V2_DIM;
     if (port == ROTARY_PORT_KNOB) {
@@ -671,17 +692,16 @@ static void gps_refresh(void)
         snprintf(detail, sizeof(detail), "Unplug the knob cable and connect the GPS module there.");
     } else if (!st.detected) {
         snprintf(title, sizeof(title), "No GPS detected");
-        snprintf(detail, sizeof(detail), "Searching the accessory port. Check the wiring below.");
+        snprintf(detail, sizeof(detail), "Searching the port. Check the wiring, or try Swap TX / RX below.");
     } else if (!st.fix) {
         snprintf(title, sizeof(title), "GPS connected, waiting for satellites");
-        snprintf(detail, sizeof(detail), "%d satellites in view. The first fix can take a few minutes "
-                 "with a clear view of the sky.", st.satellites);
+        snprintf(detail, sizeof(detail), "The first fix can take a few minutes with a clear view of the sky.");
         dot = V2_AMBER;
     } else {
         bool kph = dash_config_get_speed_kph();
         snprintf(title, sizeof(title), "GPS fix: %.0f %s", kph ? st.speed_kph : st.speed_kph * 0.621371f,
                  kph ? "km/h" : "mph");
-        snprintf(detail, sizeof(detail), "%d satellites  |  %.0f updates per second  |  %d baud",
+        snprintf(detail, sizeof(detail), "%d satellites used  |  %.0f updates per second  |  %d baud",
                  st.satellites, st.rate_hz, st.baud);
         dot = V2_GREEN;
     }
@@ -700,7 +720,7 @@ static void fw_build_gps_page(lv_obj_t *panel)
     lv_obj_set_style_pad_row(page, 12, LV_PART_MAIN);
     lv_obj_clear_flag(page, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t *status = fw_card(page, 100);
+    lv_obj_t *status = fw_card(page, 124);
     s_gps_dot = v2_box(status, 0, 8, 12, 12, V2_DIM, 6);
     s_gps_title = v2_label(status, "", &v2_font_label16, V2_TEXT);
     lv_obj_set_pos(s_gps_title, 24, 2);
@@ -708,6 +728,12 @@ static void fw_build_gps_page(lv_obj_t *panel)
     lv_obj_set_pos(s_gps_detail, 24, 30);
     lv_obj_set_width(s_gps_detail, LV_PCT(95));
     lv_label_set_long_mode(s_gps_detail, LV_LABEL_LONG_WRAP);
+    for (int i = 0; i < 5; ++i) {
+        lv_coord_t h = 8 + i * 4;
+        s_gps_bars[i] = v2_box(status, 24 + i * 10, 88 - h, 7, h, V2_TRACK, 1);
+    }
+    s_gps_signal = v2_label(status, "--", &v2_font_label13, V2_TEXT);
+    lv_obj_set_pos(s_gps_signal, 84, 72);
 
     lv_obj_t *src = fw_card(page, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(src, LV_FLEX_FLOW_COLUMN);
@@ -725,6 +751,19 @@ static void fw_build_gps_page(lv_obj_t *panel)
     s_gps_src_hint = v2_label(src, "", &v2_font_label13, V2_LABEL);
     lv_obj_set_width(s_gps_src_hint, LV_PCT(100));
     gps_source_style();
+
+    lv_obj_t *swap = fw_card(page, 76);
+    lv_obj_t *swap_name = v2_label(swap, "Swap TX / RX", &v2_font_label16, V2_TEXT);
+    lv_obj_set_pos(swap_name, 0, 0);
+    lv_obj_t *swap_hint = v2_label(swap, "Turn on if the GPS is not detected and the data wires may be crossed.",
+                                   &v2_font_label13, V2_LABEL);
+    lv_obj_set_pos(swap_hint, 0, 26);
+    lv_obj_t *swap_sw = lv_switch_create(swap);
+    lv_obj_set_size(swap_sw, 72, 38);
+    lv_obj_align(swap_sw, LV_ALIGN_RIGHT_MID, 0, 0);
+    ui_set_bg_color(swap_sw, V2_RED, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    if (dash_config_get_port_swapped()) lv_obj_add_state(swap_sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(swap_sw, gps_swap_cb, LV_EVENT_VALUE_CHANGED, NULL);
 
     lv_obj_t *note = v2_label(page,
                               "Wiring (old knob plug): GPS VCC to the plug's power, GND to GND, "
